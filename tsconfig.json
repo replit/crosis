@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist/",
+    "module": "es6",
+    "target": "es5",
+    "strict": true,
+    "lib": ["es7", "dom", "esnext.asynciterable"],
+    "allowJs": true
+  }
+}
