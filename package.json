@@ -12,11 +12,11 @@
   "author": "faris@repl.it",
   "license": "UNLICENSED",
   "dependencies": {
-    "@replit/recaptcha": "^1.0.0",
     "protobufjs": "^6.8.8"
   },
   "devDependencies": {
     "@types/engine.io-client": "^3.1.2",
+    "@types/node": "^12.7.5",
     "ts-loader": "^5.3.3",
     "typedoc": "^0.14.2",
     "webpack": "^4.29.5",

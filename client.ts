@@ -1,6 +1,4 @@
 import { EventEmitter } from 'events';
-import * as Sentry from '@sentry/browser';
-import execute from '@replit/recaptcha';
 import { api } from './api';
 import { Channel } from './channel';
 import { createDeferred, Deferred } from './deferred';
@@ -41,10 +39,7 @@ class Client extends EventEmitter {
     this.debug = null;
     this.didConnect = false;
 
-    Sentry.addBreadcrumb({
-      category: 'crosis',
-      message: 'constructor',
-    });
+
   }
 
   public isConnected = () => this.connectionState === ConnectionState.CONNECTED;
@@ -67,18 +62,9 @@ class Client extends EventEmitter {
       );
     }
 
-    Sentry.addBreadcrumb({
-      category: 'crosis',
-      message: 'connect',
-      data: { polling: options.polling },
-    });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      Sentry.addBreadcrumb({
-        category: 'crosis',
-        message: 'error',
-        data: 'Client must be disconnected to connect',
-      });
+
 
       throw new Error('Client must be disconnected to connect');
     }
@@ -86,12 +72,6 @@ class Client extends EventEmitter {
     this.connectionState = ConnectionState.CONNECTING;
 
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
-      Sentry.addBreadcrumb({
-        category: 'crosis',
-        message: 'error',
-        data: 'Client already connected to an active websocket connection',
-      });
-
       throw new Error(
         'Client already connected to an active websocket connection',
       );
@@ -101,12 +81,6 @@ class Client extends EventEmitter {
       await this._connect(options);
     } catch (e) {
       this.connectionState = ConnectionState.DISCONNECTED;
-
-      Sentry.addBreadcrumb({
-        category: 'crosis',
-        message: 'error',
-        data: e.message,
-      });
 
       throw e;
     }
@@ -128,14 +102,7 @@ class Client extends EventEmitter {
     name?: string;
     service: string;
   }): Channel => {
-    Sentry.addBreadcrumb({
-      category: 'crosis',
-      message: 'openChannel',
-      data: {
-        name,
-        service,
-      },
-    });
+
 
     const action =
       name == null
@@ -191,21 +158,7 @@ class Client extends EventEmitter {
   public getChannel(id: number): Channel {
     const chan = this.channels[id];
 
-    Sentry.addBreadcrumb({
-      category: 'crosis',
-      message: 'getChannel',
-      data: {
-        id,
-      },
-    });
-
     if (!chan) {
-      Sentry.addBreadcrumb({
-        category: 'crosis',
-        message: 'error',
-        data: 'No channel with number',
-      });
-
       throw new Error('No channel with number');
     }
 
@@ -253,11 +206,6 @@ class Client extends EventEmitter {
       case 'containerState':
         this.containerState = cmd.containerState!.state!;
 
-        Sentry.addBreadcrumb({
-          category: 'crosis',
-          message: 'containerState',
-          data: this.containerState,
-        });
 
         if (this.containerState === api.ContainerState.State.READY) {
           if (this.deferredReady) {
@@ -294,18 +242,7 @@ class Client extends EventEmitter {
     channel: Channel,
     { id, state, error }: api.IOpenChannelRes,
   ) => {
-    Sentry.addBreadcrumb({
-      category: 'crosis',
-      message: 'openChanres',
-    });
-
     if (state === api.OpenChannelRes.State.ERROR) {
-      Sentry.addBreadcrumb({
-        category: 'crosis',
-        message: 'error',
-        data: error,
-      });
-
       channel.onOpenError({ error });
 
       return;
@@ -320,11 +257,7 @@ class Client extends EventEmitter {
   };
 
   private closeChannel = ({ id }: api.ICloseChannel) => {
-    Sentry.addBreadcrumb({
-      category: 'crosis',
-      message: 'closeChannel',
-      data: { id },
-    });
+
 
     if (!id) {
       return;
@@ -345,28 +278,13 @@ class Client extends EventEmitter {
     this.connectionState = ConnectionState.DISCONNECTED;
     this.containerState = null;
 
-    Sentry.addBreadcrumb({
-      category: 'crosis',
-      message: 'close',
-      data: {
-        expected: JSON.stringify(expected),
-        closeReason: closeEvent ? closeEvent.reason : undefined,
-      },
-    });
 
     if (this.ws) {
       this.ws.onmessage = null;
       this.ws.onclose = null;
 
       if (this.ws.readyState === 0 || this.ws.readyState === 1) {
-        Sentry.addBreadcrumb({
-          category: 'crosis',
-          message: 'wsclose',
-          data: {
-            expected,
-            closeReason: closeEvent ? closeEvent.reason : undefined,
-          },
-        });
+
 
         this.ws.close();
       }
@@ -415,15 +333,9 @@ class Client extends EventEmitter {
     polling?: boolean;
     timeout?: number;
   }) => {
-    Sentry.addBreadcrumb({
-      category: 'crosis',
-      message: '_connect',
-      data: {
-        polling,
-      },
-    });
 
-    const token = await getToken(tokenOptions);
+
+    const token = await fetchToken(tokenOptions);
     if (this.connectionState === ConnectionState.DISCONNECTED) {
       throw new Error('closed while connecting');
     }
@@ -454,10 +366,6 @@ class Client extends EventEmitter {
     let timeoutId: NodeJS.Timer;
     if (timeout != null) {
       timeoutId = setTimeout(() => {
-        Sentry.addBreadcrumb({
-          category: 'crosis',
-          message: 'timeout',
-        });
 
         if (this.deferredReady) {
           this.deferredReady.reject(new Error('timeout'));
@@ -470,10 +378,7 @@ class Client extends EventEmitter {
 
     const res = this.deferredReady.resolve;
     this.deferredReady.resolve = v => {
-      Sentry.addBreadcrumb({
-        category: 'crosis',
-        message: 'connected!',
-      });
+
 
       clearTimeout(timeoutId);
       res(v);
@@ -489,24 +394,16 @@ interface TokenOptions {
   headers?: HeadersInit;
   polygott?: boolean;
   captcha?: string;
-  liveCodingToken?: string;
 }
 
 /** @hidden */
-async function getToken({
+async function fetchToken({
   replId,
   tokenUrl,
   headers,
   ...body
 }: TokenOptions): Promise<string> {
-  Sentry.addBreadcrumb({
-    category: 'crosis',
-    message: 'getToken',
-  });
-
   const url = tokenUrl || `/data/repls/${replId}/gen_repl_token`;
-
-  const captcha = await execute();
 
   const res = await fetch(url, {
     credentials: 'same-origin',
@@ -516,7 +413,7 @@ async function getToken({
       'X-Requested-With': 'XMLHttpRequest',
     },
     method: 'post',
-    body: JSON.stringify({ ...body, captcha, format: 'pbuf' }),
+    body: JSON.stringify({ ...body, format: 'pbuf' }),
   });
 
   if (!res.ok) {

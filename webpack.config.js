@@ -1,6 +1,5 @@
 const path = require('path');
 
-const root = process.env.ROOT_DIR || path.resolve(__dirname, '../../');
 
 module.exports = {
   entry: './index.ts',
@@ -15,16 +14,10 @@ module.exports = {
   },
   resolve: {
     extensions: ['.ts', '.js'],
-    modules: [
-      path.resolve(root, 'packages', 'crosis', 'node_modules'),
-      'node_modules',
-    ],
+    modules: ['node_modules'],
   },
   resolveLoader: {
-    modules: [
-      path.resolve(root, 'packages', 'crosis', 'node_modules'),
-      'node_modules',
-    ],
+    modules: ['node_modules'],
   },
   output: {
     filename: 'crosis-standalone.[hash].bundle.js',

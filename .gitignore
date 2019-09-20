@@ -1,2 +1,7 @@
 node_modules/
 docs/
+
+yarn-error.log
+yarn-debug.log*
+yarn-error.log*
+.yarn-integrity
