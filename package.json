@@ -1,6 +1,6 @@
 {
   "name": "@replit/crosis",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Goval connection and channel manager",
   "main": "dist/crosis.bundle.js",
   "scripts": {
