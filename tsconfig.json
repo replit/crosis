@@ -1,13 +1,18 @@
 {
   "compilerOptions": {
-    "outDir": "./dist/",
-    "module": "es6",
+    "rootDir": ".",
+    "outDir": "./dist",
+    "module": "commonjs",
+    "moduleResolution": "node",
     "target": "es5",
     "strict": true,
     "lib": ["es7", "dom", "esnext.asynciterable"],
-    "allowJs": true,
-    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-  }
+    "sourceMap": true,
+    "declaration": true,
+    "noImplicitAny": true,
+    "removeComments": true
+  },
+  "include": ["src", "protocol"]
 }
