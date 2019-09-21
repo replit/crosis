@@ -1,7 +1,7 @@
 /**
  * Creates a promise and exposing resolve and reject;
  */
-export function createDeferred<T = any>(): Deferred<T> {
+export function createDeferred<T = unknown>(): Deferred<T> {
   let resolve;
   let reject;
 
@@ -11,17 +11,19 @@ export function createDeferred<T = any>(): Deferred<T> {
     reject = _reject;
   });
 
+  if (!resolve || !reject) {
+    throw new Error('Expected resolve and reject to be functions');
+  }
+
   return {
     promise,
-    // @ts-ignore
     resolve,
-    // @ts-ignore
     reject,
   };
 }
 
-export interface Deferred<T = any> {
+export interface Deferred<T = unknown> {
   promise: Promise<T>;
   resolve: (t: T) => void;
-  reject: (any: any) => void;
+  reject: (reason: Error) => void;
 }

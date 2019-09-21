@@ -1,17 +1,18 @@
-import { api } from './api';
 import { EventEmitter } from 'events';
+import { api } from './api';
 import { createDeferred, Deferred } from './deferred';
 
 class Channel extends EventEmitter {
-  public state:
-    | api.OpenChannelRes.State.CREATED
-    | api.OpenChannelRes.State.ATTACHED
-    | null;
+  public state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED | null;
+
   public id: number | null;
+
   public isOpen: boolean;
 
   private sendQueue: Array<api.ICommand>;
+
   private sendToClient: (cmd: api.Command) => void;
+
   private requestMap: { [ref: string]: Deferred<api.Command> };
 
   constructor() {
@@ -31,7 +32,7 @@ class Channel extends EventEmitter {
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
   public send = (cmdJson: api.ICommand) => {
-    cmdJson['channel'] = this.id;
+    cmdJson.channel = this.id;
     this.sendToClient(api.Command.create(cmdJson));
   };
 
@@ -47,10 +48,10 @@ class Channel extends EventEmitter {
         .toString()
         .split('.')[1],
     ).toString(36);
-    const deferred = createDeferred();
+    const deferred = createDeferred<api.Command>();
     this.requestMap[ref] = deferred;
 
-    cmdJson['ref'] = ref;
+    cmdJson.ref = ref;
     this.send(cmdJson);
 
     return deferred.promise;
@@ -100,11 +101,12 @@ class Channel extends EventEmitter {
     this.state = state;
     this.isOpen = true;
 
-    let cmd;
-    // tslint:disable-next-line no-conditional-assignment
-    while ((cmd = this.sendQueue.shift())) {
+    let cmd = this.sendQueue.shift();
+    while (cmd) {
       // It will set the right channel id and send it
       this.send(cmd);
+
+      cmd = this.sendQueue.shift();
     }
 
     this.emit('open');
@@ -139,10 +141,10 @@ class Channel extends EventEmitter {
    * Called when the channel is or client is closed
    */
   public onClose = () => {
-    for (const ref of Object.keys(this.requestMap)) {
+    Object.keys(this.requestMap).forEach((ref) => {
       this.requestMap[ref].reject(new Error('Channel closed'));
       delete this.requestMap[ref];
-    }
+    });
 
     this.isOpen = false;
     this.emit('close');

@@ -1,3 +1,5 @@
+/* global Event CloseEvent MessageEvent */
+
 import * as eio from 'engine.io-client';
 import * as urllib from 'url';
 
@@ -28,24 +30,41 @@ const readyStateStringToValue = new Map([
   ['closed', 3],
 ]);
 
+Object.keys(readyStateStringToValue);
+
 export class EIOCompat {
-  public onclose: ((ev: CloseEvent) => any) | null;
-  public onerror: ((ev: Event) => any) | null;
-  public onmessage: ((ev: MessageEvent) => any) | null;
-  public onopen: ((ev: Event) => any) | null;
+  public onclose: ((ev: CloseEvent) => unknown) | null;
+
+  public onerror: ((ev: Event) => unknown) | null;
+
+  public onmessage: ((ev: MessageEvent) => unknown) | null;
+
+  public onopen: ((ev: Event) => unknown) | null;
+
   public url: string;
+
   public extensions: string;
+
   public protocol: string;
+
   public bufferedAmount: number;
+
   public binaryType: BinaryType;
+
   public readyState: number;
+
   public incomingSequence: number;
+
   public outOfOrderQueue: { [sequence: number]: ArrayBuffer };
+
   public outgoingSequence: number;
 
   readonly CLOSED = 3;
+
   readonly CLOSING = 2;
+
   readonly OPEN = 1;
+
   readonly CONNECTING = 0;
 
   private eioSocket: eio.Socket;
@@ -78,7 +97,7 @@ export class EIOCompat {
       }
     });
 
-    this.eioSocket.on('close', reason => {
+    this.eioSocket.on('close', (reason) => {
       this.setReadyState();
       if (this.onclose != null) {
         const event = new CloseEvent('close', {
@@ -91,49 +110,52 @@ export class EIOCompat {
       }
     });
 
-    this.eioSocket.on('message', data => {
+    this.eioSocket.on('message', (data) => {
       this.setReadyState();
-      if (this.onmessage != null) {
-        if (typeof data === 'string') {
-          throw new Error('expected data to be ArrayBuffer not string');
-        }
+      if (this.onmessage == null) {
+        return;
+      }
 
-        const view = new DataView(data);
-        const sequence = view.getUint32(0);
+      if (typeof data === 'string') {
+        throw new Error('expected data to be ArrayBuffer not string');
+      }
 
-        if (this.incomingSequence !== sequence) {
-          // We didn't get the message we expected
-          // put it in the queue until we get the expected message
-          this.outOfOrderQueue[sequence] = data.slice(sequenceBytesCount);
+      const view = new DataView(data);
+      const sequence = view.getUint32(0);
 
-          return;
-        }
+      if (this.incomingSequence !== sequence) {
+        // We didn't get the message we expected
+        // put it in the queue until we get the expected message
+        this.outOfOrderQueue[sequence] = data.slice(sequenceBytesCount);
 
-        this.incomingSequence = sequence + 1;
+        return;
+      }
 
-        const message = new MessageEvent('message', {
-          data: data.slice(sequenceBytesCount),
+      this.incomingSequence = sequence + 1;
+
+      const message = new MessageEvent('message', {
+        data: data.slice(sequenceBytesCount),
+      });
+
+      const onmessage = this.onmessage.bind(this);
+
+      onmessage(message);
+
+      const queuedSequences = Object.keys(this.outOfOrderQueue);
+      if (queuedSequences.length > 0) {
+        // We got the message we expected but we have other messages
+        // that were out of order and queued up
+        queuedSequences.sort().forEach((seq) => {
+          onmessage(
+            new MessageEvent('message', {
+              data: this.outOfOrderQueue[+seq],
+            }),
+          );
+
+          this.incomingSequence = +seq + 1;
         });
 
-        this.onmessage.call(this, message);
-
-        const queuedSequences = Object.keys(this.outOfOrderQueue);
-        if (queuedSequences.length > 0) {
-          // We got the message we expected but we have other messages
-          // that were out of order and queued up
-          for (let seq of queuedSequences.sort()) {
-            this.onmessage.call(
-              this,
-              new MessageEvent('message', {
-                data: this.outOfOrderQueue[+seq],
-              }),
-            );
-
-            this.incomingSequence = +seq + 1;
-          }
-
-          this.outOfOrderQueue = {};
-        }
+        this.outOfOrderQueue = {};
       }
     });
 
@@ -147,21 +169,18 @@ export class EIOCompat {
   }
 
   setReadyState() {
-    // @ts-ignore
+    // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+    // @ts-ignore engine.io-client doesn't have typing for readyState :/
     this.readyState = readyStateStringToValue.get(this.eioSocket.readyState);
   }
 
   send(buffer: ArrayBuffer) {
-    const sequencedBuffer = new ArrayBuffer(
-      sequenceBytesCount + buffer.byteLength,
-    );
-    new Uint8Array(sequencedBuffer).set(
-      new Uint8Array(buffer),
-      sequenceBytesCount,
-    );
+    const sequencedBuffer = new ArrayBuffer(sequenceBytesCount + buffer.byteLength);
+    new Uint8Array(sequencedBuffer).set(new Uint8Array(buffer), sequenceBytesCount);
 
     const view = new DataView(sequencedBuffer);
-    view.setUint32(0, this.outgoingSequence++);
+    view.setUint32(0, this.outgoingSequence);
+    this.outgoingSequence += 1;
 
     this.eioSocket.send(sequencedBuffer);
     this.setReadyState();
