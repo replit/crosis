@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
-    "rootDir": ".",
-    "outDir": "./dist",
+    "rootDir": "./src",
+    "outDir": "./dist/",
     "module": "commonjs",
     "moduleResolution": "node",
     "target": "es5",
     "strict": true,
-    "lib": ["es7", "dom", "esnext.asynciterable"],
+    "lib": ["es6", "dom"],
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "sourceMap": true,

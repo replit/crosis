@@ -2,15 +2,14 @@
   "name": "@replit/crosis",
   "version": "0.0.1",
   "description": "Goval connection and channel manager",
-  "main": "index.js",
+  "main": "dist/crosis.bundle.js",
   "scripts": {
     "gen": "pbjs -t static-module -w default -o protocol/api.js protocol/api.proto && pbts -o protocol/api.d.ts protocol/api.js",
     "lint": "eslint . --ext .js,.ts",
-    "build": "rm -rf dist && webpack --config ./webpack.config.js",
+    "build": "tsc",
     "docs": "typedoc --out docs --tsconfig ../../tsconfig.json --includeDeclarations --exclude \"**/!(api).d.ts\" --excludePrivate --mode modules client.ts channel.ts api.d.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "main": "dist/crosis.bundle.js",
   "author": "faris@repl.it",
   "license": "UNLICENSED",
   "dependencies": {
@@ -33,8 +32,6 @@
     "eslint-plugin-react": "^7.14.3",
     "prettier": "^1.18.2",
     "ts-loader": "^6.1.1",
-    "typedoc": "^0.15.0",
-    "webpack": "^4.40.2",
-    "webpack-cli": "^3.3.9"
+    "typedoc": "^0.15.0"
   }
 }
