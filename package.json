@@ -4,7 +4,7 @@
   "description": "Goval connection and channel manager",
   "main": "index.js",
   "scripts": {
-    "gen": "pbjs -t static-module -w commonjs -o api.js api.proto && pbts -o api.d.ts api.js",
+    "gen": "pbjs -t static-module -w default -o protocol/api.js protocol/api.proto && pbts -o protocol/api.d.ts protocol/api.js",
     "lint": "eslint . --ext .js,.ts",
     "build:standalone": "webpack --config ./webpack.config.js",
     "docs": "typedoc --out docs --tsconfig ../../tsconfig.json --includeDeclarations --exclude \"**/!(api).d.ts\" --excludePrivate --mode modules client.ts channel.ts api.d.ts",

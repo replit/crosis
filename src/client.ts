@@ -1,7 +1,7 @@
 /* global fetch WebSocket */
 
 import { EventEmitter } from 'events';
-import { api } from './api';
+import { api } from '../protocol/api';
 import { Channel } from './channel';
 import { createDeferred, Deferred } from './deferred';
 import { EIOCompat } from './EIOCompat';
