@@ -2,7 +2,8 @@
   "name": "@replit/crosis",
   "version": "0.1.0",
   "description": "Goval connection and channel manager",
-  "main": "dist/crosis.bundle.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "gen": "pbjs -t static-module -w default -o protocol/api.js protocol/api.proto && pbts -o protocol/api.d.ts protocol/api.js",
     "lint": "eslint . --ext .js,.ts",
