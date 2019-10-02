@@ -20,6 +20,7 @@ interface TokenOptions {
   headers?: HeadersInit;
   polygott?: boolean;
   captcha?: string;
+  token?: string;
 }
 
 /** @hidden */
@@ -371,7 +372,7 @@ class Client extends EventEmitter {
     polling?: boolean;
     timeout?: number;
   }) => {
-    const token = await fetchReplToken(tokenOptions);
+    const token = tokenOptions.token || (await fetchReplToken(tokenOptions));
     if (this.connectionState === ConnectionState.DISCONNECTED) {
       throw new Error('closed while connecting');
     }
