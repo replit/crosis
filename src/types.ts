@@ -31,4 +31,6 @@ interface UrlOptions {
   port: string;
 }
 
+// https://github.com/typescript-eslint/typescript-eslint/issues/342
+// eslint-disable-next-line
 export { DebugFunc, TokenOptions, UrlOptions };
