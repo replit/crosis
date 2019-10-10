@@ -21,7 +21,7 @@ message Command {
     OpenChannelRes openChanRes = 4;
 
     CloseChannel closeChan = 5;
-    CloseChannel closeChanRes = 6;
+    CloseChannelRes closeChanRes = 6;
 
     ContainerState containerState = 9;
     PortOpen portOpen = 10;
@@ -318,6 +318,8 @@ message OpenChannel {
 
   enum Action { CREATE = 0; ATTACH = 1; ATTACH_OR_CREATE = 2; }
   Action action = 3;
+
+  int32 id = 4;
 }
 
 message OpenChannelRes {
@@ -329,7 +331,19 @@ message OpenChannelRes {
   string error = 3;
 }
 
-message CloseChannel { int32 id = 1; }
+message CloseChannel {
+  int32 id = 1;
+
+  enum Action { DISCONNECT = 0; TRY_CLOSE = 1; CLOSE = 2; }
+  Action action = 2;
+}
+
+message CloseChannelRes {
+  int32 id = 1;
+
+  enum Status { DISCONNECT = 0; CLOSE = 1; NOTHING = 2; }
+  Status status = 2;
+}
 
 message ContainerState {
   enum State { SLEEP = 0; READY = 1; }
@@ -392,6 +406,7 @@ message Roster { repeated User user = 1; }
 message Exec {
   repeated string args = 1;
   map<string, string> env = 2;
+  bool blocking = 3;
 }
 
 message Package {
