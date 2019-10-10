@@ -286,7 +286,7 @@ class Client extends EventEmitter {
           throw new Error('Expected closeChanRes');
         }
 
-        this.closeChannel(cmd.closeChanRes);
+        this.handleCloseChannel(cmd.closeChanRes);
 
         break;
       default:
@@ -308,12 +308,12 @@ class Client extends EventEmitter {
     channel.onOpen(id, state, this.send);
   };
 
-  private closeChannel = ({ id }: api.ICloseChannel) => {
-    if (!id) {
-      return;
+  private handleCloseChannel = ({ id, status }: api.ICloseChannelRes) => {
+    if (id == null) {
+      throw new Error('Closing channel with no id?');
     }
 
-    this.channels[id].onClose();
+    this.channels[id].onClose({ id, status });
 
     delete this.channels[id];
   };
@@ -338,7 +338,7 @@ class Client extends EventEmitter {
       // so that we can retry without losing queued up
       // messages.
       Object.keys(this.channels).forEach((id) => {
-        this.closeChannel({ id: Number(id) });
+        this.handleCloseChannel({ id: Number(id) });
       });
     }
 
