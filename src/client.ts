@@ -1,77 +1,17 @@
-/* global fetch WebSocket */
+/* global WebSocket */
 
 import { EventEmitter } from 'events';
 import { api } from '../protocol/api';
 import { Channel } from './channel';
 import { createDeferred, Deferred } from './deferred';
 import { EIOCompat } from './EIOCompat';
+import { DebugFunc, TokenOptions, UrlOptions } from './types';
+import { fetchReplToken, getConnectionStr } from './util';
 
 enum ConnectionState {
   CONNECTING = 0,
   CONNECTED = 1,
   DISCONNECTED = 2,
-}
-
-type DebugFunc = (direction: 'in' | 'out', cmd: api.Command) => void;
-
-interface TokenOptions {
-  replId?: string;
-  tokenUrl?: string;
-  headers?: HeadersInit;
-  polygott?: boolean;
-  captcha?: string;
-  token?: string;
-}
-
-/** @hidden */
-async function fetchReplToken({
-  replId,
-  tokenUrl,
-  headers,
-  ...body
-}: TokenOptions): Promise<string> {
-  const url = tokenUrl || `/data/repls/${replId}/gen_repl_token`;
-
-  const res = await fetch(url, {
-    credentials: 'same-origin',
-    headers: headers || {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    method: 'post',
-    body: JSON.stringify({ ...body, format: 'pbuf' }),
-  });
-
-  if (!res.ok) {
-    let message;
-    const contentType = res.headers.get('content-type');
-
-    if (contentType && contentType.includes('application/json')) {
-      const json = await res.json();
-
-      message = json.message;
-    } else {
-      message = await res.text();
-    }
-
-    throw new Error(message || res.statusText);
-  }
-
-  return res.json();
-}
-
-interface UrlOptions {
-  secure: boolean;
-  host: string;
-  port: string;
-}
-
-/** @hidden */
-function getConnectionStr(token: string, urlOptions?: UrlOptions) {
-  const { secure = false, host = 'eval.repl.it', port = '80' } = urlOptions || {};
-
-  return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
 }
 
 class Client extends EventEmitter {
@@ -89,11 +29,11 @@ class Client extends EventEmitter {
 
   private deferredReady: Deferred<void> | null;
 
-  private debug: DebugFunc | null;
+  private debug: DebugFunc;
 
   private didConnect: boolean;
 
-  constructor() {
+  constructor(debug?: DebugFunc = () => {}) {
     super();
 
     this.ws = null;
@@ -104,8 +44,10 @@ class Client extends EventEmitter {
     this.containerState = null;
     this.token = null;
     this.connectionState = ConnectionState.DISCONNECTED;
-    this.debug = null;
+    this.debug = debug;
     this.didConnect = false;
+
+    this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
 
   public isConnected = () => this.connectionState === ConnectionState.CONNECTED;
@@ -115,25 +57,37 @@ class Client extends EventEmitter {
    * @returns it returns a promise that is resolved when the server is ready (sends cotainer state)
    */
   public connect = async (options: {
-    debug?: DebugFunc;
     tokenOptions: TokenOptions;
     urlOptions?: UrlOptions;
     polling?: boolean;
     timeout?: number;
   }): Promise<void> => {
+    this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
+
     if (this.didConnect) {
       // We don't want to allow connections if we ever connected
-      throw new Error('Reconnecting using the same client after it connected once is not allowed');
+      const error = new Error(
+        'Reconnecting using the same client after it connected once is not allowed',
+      );
+
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+      throw error;
     }
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      throw new Error('Client must be disconnected to connect');
+      const error = new Error('Client must be disconnected to connect');
+
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+      throw error;
     }
 
     this.connectionState = ConnectionState.CONNECTING;
 
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
-      throw new Error('Client already connected to an active websocket connection');
+      const error = new Error('Client already connected to an active websocket connection');
+
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+      throw error;
     }
 
     try {
@@ -141,6 +95,7 @@ class Client extends EventEmitter {
     } catch (e) {
       this.connectionState = ConnectionState.DISCONNECTED;
 
+      this.debug({ type: 'breadcrumb', message: 'error', data: e.message });
       throw e;
     }
 
@@ -155,6 +110,15 @@ class Client extends EventEmitter {
    * @param service One of goval's services
    */
   public openChannel = ({ name, service }: { name?: string; service: string }): Channel => {
+    this.debug({
+      type: 'breadcrumb',
+      message: 'openChannel',
+      data: {
+        name,
+        service,
+      },
+    });
+
     const action =
       name == null ? api.OpenChannel.Action.CREATE : api.OpenChannel.Action.ATTACH_OR_CREATE;
 
@@ -208,25 +172,34 @@ class Client extends EventEmitter {
   public getChannel(id: number): Channel {
     const chan = this.channels[id];
 
+    this.debug({
+      type: 'breadcrumb',
+      message: 'getChannel',
+      data: {
+        id,
+      },
+    });
+
     if (!chan) {
-      throw new Error('No channel with number');
+      const error = new Error(`No channel with number ${id}`);
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+
+      throw error;
     }
 
     return chan;
   }
 
-  public getToken(): string {
+  public getToken(): string | null {
     if (!this.token) {
-      throw new Error('must connect before getting token');
+      return null;
     }
 
     return this.token;
   }
 
   private send = (cmd: api.Command) => {
-    if (this.debug) {
-      this.debug('out', cmd);
-    }
+    this.debug({ type: 'log', log: { direction: 'out', cmd } });
 
     const cmdBuf = api.Command.encode(cmd).finish();
     const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
@@ -242,9 +215,7 @@ class Client extends EventEmitter {
     const d = new Uint8Array(data);
     const cmd = api.Command.decode(d);
 
-    if (this.debug) {
-      this.debug('in', cmd);
-    }
+    this.debug({ type: 'log', log: { direction: 'in', cmd } });
 
     // Pass it to the right channel
     this.getChannel(cmd.channel).onCommand(cmd);
@@ -259,8 +230,15 @@ class Client extends EventEmitter {
             return;
           }
 
+          this.debug({ type: 'breadcrumb', message: 'error', data: err.message });
           throw err;
         }
+
+        this.debug({
+          type: 'breadcrumb',
+          message: 'containerState',
+          data: this.containerState,
+        });
 
         this.containerState = cmd.containerState.state;
 
@@ -294,7 +272,11 @@ class Client extends EventEmitter {
   };
 
   private handleOpenChanRes = (channel: Channel, { id, state, error }: api.IOpenChannelRes) => {
+    this.debug({ type: 'breadcrumb', message: 'openChanres' });
+
     if (state === api.OpenChannelRes.State.ERROR) {
+      this.debug({ type: 'breadcrumb', message: 'error', data: error });
+
       channel.onOpenError({ error });
 
       return;
@@ -309,6 +291,12 @@ class Client extends EventEmitter {
   };
 
   private handleCloseChannel = ({ id, status }: api.ICloseChannelRes) => {
+    this.debug({
+      type: 'breadcrumb',
+      message: 'handleCloseChannel',
+      data: { id, status },
+    });
+
     if (id == null) {
       throw new Error('Closing channel with no id?');
     }
@@ -322,11 +310,29 @@ class Client extends EventEmitter {
     this.connectionState = ConnectionState.DISCONNECTED;
     this.containerState = null;
 
+    this.debug({
+      type: 'breadcrumb',
+      message: 'close',
+      data: {
+        expected,
+        closeReason: closeEvent ? closeEvent.reason : undefined,
+      },
+    });
+
     if (this.ws) {
       this.ws.onmessage = null;
       this.ws.onclose = null;
 
       if (this.ws.readyState === 0 || this.ws.readyState === 1) {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'wsclose',
+          data: {
+            expected,
+            closeReason: closeEvent ? closeEvent.reason : undefined,
+          },
+        });
+
         this.ws.close();
       }
 
@@ -360,23 +366,27 @@ class Client extends EventEmitter {
   };
 
   private tryConnect = async ({
-    debug,
     tokenOptions,
     urlOptions,
     polling,
     timeout,
   }: {
-    debug?: DebugFunc;
     tokenOptions: TokenOptions;
     urlOptions?: UrlOptions;
     polling?: boolean;
     timeout?: number;
   }) => {
-    const token = tokenOptions.token || (await fetchReplToken(tokenOptions));
+    this.debug({ type: 'breadcrumb', message: 'connect internal', data: { polling } });
+
     if (this.connectionState === ConnectionState.DISCONNECTED) {
       throw new Error('closed while connecting');
     }
 
+    let { token } = tokenOptions;
+    if (!token) {
+      this.debug({ type: 'breadcrumb', message: 'fetchToken' });
+      token = await fetchReplToken(tokenOptions);
+    }
     this.token = token;
 
     const connStr = getConnectionStr(token, urlOptions);
@@ -390,10 +400,6 @@ class Client extends EventEmitter {
 
     ws.binaryType = 'arraybuffer';
 
-    if (debug) {
-      this.debug = debug;
-    }
-
     ws.onmessage = this.onSocketMessage;
     ws.onclose = this.onSocketClose;
     this.ws = ws;
@@ -403,6 +409,8 @@ class Client extends EventEmitter {
     let timeoutId: NodeJS.Timer;
     if (timeout != null) {
       timeoutId = setTimeout(() => {
+        this.debug({ type: 'breadcrumb', message: 'timeout' });
+
         if (this.deferredReady) {
           this.deferredReady.reject(new Error('timeout'));
           this.deferredReady = null;
@@ -414,6 +422,8 @@ class Client extends EventEmitter {
 
     const res = this.deferredReady.resolve;
     this.deferredReady.resolve = (v) => {
+      this.debug({ type: 'breadcrumb', message: 'connected!' });
+
       clearTimeout(timeoutId);
       res(v);
     };

@@ -1,6 +1,6 @@
 module.exports = {
-  extends: ['airbnb', 'plugin:@typescript-eslint/recommended'],
   parser: '@typescript-eslint/parser',
+  extends: ['airbnb', 'plugin:@typescript-eslint/recommended', 'prettier/@typescript-eslint'],
   plugins: ['@typescript-eslint', 'prettier'],
   settings: {
     'import/parsers': {
@@ -13,7 +13,6 @@ module.exports = {
   rules: {
     'import/prefer-default-export': 'off',
     indent: 'off',
-    '@typescript-eslint/indent': ['error', 2],
     'max-len': ['error', { code: 120 }],
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/no-non-null-assertion': 'error',
