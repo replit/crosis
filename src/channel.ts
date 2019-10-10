@@ -3,12 +3,19 @@ import { api } from '../protocol/api';
 import { createDeferred, Deferred } from './deferred';
 
 class Channel extends EventEmitter {
+  // static
+  public static ChannelClosedErrorMessage = 'Channel closed';
+
+  // public
   public state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED | null;
 
   public id: number | null;
 
   public isOpen: boolean;
 
+  public closed: boolean;
+
+  // private
   private sendQueue: Array<api.ICommand>;
 
   private sendToClient: (cmd: api.Command) => void;
@@ -21,6 +28,7 @@ class Channel extends EventEmitter {
     this.state = null;
     this.id = null;
     this.isOpen = false;
+    this.closed = false;
     this.sendQueue = [];
     this.sendToClient = this.enqueueSend;
     this.requestMap = {};
@@ -60,30 +68,29 @@ class Channel extends EventEmitter {
   /**
    * Closes the channel
    */
-  public close = async () => {
-    // fake news for now
-    // uncomment when goval implements closeChan
+  public close = async (): Promise<api.ICloseChannelRes> => {
+    if (this.closed === true) {
+      throw new Error('Channel already closed');
+    }
+
+    const cmd = api.Command.create({
+      channel: 0,
+      closeChan: {
+        action: api.CloseChannel.Action.TRY_CLOSE,
+        id: this.id,
+      },
+    });
+    this.sendToClient(cmd);
+
     this.onCommand = () => undefined;
-    this.onClose();
+    this.send = () => undefined;
+    this.closed = true;
 
-    return Promise.resolve();
-
-    // if (this.isOpen === false) {
-    //   // TODO (masad-frost) need to delete channel from client
-    //   // in this case
-    //   this.onClose();
-
-    //   return Promise.resolve();
-    // }
-
-    // const cmd = api.Command.create({
-    //   channel: 0,
-    //   closeChan: {
-    //     id: this.id,
-    //   },
-    // });
-
-    // this.sendToClient(cmd);
+    return new Promise((resolve) => {
+      this.once('close', (closeRes) => {
+        resolve(closeRes);
+      });
+    });
   };
 
   /**
@@ -140,14 +147,15 @@ class Channel extends EventEmitter {
    *
    * Called when the channel is or client is closed
    */
-  public onClose = () => {
+  public onClose = (closeChanRes: api.ICloseChannelRes) => {
     Object.keys(this.requestMap).forEach((ref) => {
-      this.requestMap[ref].reject(new Error('Channel closed'));
+      this.requestMap[ref].reject(new Error(Channel.ChannelClosedErrorMessage));
       delete this.requestMap[ref];
     });
 
     this.isOpen = false;
-    this.emit('close');
+    this.closed = true;
+    this.emit('close', closeChanRes);
     this.removeAllListeners();
   };
 
@@ -180,7 +188,7 @@ declare function open(): void;
  * @asMemberOf Channel
  * @event
  */
-declare function close(): void;
+declare function close(closeChanRes: api.ICloseChannelRes): void;
 
 declare interface Channel extends EventEmitter {
   on(event: 'command', listener: typeof command): this;
