@@ -33,7 +33,7 @@ class Client extends EventEmitter {
 
   private didConnect: boolean;
 
-  constructor(debug?: DebugFunc = () => {}) {
+  constructor(debug: DebugFunc = () => {}) {
     super();
 
     this.ws = null;
