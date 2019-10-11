@@ -23,6 +23,7 @@ interface TokenOptions {
   polygott?: boolean;
   captcha?: string;
   token?: string;
+  flags?: Record<string, boolean>;
 }
 
 interface UrlOptions {
