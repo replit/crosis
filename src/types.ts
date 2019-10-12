@@ -13,6 +13,10 @@ type DebugLog =
   | {
       type: 'log';
       log: TxRx;
+    }
+  | {
+      type: 'ping';
+      latency: number;
     };
 type DebugFunc = (log: DebugLog) => void;
 

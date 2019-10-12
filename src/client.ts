@@ -423,12 +423,42 @@ class Client extends EventEmitter {
     const res = this.deferredReady.resolve;
     this.deferredReady.resolve = (v) => {
       this.debug({ type: 'breadcrumb', message: 'connected!' });
+      this.startPing();
 
       clearTimeout(timeoutId);
       res(v);
     };
 
     return this.deferredReady.promise;
+  };
+
+  private startPing = () => {
+    const chan0 = this.getChannel(0);
+    let pingTime = Date.now();
+
+    const ping = () => {
+      if (chan0.closed) {
+        return;
+      }
+
+      pingTime = Date.now();
+      chan0.send({ ping: {} });
+    };
+
+    chan0.on('command', (cmd) => {
+      if (cmd.body === 'pong') {
+        const pongTime = Date.now();
+        const latency = pongTime - pingTime;
+
+        this.debug({ type: 'ping', latency });
+
+        // Start next ping
+        setTimeout(ping, 10 * 1000);
+      }
+    });
+
+    // Kick off
+    ping();
   };
 }
 
