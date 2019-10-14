@@ -7,6 +7,7 @@
   "scripts": {
     "lint": "eslint . --ext .js,.ts",
     "build": "tsc",
+    "prepublishOnly": "tsc",
     "docs": "typedoc --out docs --tsconfig tsconfig.json --includeDeclarations --exclude \"**/!(index).d.ts\" --excludePrivate --mode modules client.ts channel.ts node_modules/@replit/protocol/index.d.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
