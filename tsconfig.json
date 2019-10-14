@@ -14,5 +14,5 @@
     "noImplicitAny": true,
     "removeComments": true
   },
-  "include": ["src", "protocol"]
+  "include": ["src"]
 }

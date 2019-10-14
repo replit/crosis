@@ -1,4 +1,4 @@
-import { api } from '../protocol/api';
+import { api } from '@replit/protocol';
 
 interface TxRx {
   direction: 'in' | 'out';

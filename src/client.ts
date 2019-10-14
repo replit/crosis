@@ -1,7 +1,7 @@
 /* global WebSocket */
 
 import { EventEmitter } from 'events';
-import { api } from '../protocol/api';
+import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { createDeferred, Deferred } from './deferred';
 import { EIOCompat } from './EIOCompat';

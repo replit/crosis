@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { api } from '../protocol/api';
+import { api } from '@replit/protocol';
 import { createDeferred, Deferred } from './deferred';
 
 class Channel extends EventEmitter {
