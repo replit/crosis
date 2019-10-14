@@ -1,24 +1,22 @@
 {
   "name": "@replit/crosis",
-  "version": "0.3.2",
+  "version": "1.0.0",
   "description": "Goval connection and channel manager",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "gen": "pbjs -t static-module -w default -o protocol/api.js protocol/api.proto && pbts -o protocol/api.d.ts protocol/api.js",
     "lint": "eslint . --ext .js,.ts",
     "build": "tsc",
-    "docs": "typedoc --out docs --tsconfig ../../tsconfig.json --includeDeclarations --exclude \"**/!(api).d.ts\" --excludePrivate --mode modules client.ts channel.ts api.d.ts",
+    "docs": "typedoc --out docs --tsconfig tsconfig.json --includeDeclarations --exclude \"**/!(index).d.ts\" --excludePrivate --mode modules client.ts channel.ts node_modules/@replit/protocol/index.d.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "faris@repl.it",
   "license": "UNLICENSED",
   "dependencies": {
-    "declaration-bundler-webpack-plugin": "^1.0.3",
-    "engine.io-client": "^3.4.0",
-    "protobufjs": "^6.8.8"
+    "engine.io-client": "^3.4.0"
   },
   "devDependencies": {
+    "@replit/protocol": "0.0.x",
     "@types/engine.io-client": "^3.1.2",
     "@types/node": "^12.7.5",
     "@typescript-eslint/eslint-plugin": "^2.3.0",
@@ -34,5 +32,8 @@
     "prettier": "^1.18.2",
     "ts-loader": "^6.1.1",
     "typedoc": "^0.15.0"
+  },
+  "peerDependencies": {
+    "@replit/protocol": "0.0.x"
   }
 }
