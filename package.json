@@ -2,8 +2,11 @@
   "name": "@replit/crosis",
   "version": "1.0.3",
   "description": "Goval connection and channel manager",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "files": [
+    "/dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "lint": "eslint . --ext .js,.ts",
     "build": "tsc",

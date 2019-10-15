@@ -1,9 +1,0 @@
-node_modules/
-
-docs/
-src/
-
-yarn-error.log
-yarn-debug.log*
-yarn-error.log*
-.yarn-integrity
