@@ -406,19 +406,27 @@ class Client extends EventEmitter {
 
     this.deferredReady = createDeferred();
 
+    const rej = this.deferredReady.reject;
+
     let timeoutId: NodeJS.Timer;
     if (timeout != null) {
       timeoutId = setTimeout(() => {
         this.debug({ type: 'breadcrumb', message: 'timeout' });
 
         if (this.deferredReady) {
-          this.deferredReady.reject(new Error('timeout'));
+          rej(new Error('timeout'));
           this.deferredReady = null;
         }
 
         this.close();
       }, timeout);
     }
+
+    this.deferredReady.reject = (reason) => {
+      // Make sure we clear the timeout when rejecting
+      clearTimeout(timeoutId);
+      rej(reason);
+    };
 
     const res = this.deferredReady.resolve;
     this.deferredReady.resolve = (v) => {
