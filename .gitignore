@@ -7,3 +7,5 @@ yarn-error.log
 yarn-debug.log*
 yarn-error.log*
 .yarn-integrity
+
+.cache/

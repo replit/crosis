@@ -9,7 +9,8 @@
     "build": "tsc",
     "prepublishOnly": "rm -rf dist && yarn run build",
     "docs": "typedoc --out docs --tsconfig tsconfig.json --includeDeclarations --exclude \"**/!(index).d.ts\" --excludePrivate --mode modules client.ts channel.ts node_modules/@replit/protocol/index.d.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsc && (tsc -w & parcel htmltest/index.html)"
   },
   "author": "faris@repl.it",
   "license": "UNLICENSED",
@@ -30,6 +31,7 @@
     "eslint-plugin-jsx-a11y": "^6.2.3",
     "eslint-plugin-prettier": "^3.1.1",
     "eslint-plugin-react": "^7.14.3",
+    "parcel": "^1.12.4",
     "prettier": "^1.18.2",
     "ts-loader": "^6.1.1",
     "typedoc": "^0.15.0"
