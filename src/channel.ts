@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { createDeferred, Deferred } from './deferred';
 
-class Channel extends EventEmitter {
+export class Channel extends EventEmitter {
   // static
   public static ChannelClosedErrorMessage = 'Channel closed';
 
@@ -190,7 +190,7 @@ declare function open(): void;
  */
 declare function close(closeChanRes: api.ICloseChannelRes): void;
 
-declare interface Channel extends EventEmitter {
+export declare interface Channel extends EventEmitter {
   on(event: 'command', listener: typeof command): this;
   on(event: 'error', listener: typeof error): this;
   on(event: 'close', listener: typeof close): this;
@@ -233,5 +233,3 @@ declare interface Channel extends EventEmitter {
 
   eventNames(): Array<'command' | 'error' | 'close' | 'open'>;
 }
-
-export { Channel };

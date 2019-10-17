@@ -38,7 +38,7 @@ type DebugLog =
     };
 type DebugFunc = (log: DebugLog) => void;
 
-class Client extends EventEmitter {
+export class Client extends EventEmitter {
   public containerState: api.ContainerState.State | null;
 
   public connectionState: ConnectionState;
@@ -502,5 +502,3 @@ class Client extends EventEmitter {
     ping();
   };
 }
-
-export { Client };
