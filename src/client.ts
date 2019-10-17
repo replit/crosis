@@ -5,14 +5,38 @@ import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { createDeferred, Deferred } from './deferred';
 import { EIOCompat } from './EIOCompat';
-import { DebugFunc, TokenOptions, UrlOptions } from './types';
-import { fetchReplToken, getConnectionStr } from './util';
 
 enum ConnectionState {
   CONNECTING = 0,
   CONNECTED = 1,
   DISCONNECTED = 2,
 }
+
+interface UrlOptions {
+  secure: boolean;
+  host: string;
+  port: string;
+}
+
+interface TxRx {
+  direction: 'in' | 'out';
+  cmd: api.Command;
+}
+type DebugLog =
+  | {
+      type: 'breadcrumb';
+      message: string;
+      data?: unknown;
+    }
+  | {
+      type: 'log';
+      log: TxRx;
+    }
+  | {
+      type: 'ping';
+      latency: number;
+    };
+type DebugFunc = (log: DebugLog) => void;
 
 class Client extends EventEmitter {
   public containerState: api.ContainerState.State | null;
@@ -57,7 +81,7 @@ class Client extends EventEmitter {
    * @returns it returns a promise that is resolved when the server is ready (sends cotainer state)
    */
   public connect = async (options: {
-    tokenOptions: TokenOptions;
+    token: string;
     urlOptions?: UrlOptions;
     polling?: boolean;
     timeout?: number;
@@ -78,6 +102,14 @@ class Client extends EventEmitter {
       const error = new Error('Client must be disconnected to connect');
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+      throw error;
+    }
+
+    if (!options.token) {
+      const error = new Error('You must provide a token');
+
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+
       throw error;
     }
 
@@ -366,12 +398,12 @@ class Client extends EventEmitter {
   };
 
   private tryConnect = async ({
-    tokenOptions,
+    token,
     urlOptions,
     polling,
     timeout,
   }: {
-    tokenOptions: TokenOptions;
+    token: string;
     urlOptions?: UrlOptions;
     polling?: boolean;
     timeout?: number;
@@ -382,11 +414,6 @@ class Client extends EventEmitter {
       throw new Error('closed while connecting');
     }
 
-    let { token } = tokenOptions;
-    if (!token) {
-      this.debug({ type: 'breadcrumb', message: 'fetchToken' });
-      token = await fetchReplToken(tokenOptions);
-    }
     this.token = token;
 
     const connStr = getConnectionStr(token, urlOptions);
@@ -468,6 +495,13 @@ class Client extends EventEmitter {
     // Kick off
     ping();
   };
+}
+
+/** @hidden */
+export function getConnectionStr(token: string, urlOptions?: UrlOptions) {
+  const { secure = false, host = 'eval.repl.it', port = '80' } = urlOptions || {};
+
+  return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
 }
 
 export { Client };
