@@ -57,6 +57,12 @@ class Client extends EventEmitter {
 
   private didConnect: boolean;
 
+  static getConnectionStr(token: string, urlOptions?: UrlOptions) {
+    const { secure = false, host = 'eval.repl.it', port = '80' } = urlOptions || {};
+
+    return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
+  }
+
   constructor(debug: DebugFunc = () => {}) {
     super();
 
@@ -416,7 +422,7 @@ class Client extends EventEmitter {
 
     this.token = token;
 
-    const connStr = getConnectionStr(token, urlOptions);
+    const connStr = Client.getConnectionStr(token, urlOptions);
 
     let ws;
     if (polling) {
@@ -495,13 +501,6 @@ class Client extends EventEmitter {
     // Kick off
     ping();
   };
-}
-
-/** @hidden */
-export function getConnectionStr(token: string, urlOptions?: UrlOptions) {
-  const { secure = false, host = 'eval.repl.it', port = '80' } = urlOptions || {};
-
-  return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
 }
 
 export { Client };
