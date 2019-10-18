@@ -10,10 +10,12 @@
   "scripts": {
     "lint": "eslint . --ext .js,.ts",
     "build": "tsc",
-    "prepublishOnly": "rm -rf dist && yarn run build",
+    "build:browser": "yarn clean && yarn build && parcel build src.browser/index.js -d dist.browser --out-file crosis.js",
+    "dev": "yarn build && (yarn build -- -w & parcel src.browser/index.html)",
+    "prepublishOnly": "yarn clean && yarn build",
+    "clean": "rm -rf dist dist.browser",
     "docs": "typedoc --out docs --name crosis --includeDeclarations --excludeExternals src/channel.ts src/client.ts node_modules/@replit/protocol/index.d.ts",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsc && (tsc -w & parcel htmltest/index.html)"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "faris@repl.it",
   "license": "UNLICENSED",
@@ -36,8 +38,8 @@
     "eslint-plugin-react": "^7.14.3",
     "parcel": "^1.12.4",
     "prettier": "^1.18.2",
-    "ts-loader": "^6.1.1",
-    "typedoc": "^0.15.0"
+    "typedoc": "^0.15.0",
+    "typescript": "^3.6.4"
   },
   "peerDependencies": {
     "@replit/protocol": "0.0.x"
