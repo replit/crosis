@@ -2,6 +2,7 @@ node_modules/
 
 docs/
 dist/
+dist.browser/
 
 yarn-error.log
 yarn-debug.log*
