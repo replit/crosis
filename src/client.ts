@@ -228,12 +228,18 @@ export class Client extends EventEmitter {
     return chan;
   }
 
+  /** Gets the token that was used to connect */
   public getToken(): string | null {
     if (!this.token) {
       return null;
     }
 
     return this.token;
+  }
+
+  /** Sets a logging/debugging function */
+  public setDebugFunc(debugFunc: DebugFunc): void {
+    this.debug = debugFunc;
   }
 
   private send = (cmd: api.Command) => {
