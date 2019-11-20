@@ -2,7 +2,7 @@ Generated docs https://replit-crosis--masfrost.repl.co/
 
 ### Installation
 
-`yarn add @replit/crosis @replit/protocl`
+`yarn add @replit/crosis @replit/protocol`
 
 Crosis relies on the `@replit/protocol` package as a peer dependency. https://github.com/replit/protocol
 
