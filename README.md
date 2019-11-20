@@ -8,9 +8,9 @@ Crosis relies on the `@replit/protocol` package as a peer dependency. https://gi
 
 ### Exported
 
-- [Client](https://replit-crosis--masfrost.repl.co/classes/_client_.client.html)
+- [Client](https://replit-crosis.masfrost.repl.co/modules/_src_client_.html)
 
-You probably don't need this but it's exported: [Channel](https://replit-crosis--masfrost.repl.co/classes/_channel_.channel.html)
+You probably don't need this but it's exported: [Channel](https://replit-crosis.masfrost.repl.co/modules/_src_channel_.html)
 
 ### Usage
 
@@ -29,7 +29,7 @@ const token = await fetch(TOKEN_URL).then((r) => r.text());
 
 await client.connect({ token });
 
-const channel = connection.openChannel({
+const channel = client.openChannel({
   name: 'evaller',
   service: 'eval',
 });
