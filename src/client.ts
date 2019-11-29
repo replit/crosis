@@ -142,23 +142,39 @@ export class Client extends EventEmitter {
   };
 
   /**
-   * Opens a service channel. If name is omitted, it will send [[api.OpenChannel.Action.CREATE]] as the action
+   * Opens a service channel.
+   * If action is specified the action will be sent with the request
+   * If action is not specfied it will:
+   *    1- if name is specified, it will send a request with [[api.OpenChannel.Action.ATTACH_OR_CREATE]]
+   *    2- if name is not specified, it will send a request with [[api.OpenChannel.Action.CREATE]]
    *
    * @param name Channel name (can be anything)
    * @param service One of goval's services
+   * @param action [[api.OpenChannel.Action]]
    */
-  public openChannel = ({ name, service }: { name?: string; service: string }): Channel => {
+  public openChannel = ({
+    name,
+    service,
+    action,
+  }: {
+    name?: string;
+    service: string;
+    action?: api.OpenChannel.Action;
+  }): Channel => {
+    let ac = action;
+    if (!ac) {
+      ac = name == null ? api.OpenChannel.Action.CREATE : api.OpenChannel.Action.ATTACH_OR_CREATE;
+    }
+
     this.debug({
       type: 'breadcrumb',
       message: 'openChannel',
       data: {
         name,
         service,
+        action: ac,
       },
     });
-
-    const action =
-      name == null ? api.OpenChannel.Action.CREATE : api.OpenChannel.Action.ATTACH_OR_CREATE;
 
     const channel = new Channel();
 
@@ -178,7 +194,7 @@ export class Client extends EventEmitter {
       openChan: {
         name,
         service,
-        action,
+        action: ac,
       },
     });
 
