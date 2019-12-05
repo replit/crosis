@@ -67,8 +67,13 @@ export class Channel extends EventEmitter {
 
   /**
    * Closes the channel
+   *
+   * see http://protodoc.turbio.repl.co/protov2#closing-channels
+   * @param action [[api.OpenChannel.Action]] specifies how you want to close the channel
    */
-  public close = async (): Promise<api.ICloseChannelRes> => {
+  public close = async (
+    action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE,
+  ): Promise<api.ICloseChannelRes> => {
     if (this.closed === true) {
       throw new Error('Channel already closed');
     }
@@ -76,7 +81,7 @@ export class Channel extends EventEmitter {
     const cmd = api.Command.create({
       channel: 0,
       closeChan: {
-        action: api.CloseChannel.Action.TRY_CLOSE,
+        action,
         id: this.id,
       },
     });

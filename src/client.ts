@@ -148,6 +148,7 @@ export class Client extends EventEmitter {
    *    1- if name is specified, it will send a request with [[api.OpenChannel.Action.ATTACH_OR_CREATE]]
    *    2- if name is not specified, it will send a request with [[api.OpenChannel.Action.CREATE]]
    *
+   * http://protodoc.turbio.repl.co/protov2#opening-channels
    * @param name Channel name (can be anything)
    * @param service One of goval's services
    * @param action [[api.OpenChannel.Action]]
