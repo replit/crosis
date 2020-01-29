@@ -160,8 +160,6 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    this.connectionState = ConnectionState.CONNECTING;
-
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
       const error = new Error('Client already connected to an active websocket connection');
 
@@ -179,6 +177,8 @@ export class Client extends EventEmitter {
       WebSocketClass: options.polling ? EIOCompat : getWebSocketClass(options),
       polling: !!options.polling,
     };
+
+    this.connectionState = ConnectionState.CONNECTING;
 
     try {
       await this.tryConnect(completeOptions);
