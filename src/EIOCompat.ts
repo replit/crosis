@@ -30,9 +30,7 @@ const readyStateStringToValue = new Map([
   ['closed', 3],
 ]);
 
-Object.keys(readyStateStringToValue);
-
-export class EIOCompat {
+export class EIOCompat implements WebSocket {
   public onclose: ((ev: CloseEvent) => unknown) | null;
 
   public onerror: ((ev: Event) => unknown) | null;
@@ -69,7 +67,11 @@ export class EIOCompat {
 
   private eioSocket: eio.Socket;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | string[] | undefined) {
+    if (protocols) {
+      throw new Error('Passing protocols is not implemented');
+    }
+
     const { uri, path } = splitHref(url);
 
     this.onopen = null;
@@ -190,5 +192,20 @@ export class EIOCompat {
     this.onmessage = null;
     this.eioSocket.close();
     this.setReadyState();
+  }
+
+  // eslint-disable-next-line class-methods-use-this
+  addEventListener(): boolean {
+    throw new Error('Not Implemented, please use onmessage, onopen, onerror, or onclose');
+  }
+
+  // eslint-disable-next-line class-methods-use-this
+  removeEventListener() {
+    throw new Error('Not Implemented');
+  }
+
+  // eslint-disable-next-line class-methods-use-this
+  dispatchEvent(): boolean {
+    throw new Error('Not Implemented');
   }
 }

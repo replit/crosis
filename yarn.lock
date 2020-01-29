@@ -802,10 +802,10 @@
   resolved "https://registry.yarnpkg.com/@protobufjs/utf8/-/utf8-1.1.0.tgz#a777360b5b39a1a2e5106f8e858f2fd2d060c570"
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
-"@replit/protocol@0.0.x":
-  version "0.0.1"
-  resolved "https://registry.yarnpkg.com/@replit/protocol/-/protocol-0.0.1.tgz#d88670f0a55089ed298a339e892846af8ce448d8"
-  integrity sha512-eoRj0v5KW7VqE4CHFYsAetoNpHSvlxIrGkqgdBN8W3v01N6//ntP9YXfsEg1apPRW1y8UbieZv7JQPm3lTxUVg==
+"@replit/protocol@0.x.x":
+  version "0.2.2"
+  resolved "https://registry.yarnpkg.com/@replit/protocol/-/protocol-0.2.2.tgz#14e94f2eb86b4206d7eb2bf0963459bdcb0a25d4"
+  integrity sha512-vRlwsX6d30vZQi/yZ+gQBSCNH4Nt721vIusPn9egUNTU4CqUfyHVuwNNSxmUrbUCHz8LyZPDx20X98l5WJ6wBg==
   dependencies:
     protobufjs "^6.8.8"
 

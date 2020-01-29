@@ -38,6 +38,52 @@ type DebugLog =
     };
 type DebugFunc = (log: DebugLog) => void;
 
+interface ConnectOptions {
+  token: string;
+  urlOptions?: UrlOptions;
+  polling?: boolean;
+  timeout?: number | null;
+  WebSocketClass?: typeof WebSocket;
+}
+
+/**
+ * @hidden
+ */
+const isWebSocket = (w: typeof WebSocket | unknown) => {
+  if (typeof w !== 'object' && typeof w !== 'function') {
+    return false;
+  }
+
+  if (!w) {
+    return false;
+  }
+
+  return 'OPEN' in w && (w as WebSocket).OPEN === 1;
+};
+
+/**
+ * @hidden
+ */
+const getWebSocketClass = (options: ConnectOptions) => {
+  if (options.WebSocketClass) {
+    if (!isWebSocket(options.WebSocketClass)) {
+      throw new Error('Passed in WebSocket does not look like a standard WebSocket');
+    }
+
+    return options.WebSocketClass;
+  }
+
+  if (typeof WebSocket !== 'undefined') {
+    if (!isWebSocket(WebSocket)) {
+      throw new Error('Global WebSocket does not look like a standard WebSocket');
+    }
+
+    return WebSocket;
+  }
+
+  throw new Error('Please pass in a WebSocket class, add it to global, or use the polling option');
+};
+
 export class Client extends EventEmitter {
   public containerState: api.ContainerState.State | null;
 
@@ -45,7 +91,7 @@ export class Client extends EventEmitter {
 
   private token: string | null;
 
-  private ws: WebSocket | EIOCompat | null;
+  private ws: WebSocket | null;
 
   private channels: {
     [id: number]: Channel;
@@ -57,8 +103,8 @@ export class Client extends EventEmitter {
 
   private didConnect: boolean;
 
-  static getConnectionStr(token: string, urlOptions?: UrlOptions) {
-    const { secure = false, host = 'eval.repl.it', port = '80' } = urlOptions || {};
+  static getConnectionStr(token: string, urlOptions: UrlOptions) {
+    const { secure, host, port } = urlOptions;
 
     return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
   }
@@ -86,12 +132,7 @@ export class Client extends EventEmitter {
    * Connects to the server and primes the client to start sending data
    * @returns it returns a promise that is resolved when the server is ready (sends cotainer state)
    */
-  public connect = async (options: {
-    token: string;
-    urlOptions?: UrlOptions;
-    polling?: boolean;
-    timeout?: number;
-  }): Promise<void> => {
+  public connect = async (options: ConnectOptions): Promise<void> => {
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
 
     if (this.didConnect) {
@@ -128,8 +169,19 @@ export class Client extends EventEmitter {
       throw error;
     }
 
+    const completeOptions: Required<ConnectOptions> = {
+      token: options.token,
+      urlOptions: options.urlOptions || { secure: false, host: 'eval.repl.it', port: '80' },
+      timeout: options.timeout || null,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+      // @ts-ignore: EIOCompat is compatible with the WebSocket api but
+      // lib.dom.d.ts defines WebSockets in a weird way that is causing errors
+      WebSocketClass: options.polling ? EIOCompat : getWebSocketClass(options),
+      polling: !!options.polling,
+    };
+
     try {
-      await this.tryConnect(options);
+      await this.tryConnect(completeOptions);
     } catch (e) {
       this.connectionState = ConnectionState.DISCONNECTED;
 
@@ -431,12 +483,8 @@ export class Client extends EventEmitter {
     urlOptions,
     polling,
     timeout,
-  }: {
-    token: string;
-    urlOptions?: UrlOptions;
-    polling?: boolean;
-    timeout?: number;
-  }) => {
+    WebSocketClass,
+  }: Required<ConnectOptions>) => {
     this.debug({ type: 'breadcrumb', message: 'connect internal', data: { polling } });
 
     if (this.connectionState === ConnectionState.DISCONNECTED) {
@@ -447,12 +495,7 @@ export class Client extends EventEmitter {
 
     const connStr = Client.getConnectionStr(token, urlOptions);
 
-    let ws;
-    if (polling) {
-      ws = new EIOCompat(connStr);
-    } else {
-      ws = new WebSocket(connStr);
-    }
+    const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
 
