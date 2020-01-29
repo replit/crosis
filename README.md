@@ -1,3 +1,5 @@
+[![Run on Repl.it](https://repl.it/badge/github/replit/crosis)](https://repl.it/github/replit/crosis)
+
 Generated docs https://replit-crosis--masfrost.repl.co/
 
 ### Installation
