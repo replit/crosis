@@ -268,7 +268,10 @@ export class Client extends EventEmitter {
   };
 
   /**
-   * Closes the socket connection and handles cleanup
+   * Closes the connection.
+   * - If `connect` was called and not settled it will also reject the promise
+   * - If there's an open WebSocket connection it will be closed
+   * - Any open channels or channel requests are closed
    */
   public close = () => {
     this.debug({ type: 'breadcrumb', message: 'user close' });
@@ -385,14 +388,9 @@ export class Client extends EventEmitter {
   private onClose = ({ closeEvent, expected }: { closeEvent?: CloseEvent; expected: boolean }) => {
     this.cleanupSocket();
 
-    if (this.didConnect) {
-      // Only close the channels if we ever connected
-      // so that we can retry without losing queued up
-      // messages.
-      Object.keys(this.channels).forEach((id) => {
-        this.handleCloseChannel({ id: Number(id) });
-      });
-    }
+    Object.keys(this.channels).forEach((id) => {
+      this.handleCloseChannel({ id: Number(id) });
+    });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       this.emit('close', { closeEvent, expected });
