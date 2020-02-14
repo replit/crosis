@@ -3,7 +3,6 @@
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
-import { createDeferred, Deferred } from './deferred';
 import { EIOCompat } from './EIOCompat';
 
 enum ConnectionState {
@@ -85,8 +84,6 @@ const getWebSocketClass = (options: ConnectOptions) => {
 };
 
 export class Client extends EventEmitter {
-  public containerState: api.ContainerState.State | null;
-
   public connectionState: ConnectionState;
 
   private token: string | null;
@@ -96,8 +93,6 @@ export class Client extends EventEmitter {
   private channels: {
     [id: number]: Channel;
   };
-
-  private deferredReady: Deferred<void> | null;
 
   private debug: DebugFunc;
 
@@ -116,8 +111,6 @@ export class Client extends EventEmitter {
     this.channels = {
       0: new Channel(),
     };
-    this.deferredReady = null;
-    this.containerState = null;
     this.token = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
@@ -334,44 +327,6 @@ export class Client extends EventEmitter {
     this.getChannel(cmd.channel).onCommand(cmd);
 
     switch (cmd.body) {
-      case 'containerState':
-        if (cmd.containerState == null || cmd.containerState.state == null) {
-          const err = new Error('Expected container state to have state, got null or undefined');
-
-          if (this.deferredReady) {
-            this.deferredReady.reject(err);
-            return;
-          }
-
-          this.debug({ type: 'breadcrumb', message: 'error', data: err.message });
-          throw err;
-        }
-
-        this.debug({
-          type: 'breadcrumb',
-          message: 'containerState',
-          data: this.containerState,
-        });
-
-        this.containerState = cmd.containerState.state;
-
-        if (this.containerState === api.ContainerState.State.READY) {
-          if (this.deferredReady) {
-            this.deferredReady.resolve();
-            this.deferredReady = null;
-          }
-
-          if (this.getChannel(0).isOpen === false) {
-            this.getChannel(0).onOpen(0, api.OpenChannelRes.State.CREATED, this.send);
-          }
-        }
-
-        if (this.containerState === api.ContainerState.State.SLEEP) {
-          this.onClose({ expected: false });
-        }
-
-        break;
-
       case 'closeChanRes':
         if (cmd.closeChanRes == null) {
           throw new Error('Expected closeChanRes');
@@ -421,7 +376,6 @@ export class Client extends EventEmitter {
 
   private onClose = ({ closeEvent, expected }: { closeEvent?: CloseEvent; expected: boolean }) => {
     this.connectionState = ConnectionState.DISCONNECTED;
-    this.containerState = null;
 
     this.debug({
       type: 'breadcrumb',
@@ -461,11 +415,6 @@ export class Client extends EventEmitter {
       });
     }
 
-    if (this.deferredReady) {
-      this.deferredReady.reject(new Error('Connection closed before the server was ready'));
-      this.deferredReady = null;
-    }
-
     this.emit('close', { closeEvent, expected });
   };
 
@@ -503,40 +452,151 @@ export class Client extends EventEmitter {
     ws.onclose = this.onSocketClose;
     this.ws = ws;
 
-    this.deferredReady = createDeferred();
+    let onSuccess: () => void;
+    let onFailed: (err: Error) => void;
 
-    const rej = this.deferredReady.reject;
+    const onCommand = (cmd: api.Command) => {
+      if (cmd.containerState == null) {
+        return;
+      }
 
-    let timeoutId: NodeJS.Timer;
-    if (timeout != null) {
-      timeoutId = setTimeout(() => {
-        this.debug({ type: 'breadcrumb', message: 'timeout' });
+      if (cmd.containerState.state == null) {
+        onFailed(new Error('Got containterState but state was not defined'));
 
-        if (this.deferredReady) {
-          rej(new Error('timeout'));
-          this.deferredReady = null;
-        }
+        return;
+      }
 
-        this.close();
-      }, timeout);
-    }
+      const { state } = cmd.containerState;
 
-    this.deferredReady.reject = (reason) => {
-      // Make sure we clear the timeout when rejecting
-      clearTimeout(timeoutId);
-      rej(reason);
+      this.debug({
+        type: 'breadcrumb',
+        message: 'containerState',
+        data: state,
+      });
+
+      const StateEnum = api.ContainerState.State;
+
+      switch (state) {
+        case StateEnum.READY:
+          onSuccess();
+
+          if (this.getChannel(0).isOpen === false) {
+            this.getChannel(0).onOpen(0, api.OpenChannelRes.State.CREATED, this.send);
+          }
+
+          return;
+
+        case StateEnum.SLEEP:
+          onFailed(new Error('Got SLEEP as container state'));
+
+          break;
+
+        default:
+      }
+    };
+    const chan0 = this.getChannel(0);
+    chan0.on('command', onCommand);
+
+    const originalOnClose = this.onClose;
+    this.onClose = ({ expected, closeEvent }) => {
+      originalOnClose({ expected, closeEvent });
+
+      if (expected) {
+        onFailed(new Error('You called `Client.close` before you connected'));
+      }
     };
 
-    const res = this.deferredReady.resolve;
-    this.deferredReady.resolve = (v) => {
-      this.debug({ type: 'breadcrumb', message: 'connected!' });
-      this.startPing();
-
-      clearTimeout(timeoutId);
-      res(v);
+    const cleanup = () => {
+      this.onClose = originalOnClose;
+      chan0.off('command', onCommand);
     };
 
-    return this.deferredReady.promise;
+    return new Promise((_res, _rej) => {
+      onSuccess = () => {
+        _res();
+        cleanup();
+
+        this.debug({ type: 'breadcrumb', message: 'connected!' });
+        this.startPing();
+      };
+
+      onFailed = (err) => {
+        _rej(err);
+        cleanup();
+
+        this.debug({ type: 'breadcrumb', message: 'connect failed' });
+      };
+    });
+    // const onSuccess = () => {
+    //   this.connectCallback = null;
+
+    //   this.debug({ type: 'breadcrumb', message: 'connected!' });
+    //   this.startPing();
+
+    //   resolve();
+    // };
+
+    // const onError = (err: Error) => {
+    //   this.connectCallback = null;
+
+    //   this.debug({ type: 'breadcrumb', message: 'connection failed' });
+
+    //   reject(err);
+    // };
+
+    // // Create a callback so that we can
+    // this.connectCallback = (err) => {
+    //   if (err) {
+    //     onError(err);
+
+    //     return;
+    //   }
+
+    //   onSuccess();
+    // };
+
+    // if (timeout == null) {
+    //   return;
+    // }
+
+    // let timeoutId: NodeJS.Timer;
+    // });
+
+    // TODO handle timeout case
+    // this.deferredReady = createDeferred();
+
+    // const rej = this.deferredReady.reject;
+
+    // let timeoutId: NodeJS.Timer;
+    // if (timeout != null) {
+    //   timeoutId = setTimeout(() => {
+    //     this.debug({ type: 'breadcrumb', message: 'timeout' });
+
+    //     if (this.deferredReady) {
+    //       rej(new Error('timeout'));
+    //       this.deferredReady = null;
+    //     }
+
+    //     this.close();
+    //   }, timeout);
+    // }
+
+    // this.deferredReady.reject = (reason) => {
+    //   // Make sure we clear the timeout when rejecting
+    //   clearTimeout(timeoutId);
+    //   rej(reason);
+    // };
+
+    // const res = this.deferredReady.resolve;
+    // this.deferredReady.resolve = (v) => {
+    //   this.debug({ type: 'breadcrumb', message: 'connected!' });
+    //   this.startPing();
+
+    //   clearTimeout(timeoutId);
+    //   res(v);
+    // };
+
+    // return this.deferredReady.promise;
   };
 
   private startPing = () => {
