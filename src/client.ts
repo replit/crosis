@@ -162,7 +162,11 @@ export class Client extends EventEmitter {
 
     const completeOptions: Required<ConnectOptions> = {
       token: options.token,
-      urlOptions: options.urlOptions || { secure: false, host: 'eval.repl.it', port: '80' },
+      urlOptions: options.urlOptions || {
+        secure: false,
+        host: 'eval.repl.it',
+        port: '80',
+      },
       timeout: options.timeout || null,
       // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
       // @ts-ignore: EIOCompat is compatible with the WebSocket api but
@@ -266,7 +270,11 @@ export class Client extends EventEmitter {
   /**
    * Closes the socket connection and handles cleanup
    */
-  public close = () => this.onClose({ expected: true });
+  public close = () => {
+    this.debug({ type: 'breadcrumb', message: 'user close' });
+
+    this.onClose({ expected: true });
+  };
 
   /** Gets a channel by Id */
   public getChannel(id: number): Channel {
@@ -375,38 +383,7 @@ export class Client extends EventEmitter {
   };
 
   private onClose = ({ closeEvent, expected }: { closeEvent?: CloseEvent; expected: boolean }) => {
-    const prevState = this.connectionState;
-
-    this.connectionState = ConnectionState.DISCONNECTED;
-
-    this.debug({
-      type: 'breadcrumb',
-      message: 'close',
-      data: {
-        expected,
-        closeReason: closeEvent ? closeEvent.reason : undefined,
-      },
-    });
-
-    if (this.ws) {
-      this.ws.onmessage = null;
-      this.ws.onclose = null;
-
-      if (this.ws.readyState === 0 || this.ws.readyState === 1) {
-        this.debug({
-          type: 'breadcrumb',
-          message: 'wsclose',
-          data: {
-            expected,
-            closeReason: closeEvent ? closeEvent.reason : undefined,
-          },
-        });
-
-        this.ws.close();
-      }
-
-      this.ws = null;
-    }
+    this.cleanupSocket();
 
     if (this.didConnect) {
       // Only close the channels if we ever connected
@@ -417,18 +394,45 @@ export class Client extends EventEmitter {
       });
     }
 
-    if (prevState !== ConnectionState.DISCONNECTED) {
+    if (this.connectionState !== ConnectionState.DISCONNECTED) {
       this.emit('close', { closeEvent, expected });
+    }
+
+    this.connectionState = ConnectionState.DISCONNECTED;
+  };
+
+  private cleanupSocket = () => {
+    const { ws } = this;
+
+    if (!ws) {
+      return;
+    }
+
+    this.ws = null;
+
+    ws.onmessage = null;
+    ws.onclose = null;
+
+    if (ws.readyState === 0 || ws.readyState === 1) {
+      this.debug({
+        type: 'breadcrumb',
+        message: 'wsclose',
+      });
+
+      ws.close();
     }
   };
 
   private onSocketClose = (closeEvent: CloseEvent) => {
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      this.onClose({
-        closeEvent,
-        expected: false,
-      });
-    }
+    this.debug({
+      type: 'breadcrumb',
+      message: 'wsclose',
+      data: {
+        closeReason: closeEvent ? closeEvent.reason : undefined,
+      },
+    });
+
+    this.onClose({ closeEvent, expected: false });
   };
 
   private tryConnect = async ({
@@ -546,10 +550,9 @@ export class Client extends EventEmitter {
      * we wanna make sure we reject the promise if that happens
      * so we monkey patch our own `close` function ;)
      */
-    let closeCalledByUser = false;
     const originalClose = this.close;
     this.close = () => {
-      closeCalledByUser = true;
+      this.debug({ type: 'breadcrumb', message: 'user close' });
       onFailed(new Error('You called `Client.close` before you connected'));
     };
 
@@ -572,7 +575,7 @@ export class Client extends EventEmitter {
         _rej(err);
         cleanup();
 
-        this.onClose({ expected: closeCalledByUser });
+        this.cleanupSocket();
 
         this.debug({ type: 'breadcrumb', message: 'connect failed' });
       };
