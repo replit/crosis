@@ -375,6 +375,8 @@ export class Client extends EventEmitter {
   };
 
   private onClose = ({ closeEvent, expected }: { closeEvent?: CloseEvent; expected: boolean }) => {
+    const prevState = this.connectionState;
+
     this.connectionState = ConnectionState.DISCONNECTED;
 
     this.debug({
@@ -415,7 +417,9 @@ export class Client extends EventEmitter {
       });
     }
 
-    this.emit('close', { closeEvent, expected });
+    if (prevState !== ConnectionState.DISCONNECTED) {
+      this.emit('close', { closeEvent, expected });
+    }
   };
 
   private onSocketClose = (closeEvent: CloseEvent) => {
@@ -455,7 +459,47 @@ export class Client extends EventEmitter {
     let onSuccess: () => void;
     let onFailed: (err: Error) => void;
 
+    /**
+     * If the user specifies a timeout we will short circuit
+     * the connection if we don't get READY from the container
+     * within the specified timeout.
+     *
+     * Every time we get a message we reset the connection timeout
+     * this is because it signifies that the connection will eventually work.
+     */
+    let resetTimeout = () => {};
+    let cancelTimeout = () => {};
+    if (timeout) {
+      let timeoutId: NodeJS.Timer; // Can also be of type `number` in the browser
+
+      cancelTimeout = () => clearTimeout(timeoutId);
+
+      resetTimeout = () => {
+        cancelTimeout();
+
+        timeoutId = setTimeout(() => {
+          this.debug({ type: 'breadcrumb', message: 'connect timeout' });
+
+          onFailed(new Error('timeout'));
+        }, timeout);
+      };
+    }
+
+    /** Listen to incoming commands
+     * Every time we get a message we reset the connection timeout (if it exists)
+     * this is because it signifies that the connection will eventually work.
+     *
+     * If we ever get a ContainterState READY we can officially
+     * say that the connection is successful and we resolve the returned promise.
+     *
+     * If we ever get ContainterState SLEEP it means that something went wrong
+     * and connection should be dropped
+     */
     const onCommand = (cmd: api.Command) => {
+      // Everytime we get a message on channel0
+      // we will reset the timeout
+      resetTimeout();
+
       if (cmd.containerState == null) {
         return;
       }
@@ -484,7 +528,7 @@ export class Client extends EventEmitter {
             this.getChannel(0).onOpen(0, api.OpenChannelRes.State.CREATED, this.send);
           }
 
-          return;
+          break;
 
         case StateEnum.SLEEP:
           onFailed(new Error('Got SLEEP as container state'));
@@ -497,17 +541,21 @@ export class Client extends EventEmitter {
     const chan0 = this.getChannel(0);
     chan0.on('command', onCommand);
 
-    const originalOnClose = this.onClose;
-    this.onClose = ({ expected, closeEvent }) => {
-      originalOnClose({ expected, closeEvent });
-
-      if (expected) {
-        onFailed(new Error('You called `Client.close` before you connected'));
-      }
+    /**
+     * The user might call `close` before we even connect
+     * we wanna make sure we reject the promise if that happens
+     * so we monkey patch our own `close` function ;)
+     */
+    let closeCalledByUser = false;
+    const originalClose = this.close;
+    this.close = () => {
+      closeCalledByUser = true;
+      onFailed(new Error('You called `Client.close` before you connected'));
     };
 
     const cleanup = () => {
-      this.onClose = originalOnClose;
+      cancelTimeout();
+      this.close = originalClose;
       chan0.off('command', onCommand);
     };
 
@@ -524,79 +572,11 @@ export class Client extends EventEmitter {
         _rej(err);
         cleanup();
 
+        this.onClose({ expected: closeCalledByUser });
+
         this.debug({ type: 'breadcrumb', message: 'connect failed' });
       };
     });
-    // const onSuccess = () => {
-    //   this.connectCallback = null;
-
-    //   this.debug({ type: 'breadcrumb', message: 'connected!' });
-    //   this.startPing();
-
-    //   resolve();
-    // };
-
-    // const onError = (err: Error) => {
-    //   this.connectCallback = null;
-
-    //   this.debug({ type: 'breadcrumb', message: 'connection failed' });
-
-    //   reject(err);
-    // };
-
-    // // Create a callback so that we can
-    // this.connectCallback = (err) => {
-    //   if (err) {
-    //     onError(err);
-
-    //     return;
-    //   }
-
-    //   onSuccess();
-    // };
-
-    // if (timeout == null) {
-    //   return;
-    // }
-
-    // let timeoutId: NodeJS.Timer;
-    // });
-
-    // TODO handle timeout case
-    // this.deferredReady = createDeferred();
-
-    // const rej = this.deferredReady.reject;
-
-    // let timeoutId: NodeJS.Timer;
-    // if (timeout != null) {
-    //   timeoutId = setTimeout(() => {
-    //     this.debug({ type: 'breadcrumb', message: 'timeout' });
-
-    //     if (this.deferredReady) {
-    //       rej(new Error('timeout'));
-    //       this.deferredReady = null;
-    //     }
-
-    //     this.close();
-    //   }, timeout);
-    // }
-
-    // this.deferredReady.reject = (reason) => {
-    //   // Make sure we clear the timeout when rejecting
-    //   clearTimeout(timeoutId);
-    //   rej(reason);
-    // };
-
-    // const res = this.deferredReady.resolve;
-    // this.deferredReady.resolve = (v) => {
-    //   this.debug({ type: 'breadcrumb', message: 'connected!' });
-    //   this.startPing();
-
-    //   clearTimeout(timeoutId);
-    //   res(v);
-    // };
-
-    // return this.deferredReady.promise;
   };
 
   private startPing = () => {
