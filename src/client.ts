@@ -423,18 +423,6 @@ export class Client extends EventEmitter {
     }
   };
 
-  private onSocketClose = (closeEvent: CloseEvent) => {
-    this.debug({
-      type: 'breadcrumb',
-      message: 'wsclose',
-      data: {
-        closeReason: closeEvent ? closeEvent.reason : undefined,
-      },
-    });
-
-    this.onClose({ closeEvent, expected: false });
-  };
-
   private tryConnect = async ({
     token,
     urlOptions,
@@ -457,11 +445,28 @@ export class Client extends EventEmitter {
     ws.binaryType = 'arraybuffer';
 
     ws.onmessage = this.onSocketMessage;
-    ws.onclose = this.onSocketClose;
     this.ws = ws;
 
+    /**
+     * success is only called when we get
+     * ContainerState.READY command
+     */
     let onSuccess: () => void;
+    /**
+     * Failure can happen due to a number of reasons
+     * 1- Abrupt socket closure
+     * 2- Timedout connection request
+     * 3- ContainerState.SLEEP command
+     * 4- Use calling `close` before we connect
+     */
     let onFailed: (err: Error) => void;
+
+    /**
+     * Abrupt socket closures should report failed
+     */
+    ws.onclose = () => {
+      onFailed(new Error('WebSocket closed before we got READY'));
+    };
 
     /**
      * If the user specifies a timeout we will short circuit
@@ -556,7 +561,10 @@ export class Client extends EventEmitter {
       onFailed(new Error('You called `Client.close` before you connected'));
     };
 
-    const cleanup = () => {
+    /**
+     * We call this as a cleanup method after we settle the connection
+     */
+    const onFinally = () => {
       cancelTimeout();
       this.close = originalClose;
       chan0.off('command', onCommand);
@@ -564,16 +572,31 @@ export class Client extends EventEmitter {
 
     return new Promise((_res, _rej) => {
       onSuccess = () => {
+        onFinally();
+
+        // Update socket closure to do something else
+        ws.onclose = (closeEvent: CloseEvent) => {
+          this.debug({
+            type: 'breadcrumb',
+            message: 'wsclose',
+            data: {
+              closeReason: closeEvent ? closeEvent.reason : undefined,
+            },
+          });
+
+          this.onClose({ closeEvent, expected: false });
+        };
+
         _res();
-        cleanup();
 
         this.debug({ type: 'breadcrumb', message: 'connected!' });
         this.startPing();
       };
 
       onFailed = (err) => {
+        onFinally();
+
         _rej(err);
-        cleanup();
 
         this.cleanupSocket();
 
