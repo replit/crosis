@@ -568,3 +568,30 @@ export class Client extends EventEmitter {
     ping();
   };
 }
+
+/**
+ * Emitted when there's an error while the channel is opening
+ * @asMemberOf Channel
+ * @event
+ */
+declare function close(c: { closeEvent?: CloseEvent; expected: boolean }): void;
+
+export declare interface Client extends EventEmitter {
+  on(event: 'close', listener: typeof close): this;
+  addListener(event: 'close', listener: typeof close): this;
+
+  once(event: 'close', listener: typeof close): this;
+
+  prependListener(event: 'close', listener: typeof close): this;
+
+  prependOnceListener(event: 'close', listener: typeof close): this;
+
+  off(event: 'close', listener: typeof close): this;
+  removeListener(event: 'close', listener: typeof close): this;
+
+  emit(event: 'close', ...args: Parameters<typeof close>): boolean;
+
+  removeAllListeners(event?: 'close'): this;
+
+  eventNames(): Array<'close'>;
+}
