@@ -3,7 +3,6 @@
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
-import { createDeferred, Deferred } from './deferred';
 import { EIOCompat } from './EIOCompat';
 
 enum ConnectionState {
@@ -85,8 +84,6 @@ const getWebSocketClass = (options: ConnectOptions) => {
 };
 
 export class Client extends EventEmitter {
-  public containerState: api.ContainerState.State | null;
-
   public connectionState: ConnectionState;
 
   private token: string | null;
@@ -96,8 +93,6 @@ export class Client extends EventEmitter {
   private channels: {
     [id: number]: Channel;
   };
-
-  private deferredReady: Deferred<void> | null;
 
   private debug: DebugFunc;
 
@@ -116,8 +111,6 @@ export class Client extends EventEmitter {
     this.channels = {
       0: new Channel(),
     };
-    this.deferredReady = null;
-    this.containerState = null;
     this.token = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
@@ -169,7 +162,11 @@ export class Client extends EventEmitter {
 
     const completeOptions: Required<ConnectOptions> = {
       token: options.token,
-      urlOptions: options.urlOptions || { secure: false, host: 'eval.repl.it', port: '80' },
+      urlOptions: options.urlOptions || {
+        secure: false,
+        host: 'eval.repl.it',
+        port: '80',
+      },
       timeout: options.timeout || null,
       // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
       // @ts-ignore: EIOCompat is compatible with the WebSocket api but
@@ -271,9 +268,16 @@ export class Client extends EventEmitter {
   };
 
   /**
-   * Closes the socket connection and handles cleanup
+   * Closes the connection.
+   * - If `connect` was called and not settled it will also reject the promise
+   * - If there's an open WebSocket connection it will be closed
+   * - Any open channels or channel requests are closed
    */
-  public close = () => this.onClose({ expected: true });
+  public close = () => {
+    this.debug({ type: 'breadcrumb', message: 'user close' });
+
+    this.onClose({ expected: true });
+  };
 
   /** Gets a channel by Id */
   public getChannel(id: number): Channel {
@@ -334,44 +338,6 @@ export class Client extends EventEmitter {
     this.getChannel(cmd.channel).onCommand(cmd);
 
     switch (cmd.body) {
-      case 'containerState':
-        if (cmd.containerState == null || cmd.containerState.state == null) {
-          const err = new Error('Expected container state to have state, got null or undefined');
-
-          if (this.deferredReady) {
-            this.deferredReady.reject(err);
-            return;
-          }
-
-          this.debug({ type: 'breadcrumb', message: 'error', data: err.message });
-          throw err;
-        }
-
-        this.debug({
-          type: 'breadcrumb',
-          message: 'containerState',
-          data: this.containerState,
-        });
-
-        this.containerState = cmd.containerState.state;
-
-        if (this.containerState === api.ContainerState.State.READY) {
-          if (this.deferredReady) {
-            this.deferredReady.resolve();
-            this.deferredReady = null;
-          }
-
-          if (this.getChannel(0).isOpen === false) {
-            this.getChannel(0).onOpen(0, api.OpenChannelRes.State.CREATED, this.send);
-          }
-        }
-
-        if (this.containerState === api.ContainerState.State.SLEEP) {
-          this.onClose({ expected: false });
-        }
-
-        break;
-
       case 'closeChanRes':
         if (cmd.closeChanRes == null) {
           throw new Error('Expected closeChanRes');
@@ -420,61 +386,38 @@ export class Client extends EventEmitter {
   };
 
   private onClose = ({ closeEvent, expected }: { closeEvent?: CloseEvent; expected: boolean }) => {
-    this.connectionState = ConnectionState.DISCONNECTED;
-    this.containerState = null;
+    this.cleanupSocket();
 
-    this.debug({
-      type: 'breadcrumb',
-      message: 'close',
-      data: {
-        expected,
-        closeReason: closeEvent ? closeEvent.reason : undefined,
-      },
+    Object.keys(this.channels).forEach((id) => {
+      this.handleCloseChannel({ id: Number(id) });
     });
 
-    if (this.ws) {
-      this.ws.onmessage = null;
-      this.ws.onclose = null;
-
-      if (this.ws.readyState === 0 || this.ws.readyState === 1) {
-        this.debug({
-          type: 'breadcrumb',
-          message: 'wsclose',
-          data: {
-            expected,
-            closeReason: closeEvent ? closeEvent.reason : undefined,
-          },
-        });
-
-        this.ws.close();
-      }
-
-      this.ws = null;
+    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+      this.emit('close', { closeEvent, expected });
     }
 
-    if (this.didConnect) {
-      // Only close the channels if we ever connected
-      // so that we can retry without losing queued up
-      // messages.
-      Object.keys(this.channels).forEach((id) => {
-        this.handleCloseChannel({ id: Number(id) });
-      });
-    }
-
-    if (this.deferredReady) {
-      this.deferredReady.reject(new Error('Connection closed before the server was ready'));
-      this.deferredReady = null;
-    }
-
-    this.emit('close', { closeEvent, expected });
+    this.connectionState = ConnectionState.DISCONNECTED;
   };
 
-  private onSocketClose = (closeEvent: CloseEvent) => {
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      this.onClose({
-        closeEvent,
-        expected: false,
+  private cleanupSocket = () => {
+    const { ws } = this;
+
+    if (!ws) {
+      return;
+    }
+
+    this.ws = null;
+
+    ws.onmessage = null;
+    ws.onclose = null;
+
+    if (ws.readyState === 0 || ws.readyState === 1) {
+      this.debug({
+        type: 'breadcrumb',
+        message: 'wsclose',
       });
+
+      ws.close();
     }
   };
 
@@ -500,43 +443,164 @@ export class Client extends EventEmitter {
     ws.binaryType = 'arraybuffer';
 
     ws.onmessage = this.onSocketMessage;
-    ws.onclose = this.onSocketClose;
     this.ws = ws;
 
-    this.deferredReady = createDeferred();
+    /**
+     * success is only called when we get
+     * ContainerState.READY command
+     */
+    let onSuccess: () => void;
+    /**
+     * Failure can happen due to a number of reasons
+     * 1- Abrupt socket closure
+     * 2- Timedout connection request
+     * 3- ContainerState.SLEEP command
+     * 4- Use calling `close` before we connect
+     */
+    let onFailed: (err: Error) => void;
 
-    const rej = this.deferredReady.reject;
+    /**
+     * Abrupt socket closures should report failed
+     */
+    ws.onclose = () => {
+      onFailed(new Error('WebSocket closed before we got READY'));
+    };
 
-    let timeoutId: NodeJS.Timer;
-    if (timeout != null) {
-      timeoutId = setTimeout(() => {
-        this.debug({ type: 'breadcrumb', message: 'timeout' });
+    /**
+     * If the user specifies a timeout we will short circuit
+     * the connection if we don't get READY from the container
+     * within the specified timeout.
+     *
+     * Every time we get a message we reset the connection timeout
+     * this is because it signifies that the connection will eventually work.
+     */
+    let resetTimeout = () => {};
+    let cancelTimeout = () => {};
+    if (timeout) {
+      let timeoutId: NodeJS.Timer; // Can also be of type `number` in the browser
 
-        if (this.deferredReady) {
-          rej(new Error('timeout'));
-          this.deferredReady = null;
-        }
+      cancelTimeout = () => clearTimeout(timeoutId);
 
-        this.close();
-      }, timeout);
+      resetTimeout = () => {
+        cancelTimeout();
+
+        timeoutId = setTimeout(() => {
+          this.debug({ type: 'breadcrumb', message: 'connect timeout' });
+
+          onFailed(new Error('timeout'));
+        }, timeout);
+      };
     }
 
-    this.deferredReady.reject = (reason) => {
-      // Make sure we clear the timeout when rejecting
-      clearTimeout(timeoutId);
-      rej(reason);
+    /** Listen to incoming commands
+     * Every time we get a message we reset the connection timeout (if it exists)
+     * this is because it signifies that the connection will eventually work.
+     *
+     * If we ever get a ContainterState READY we can officially
+     * say that the connection is successful and we resolve the returned promise.
+     *
+     * If we ever get ContainterState SLEEP it means that something went wrong
+     * and connection should be dropped
+     */
+    const onCommand = (cmd: api.Command) => {
+      // Everytime we get a message on channel0
+      // we will reset the timeout
+      resetTimeout();
+
+      if (cmd.containerState == null) {
+        return;
+      }
+
+      if (cmd.containerState.state == null) {
+        onFailed(new Error('Got containterState but state was not defined'));
+
+        return;
+      }
+
+      const { state } = cmd.containerState;
+
+      this.debug({
+        type: 'breadcrumb',
+        message: 'containerState',
+        data: state,
+      });
+
+      const StateEnum = api.ContainerState.State;
+
+      switch (state) {
+        case StateEnum.READY:
+          onSuccess();
+
+          if (this.getChannel(0).isOpen === false) {
+            this.getChannel(0).onOpen(0, api.OpenChannelRes.State.CREATED, this.send);
+          }
+
+          break;
+
+        case StateEnum.SLEEP:
+          onFailed(new Error('Got SLEEP as container state'));
+
+          break;
+
+        default:
+      }
+    };
+    const chan0 = this.getChannel(0);
+    chan0.on('command', onCommand);
+
+    /**
+     * The user might call `close` before we even connect
+     * we wanna make sure we reject the promise if that happens
+     * so we monkey patch our own `close` function ;)
+     */
+    const originalClose = this.close;
+    this.close = () => {
+      this.debug({ type: 'breadcrumb', message: 'user close' });
+      onFailed(new Error('You called `Client.close` before you connected'));
     };
 
-    const res = this.deferredReady.resolve;
-    this.deferredReady.resolve = (v) => {
-      this.debug({ type: 'breadcrumb', message: 'connected!' });
-      this.startPing();
-
-      clearTimeout(timeoutId);
-      res(v);
+    /**
+     * We call this as a cleanup method after we settle the connection
+     */
+    const onFinally = () => {
+      cancelTimeout();
+      this.close = originalClose;
+      chan0.off('command', onCommand);
     };
 
-    return this.deferredReady.promise;
+    return new Promise((_res, _rej) => {
+      onSuccess = () => {
+        onFinally();
+
+        // Update socket closure to do something else
+        ws.onclose = (closeEvent: CloseEvent) => {
+          this.debug({
+            type: 'breadcrumb',
+            message: 'wsclose',
+            data: {
+              closeReason: closeEvent ? closeEvent.reason : undefined,
+            },
+          });
+
+          this.onClose({ closeEvent, expected: false });
+        };
+
+        _res();
+
+        this.debug({ type: 'breadcrumb', message: 'connected!' });
+        this.startPing();
+      };
+
+      onFailed = (err) => {
+        onFinally();
+
+        _rej(err);
+
+        this.cleanupSocket();
+
+        this.debug({ type: 'breadcrumb', message: 'connect failed' });
+      };
+    });
   };
 
   private startPing = () => {
@@ -567,4 +631,31 @@ export class Client extends EventEmitter {
     // Kick off
     ping();
   };
+}
+
+/**
+ * Emitted when there's an error while the channel is opening
+ * @asMemberOf Channel
+ * @event
+ */
+declare function close(c: { closeEvent?: CloseEvent; expected: boolean }): void;
+
+export declare interface Client extends EventEmitter {
+  on(event: 'close', listener: typeof close): this;
+  addListener(event: 'close', listener: typeof close): this;
+
+  once(event: 'close', listener: typeof close): this;
+
+  prependListener(event: 'close', listener: typeof close): this;
+
+  prependOnceListener(event: 'close', listener: typeof close): this;
+
+  off(event: 'close', listener: typeof close): this;
+  removeListener(event: 'close', listener: typeof close): this;
+
+  emit(event: 'close', ...args: Parameters<typeof close>): boolean;
+
+  removeAllListeners(event?: 'close'): this;
+
+  eventNames(): Array<'close'>;
 }
