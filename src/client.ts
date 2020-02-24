@@ -315,6 +315,36 @@ export class Client extends EventEmitter {
     this.debug = debugFunc;
   }
 
+  /** Start a ping<>pong for debugging and latency stats */
+  public startPing = () => {
+    const chan0 = this.getChannel(0);
+    let pingTime = Date.now();
+
+    const ping = () => {
+      if (chan0.closed) {
+        return;
+      }
+
+      pingTime = Date.now();
+      chan0.send({ ping: {} });
+    };
+
+    chan0.on('command', (cmd) => {
+      if (cmd.body === 'pong') {
+        const pongTime = Date.now();
+        const latency = pongTime - pingTime;
+
+        this.debug({ type: 'ping', latency });
+
+        // Start next ping
+        setTimeout(ping, 10 * 1000);
+      }
+    });
+
+    // Kick off
+    ping();
+  };
+
   private send = (cmd: api.Command) => {
     this.debug({ type: 'log', log: { direction: 'out', cmd } });
 
@@ -588,7 +618,6 @@ export class Client extends EventEmitter {
         _res();
 
         this.debug({ type: 'breadcrumb', message: 'connected!' });
-        this.startPing();
       };
 
       onFailed = (err) => {
@@ -601,35 +630,6 @@ export class Client extends EventEmitter {
         this.debug({ type: 'breadcrumb', message: 'connect failed' });
       };
     });
-  };
-
-  private startPing = () => {
-    const chan0 = this.getChannel(0);
-    let pingTime = Date.now();
-
-    const ping = () => {
-      if (chan0.closed) {
-        return;
-      }
-
-      pingTime = Date.now();
-      chan0.send({ ping: {} });
-    };
-
-    chan0.on('command', (cmd) => {
-      if (cmd.body === 'pong') {
-        const pongTime = Date.now();
-        const latency = pongTime - pingTime;
-
-        this.debug({ type: 'ping', latency });
-
-        // Start next ping
-        setTimeout(ping, 10 * 1000);
-      }
-    });
-
-    // Kick off
-    ping();
   };
 }
 
