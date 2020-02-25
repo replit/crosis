@@ -1,3 +1,7 @@
+#### v4.0.1
+
+Increment listener limit for the control channel (channel 0) when requesting a channel open.
+
 #### v4.0.0 [BREAKING-ish]
 
 This is only a breaking change for debugging and stats collection (pings)
