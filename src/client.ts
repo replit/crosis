@@ -234,12 +234,16 @@ export class Client extends EventEmitter {
         .toString()
         .split('.')[1],
     ).toString(36);
+
+    const chan0 = this.getChannel(0);
+    // avoid warnings on listener count
+    chan0.setMaxListeners(chan0.getMaxListeners() + 1);
     // Not using Channel.request here because we want to
     // resolve the response synchronously. We can receive
     // openChanRes and a command on the requested channel
     // in a single tick, using promises here would causes us to
     // handle the incoming command before openChanRes, leading to errors
-    this.getChannel(0).send({
+    chan0.send({
       ref,
       openChan: {
         name,
@@ -259,10 +263,11 @@ export class Client extends EventEmitter {
 
       this.handleOpenChanRes(channel, cmd.openChanRes);
 
-      this.getChannel(0).off('command', onResponse);
+      chan0.setMaxListeners(chan0.getMaxListeners() - 1);
+      chan0.off('command', onResponse);
     };
 
-    this.getChannel(0).on('command', onResponse);
+    chan0.on('command', onResponse);
 
     return channel;
   };
