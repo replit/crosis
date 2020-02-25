@@ -1,3 +1,12 @@
+#### v4.0.0 [BREAKING-ish]
+
+This is only a breaking change for debugging and stats collection (pings)
+
+See https://github.com/replit/crosis/pull/15
+
+- Debug pings are not started automatically
+- You can now call `client.startPing` after you connect to maintain old behavior :)
+
 #### v3.0.2 [BREAKING]
 
 See https://github.com/replit/crosis/pull/12
