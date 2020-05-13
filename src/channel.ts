@@ -1,6 +1,5 @@
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
-import { createDeferred, Deferred } from './deferred';
 
 export class Channel extends EventEmitter {
   // static
@@ -20,7 +19,7 @@ export class Channel extends EventEmitter {
 
   private sendToClient: (cmd: api.Command) => void;
 
-  private requestMap: { [ref: string]: Deferred<api.Command> };
+  private requestMap: { [ref: string]: { respond(cmd: api.Command): void; chanClosed(): void } };
 
   constructor() {
     super();
@@ -56,13 +55,20 @@ export class Channel extends EventEmitter {
         .toString()
         .split('.')[1],
     ).toString(36);
-    const deferred = createDeferred<api.Command>();
-    this.requestMap[ref] = deferred;
-
     cmdJson.ref = ref;
-    this.send(cmdJson);
 
-    return deferred.promise;
+    // Create the error here so that the stack traces
+    // are a little cleaner when we throw this
+    const closeError = new Error(Channel.ChannelClosedErrorMessage);
+
+    return new Promise((resolve, reject) => {
+      this.requestMap[ref] = {
+        respond: resolve,
+        chanClosed: () => reject(closeError),
+      };
+
+      this.send(cmdJson);
+    });
   };
 
   /**
@@ -142,7 +148,7 @@ export class Channel extends EventEmitter {
     this.emit('command', cmd);
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
-      this.requestMap[cmd.ref].resolve(cmd);
+      this.requestMap[cmd.ref].respond(cmd);
       delete this.requestMap[cmd.ref];
     }
   };
@@ -154,7 +160,7 @@ export class Channel extends EventEmitter {
    */
   public onClose = (closeChanRes: api.ICloseChannelRes) => {
     Object.keys(this.requestMap).forEach((ref) => {
-      this.requestMap[ref].reject(new Error(Channel.ChannelClosedErrorMessage));
+      this.requestMap[ref].chanClosed();
       delete this.requestMap[ref];
     });
 
