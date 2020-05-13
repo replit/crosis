@@ -1,3 +1,7 @@
+#### v4.1.0
+
+Make stack traces for `Channel.request` more usable.
+
 #### v4.0.1
 
 Increment listener limit for the control channel (channel 0) when requesting a channel open.
