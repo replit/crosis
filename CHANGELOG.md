@@ -1,3 +1,7 @@
+#### v4.1.2
+
+Added a specific error to assert on when checking channel closing.
+
 #### v4.1.0
 
 Make stack traces for `Channel.request` more usable.
