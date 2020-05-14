@@ -1,6 +1,6 @@
-#### v4.1.2
+#### v4.1.3
 
-Added a specific error to assert on when checking channel closing.
+Added a specific error (Channel.ChannelCloseError) to assert on when checking channel closing.
 
 #### v4.1.0
 
