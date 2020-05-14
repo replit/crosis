@@ -3,9 +3,7 @@ import { api } from '@replit/protocol';
 import { ChannelCloseReason } from './closeReasons';
 
 type RequestResult = api.Command & {
-  channelClosed?: {
-    reason: ChannelCloseReason;
-  };
+  channelClosed?: ChannelCloseReason;
 };
 
 export class Channel extends EventEmitter {
@@ -158,9 +156,7 @@ export class Channel extends EventEmitter {
   public onClose = (reason: ChannelCloseReason) => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
-      requestResult.channelClosed = {
-        reason,
-      };
+      requestResult.channelClosed = reason;
       this.requestMap[ref](requestResult);
       delete this.requestMap[ref];
     });
