@@ -45,6 +45,17 @@ interface ConnectOptions {
   WebSocketClass?: typeof WebSocket;
 }
 
+enum ClientCloseReason {
+  /**
+   * called `client.close`
+   */
+  Intentional,
+  /**
+   * The websocket connection died
+   */
+  Disconnected,
+}
+
 /**
  * @hidden
  */
@@ -84,6 +95,8 @@ const getWebSocketClass = (options: ConnectOptions) => {
 };
 
 export class Client extends EventEmitter {
+  public static ClientCloseReason = ClientCloseReason;
+
   public connectionState: ConnectionState;
 
   private token: string | null;
@@ -281,7 +294,7 @@ export class Client extends EventEmitter {
   public close = () => {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
-    this.onClose({ expected: true });
+    this.onClose({ closeReason: ClientCloseReason.Intentional });
   };
 
   /** Gets a channel by Id */
@@ -420,7 +433,7 @@ export class Client extends EventEmitter {
     delete this.channels[id];
   };
 
-  private onClose = ({ closeEvent, expected }: { closeEvent?: CloseEvent; expected: boolean }) => {
+  private onClose = (closeResult: CloseResult) => {
     this.cleanupSocket();
 
     Object.keys(this.channels).forEach((id) => {
@@ -428,7 +441,7 @@ export class Client extends EventEmitter {
     });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      this.emit('close', { closeEvent, expected });
+      this.emit('close', closeResult);
     }
 
     this.connectionState = ConnectionState.DISCONNECTED;
@@ -617,7 +630,10 @@ export class Client extends EventEmitter {
             },
           });
 
-          this.onClose({ closeEvent, expected: false });
+          this.onClose({
+            closeReason: ClientCloseReason.Disconnected,
+            wsCloseEvent: closeEvent,
+          });
         };
 
         _res();
@@ -638,12 +654,21 @@ export class Client extends EventEmitter {
   };
 }
 
+type CloseResult =
+  | {
+      closeReason: ClientCloseReason.Intentional;
+    }
+  | {
+      closeReason: ClientCloseReason.Disconnected;
+      wsCloseEvent: CloseEvent;
+    };
+
 /**
  * Emitted when there's an error while the channel is opening
  * @asMemberOf Channel
  * @event
  */
-declare function close(c: { closeEvent?: CloseEvent; expected: boolean }): void;
+declare function close(c: CloseResult): void;
 
 export declare interface Client extends EventEmitter {
   on(event: 'close', listener: typeof close): this;
