@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { EIOCompat } from './EIOCompat';
+import { ClientCloseReason, ChannelCloseReason } from './closeReasons';
 
 enum ConnectionState {
   CONNECTING = 0,
@@ -43,17 +44,6 @@ interface ConnectOptions {
   polling?: boolean;
   timeout?: number | null;
   WebSocketClass?: typeof WebSocket;
-}
-
-enum ClientCloseReason {
-  /**
-   * called `client.close`
-   */
-  Intentional,
-  /**
-   * The websocket connection died
-   */
-  Disconnected,
 }
 
 /**
@@ -391,7 +381,16 @@ export class Client extends EventEmitter {
           throw new Error('Expected closeChanRes');
         }
 
-        this.handleCloseChannel(cmd.closeChanRes);
+        if (cmd.closeChanRes.id == null || cmd.closeChanRes.status == null) {
+          throw new Error(
+            `Expected id and status in closeChanRes, got ${cmd.closeChanRes.id} and ${cmd.closeChanRes.status}`,
+          );
+        }
+
+        this.handleCloseChannel(cmd.closeChanRes.id, {
+          initiator: 'channel',
+          closeStatus: cmd.closeChanRes.status,
+        });
 
         break;
       default:
@@ -417,18 +416,14 @@ export class Client extends EventEmitter {
     channel.onOpen(id, state, this.send);
   };
 
-  private handleCloseChannel = ({ id, status }: api.ICloseChannelRes) => {
+  private handleCloseChannel = (id: number, reason: ChannelCloseReason) => {
     this.debug({
       type: 'breadcrumb',
       message: 'handleCloseChannel',
-      data: { id, status },
+      data: { id, reason },
     });
 
-    if (id == null) {
-      throw new Error('Closing channel with no id?');
-    }
-
-    this.channels[id].onClose({ id, status });
+    this.channels[id].onClose(reason);
 
     delete this.channels[id];
   };
@@ -437,7 +432,10 @@ export class Client extends EventEmitter {
     this.cleanupSocket();
 
     Object.keys(this.channels).forEach((id) => {
-      this.handleCloseChannel({ id: Number(id) });
+      this.handleCloseChannel(Number(id), {
+        initiator: 'client',
+        clientCloseReason: closeResult.closeReason,
+      });
     });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
