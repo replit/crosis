@@ -1,9 +1,12 @@
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
+import ChannelCloseError from './channelCloseError';
 
 export class Channel extends EventEmitter {
   // static
   public static ChannelClosedErrorMessage = 'Channel closed';
+
+  public static ChannelCloseError = ChannelCloseError;
 
   // public
   public state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED | null;
@@ -59,7 +62,7 @@ export class Channel extends EventEmitter {
 
     // Create the error here so that the stack traces
     // are a little cleaner when we throw this
-    const closeError = new Error(Channel.ChannelClosedErrorMessage);
+    const closeError = new Channel.ChannelCloseError(Channel.ChannelClosedErrorMessage);
 
     return new Promise((resolve, reject) => {
       this.requestMap[ref] = {
