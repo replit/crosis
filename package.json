@@ -14,7 +14,7 @@
     "dev": "yarn build && (yarn build -- -w & parcel src.browser/index.html)",
     "prepublishOnly": "yarn clean && yarn build",
     "clean": "rm -rf dist dist.browser",
-    "docs": "typedoc --out docs --name crosis --includeDeclarations --excludeExternals src/channel.ts src/client.ts node_modules/@replit/protocol/index.d.ts",
+    "docs": "typedoc --out docs --name crosis --includeDeclarations --excludeExternals src/channel.ts src/client.ts src/closeReasons.ts node_modules/@replit/protocol/index.d.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "faris@repl.it",
@@ -38,8 +38,8 @@
     "eslint-plugin-react": "^7.14.3",
     "parcel": "^1.12.4",
     "prettier": "^1.18.2",
-    "typedoc": "^0.15.0",
-    "typescript": "^3.6.4"
+    "typedoc": "^0.17.6",
+    "typescript": "^3.9.2"
   },
   "peerDependencies": {
     "@replit/protocol": "0.x.x"
