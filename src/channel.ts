@@ -2,9 +2,9 @@ import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { ChannelCloseReason } from './closeReasons';
 
-type RequestResult = api.Command & {
+interface RequestResult extends api.Command {
   channelClosed?: ChannelCloseReason;
-};
+}
 
 export class Channel extends EventEmitter {
   // public
