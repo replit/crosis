@@ -1,3 +1,9 @@
+#### v5.0.0
+
+Client close event now emits [CloseResult](https://replit-crosis.masfrost.repl.co/modules/_src_client_.html#closeresult)
+
+Channel closing during `channel.request` no longer throws an error. It now returns an extended @replit/protocol::`Command` that includes a [`channelClosed`](https://replit-crosis.masfrost.repl.co/interfaces/_src_channel_.requestresult.html#channelclosed)
+
 #### v4.1.3
 
 Added a specific error (Channel.ChannelCloseError) to assert on when checking channel closing.
