@@ -1,13 +1,12 @@
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
-import ChannelCloseError from './channelCloseError';
+import { ChannelCloseReason } from './closeReasons';
+
+type RequestResult = api.Command & {
+  channelClosed?: ChannelCloseReason;
+};
 
 export class Channel extends EventEmitter {
-  // static
-  public static ChannelClosedErrorMessage = 'Channel closed';
-
-  public static ChannelCloseError = ChannelCloseError;
-
   // public
   public state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED | null;
 
@@ -22,7 +21,7 @@ export class Channel extends EventEmitter {
 
   private sendToClient: (cmd: api.Command) => void;
 
-  private requestMap: { [ref: string]: { respond(cmd: api.Command): void; chanClosed(): void } };
+  private requestMap: { [ref: string]: (res: RequestResult) => void };
 
   constructor() {
     super();
@@ -51,7 +50,7 @@ export class Channel extends EventEmitter {
    * that is resolved when we get a response.
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
-  public request = async (cmdJson: api.ICommand): Promise<api.Command> => {
+  public request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
     // Random base36 int
     const ref = Number(
       Math.random()
@@ -60,15 +59,8 @@ export class Channel extends EventEmitter {
     ).toString(36);
     cmdJson.ref = ref;
 
-    // Create the error here so that the stack traces
-    // are a little cleaner when we throw this
-    const closeError = new Channel.ChannelCloseError(Channel.ChannelClosedErrorMessage);
-
-    return new Promise((resolve, reject) => {
-      this.requestMap[ref] = {
-        respond: resolve,
-        chanClosed: () => reject(closeError),
-      };
+    return new Promise((resolve) => {
+      this.requestMap[ref] = resolve;
 
       this.send(cmdJson);
     });
@@ -82,7 +74,7 @@ export class Channel extends EventEmitter {
    */
   public close = async (
     action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE,
-  ): Promise<api.ICloseChannelRes> => {
+  ): Promise<ChannelCloseReason> => {
     if (this.closed === true) {
       throw new Error('Channel already closed');
     }
@@ -101,8 +93,8 @@ export class Channel extends EventEmitter {
     this.closed = true;
 
     return new Promise((resolve) => {
-      this.once('close', (closeRes) => {
-        resolve(closeRes);
+      this.once('close', (reason) => {
+        resolve(reason);
       });
     });
   };
@@ -151,7 +143,7 @@ export class Channel extends EventEmitter {
     this.emit('command', cmd);
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
-      this.requestMap[cmd.ref].respond(cmd);
+      this.requestMap[cmd.ref](cmd);
       delete this.requestMap[cmd.ref];
     }
   };
@@ -159,17 +151,19 @@ export class Channel extends EventEmitter {
   /**
    * @hidden should only be called by [[Client]]
    *
-   * Called when the channel is or client is closed
+   * Called when the channel or client is closed
    */
-  public onClose = (closeChanRes: api.ICloseChannelRes) => {
+  public onClose = (reason: ChannelCloseReason) => {
     Object.keys(this.requestMap).forEach((ref) => {
-      this.requestMap[ref].chanClosed();
+      const requestResult = api.Command.fromObject({}) as RequestResult;
+      requestResult.channelClosed = reason;
+      this.requestMap[ref](requestResult);
       delete this.requestMap[ref];
     });
 
     this.isOpen = false;
     this.closed = true;
-    this.emit('close', closeChanRes);
+    this.emit('close', reason);
     this.removeAllListeners();
   };
 
@@ -198,11 +192,11 @@ declare function error({ message }: { message: string }): void;
 declare function open(): void;
 
 /**
- * Emitted when there's an error while the channel is opening
+ * Emitted when a channel is closed
  * @asMemberOf Channel
  * @event
  */
-declare function close(closeChanRes: api.ICloseChannelRes): void;
+declare function close(chanCloseReason: ChannelCloseReason): void;
 
 export declare interface Channel extends EventEmitter {
   on(event: 'command', listener: typeof command): this;
