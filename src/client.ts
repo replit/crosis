@@ -90,8 +90,6 @@ export class Client extends EventEmitter {
 
   public connectionState: ConnectionState;
 
-  private token: string | null;
-
   private ws: WebSocket | null;
 
   private connectOptions: ConnectOptions | null;
@@ -112,11 +110,8 @@ export class Client extends EventEmitter {
     super();
 
     this.ws = null;
+    this.channels = {};
     this.connectOptions = null;
-    this.channels = {
-      0: new Channel(),
-    };
-    this.token = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
 
@@ -129,7 +124,7 @@ export class Client extends EventEmitter {
    * Connects to the server and primes the client to start sending data
    * @returns it returns a promise that is resolved when the server is ready (sends cotainer state)
    */
-  public connect = async (options: ConnectOptions): Promise<void> => {
+  public connect = (options: ConnectOptions) => {
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
@@ -154,35 +149,186 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    const completeOptions: Required<ConnectOptions> = {
-      token: options.token,
-      urlOptions: options.urlOptions || {
-        secure: false,
-        host: 'eval.repl.it',
-        port: '80',
-      },
-      timeout: options.timeout || null,
-      // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
-      // @ts-ignore: EIOCompat is compatible with the WebSocket api but
-      // lib.dom.d.ts defines WebSockets in a weird way that is causing errors
-      WebSocketClass: options.polling ? EIOCompat : getWebSocketClass(options),
-      polling: !!options.polling,
+    this.channels = {
+      0: new Channel(),
     };
-
     this.connectOptions = options;
     this.connectionState = ConnectionState.CONNECTING;
 
-    try {
-      await this.tryConnect(completeOptions);
-    } catch (e) {
-      this.connectionState = ConnectionState.DISCONNECTED;
+    const WebSocketClass = options.polling ? EIOCompat : getWebSocketClass(options);
 
-      this.debug({ type: 'breadcrumb', message: 'error', data: e.message });
-      throw e;
+    const urlOptions = options.urlOptions || {
+      secure: false,
+      host: 'eval.repl.it',
+      port: '80',
+    };
+    const connStr = Client.getConnectionStr(options.token, urlOptions);
+    const ws = new WebSocketClass(connStr);
+
+    ws.binaryType = 'arraybuffer';
+    ws.onmessage = this.onSocketMessage;
+    this.ws = ws;
+
+    /**
+     * success is only called when we get
+     * ContainerState.READY command
+     */
+    let onSuccess: () => void;
+    /**
+     * Failure can happen due to a number of reasons
+     * 1- Abrupt socket closure
+     * 2- Timedout connection request
+     * 3- ContainerState.SLEEP command
+     * 4- User calling `close` before we connect
+     */
+    let onFailed: (err: Error) => void;
+
+    /**
+     * Abrupt socket closures should report failed
+     */
+    ws.onclose = () => {
+      onFailed(new Error('WebSocket closed before we got READY'));
+    };
+
+    /**
+     * If the user specifies a timeout we will short circuit
+     * the connection if we don't get READY from the container
+     * within the specified timeout.
+     *
+     * Every time we get a message we reset the connection timeout
+     * this is because it signifies that the connection will eventually work.
+     */
+    let resetTimeout = () => {};
+    let cancelTimeout = () => {};
+    if (options.timeout) {
+      const { timeout } = options;
+      let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
+
+      cancelTimeout = () => clearTimeout(timeoutId);
+
+      resetTimeout = () => {
+        cancelTimeout();
+
+        timeoutId = setTimeout(() => {
+          this.debug({ type: 'breadcrumb', message: 'connect timeout' });
+
+          onFailed(new Error('timeout'));
+        }, timeout);
+      };
     }
 
-    this.connectionState = ConnectionState.CONNECTED;
-    this.emit('open');
+    /** Listen to incoming commands
+     * Every time we get a message we reset the connection timeout (if it exists)
+     * this is because it signifies that the connection will eventually work.
+     *
+     * If we ever get a ContainterState READY we can officially
+     * say that the connection is successful and we resolve the returned promise.
+     *
+     * If we ever get ContainterState SLEEP it means that something went wrong
+     * and connection should be dropped
+     */
+    const onCommand = (cmd: api.Command) => {
+      // Everytime we get a message on channel0
+      // we will reset the timeout
+      resetTimeout();
+
+      if (cmd.containerState == null) {
+        return;
+      }
+
+      if (cmd.containerState.state == null) {
+        onFailed(new Error('Got containterState but state was not defined'));
+
+        return;
+      }
+
+      const { state } = cmd.containerState;
+
+      this.debug({
+        type: 'breadcrumb',
+        message: 'containerState',
+        data: state,
+      });
+
+      const StateEnum = api.ContainerState.State;
+
+      switch (state) {
+        case StateEnum.READY:
+          onSuccess();
+
+          if (this.getChannel(0).isOpen === false) {
+            this.getChannel(0).onOpen(0, api.OpenChannelRes.State.CREATED, this.send);
+          }
+
+          this.emit('connect');
+
+          break;
+
+        case StateEnum.SLEEP:
+          onFailed(new Error('Got SLEEP as container state'));
+
+          break;
+
+        default:
+      }
+    };
+    const chan0 = this.getChannel(0);
+    chan0.on('command', onCommand);
+
+    /**
+     * The user might call `close` before we even connect
+     * we wanna make sure we reject the promise if that happens
+     * so we monkey patch our own `close` function ;)
+     */
+    const originalClose = this.close;
+    this.close = () => {
+      this.debug({ type: 'breadcrumb', message: 'user close' });
+      onFailed(new Error('You called `Client.close` before you connected'));
+    };
+
+    /**
+     * We call this as a cleanup method after we settle the connection
+     */
+    const onFinally = () => {
+      cancelTimeout();
+      this.close = originalClose;
+      chan0.off('command', onCommand);
+    };
+
+    onSuccess = () => {
+      onFinally();
+
+      // Update socket closure to do something else
+      ws.onclose = (closeEvent: CloseEvent) => {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'wsclose',
+          data: {
+            closeReason: closeEvent ? closeEvent.reason : undefined,
+          },
+        });
+
+        this.onClose({
+          closeReason: ClientCloseReason.Disconnected,
+          wsCloseEvent: closeEvent,
+        });
+      };
+
+      this.connectionState = ConnectionState.CONNECTED;
+
+      this.debug({ type: 'breadcrumb', message: 'connected!' });
+    };
+
+    onFailed = (err: Error) => {
+      onFinally();
+
+      this.connectionState = ConnectionState.DISCONNECTED;
+      this.cleanupSocket();
+
+      this.emit('error', err);
+
+      this.debug({ type: 'breadcrumb', message: 'connect failed', data: err.message });
+    };
   };
 
   /**
@@ -303,11 +449,11 @@ export class Client extends EventEmitter {
 
   /** Gets the token that was used to connect */
   public getToken(): string | null {
-    if (!this.token) {
+    if (!this.connectOptions) {
       return null;
     }
 
-    return this.token;
+    return this.connectOptions.token;
   }
 
   /** Sets a logging/debugging function */
@@ -416,7 +562,6 @@ export class Client extends EventEmitter {
     });
 
     this.channels[id].onClose(reason);
-
     delete this.channels[id];
   };
 
@@ -441,9 +586,6 @@ export class Client extends EventEmitter {
         type: 'breadcrumb',
         message: 'reconnecting',
       });
-      this.channels = {
-        0: new Channel(),
-      };
 
       this.connect(this.connectOptions);
     }
@@ -470,190 +612,6 @@ export class Client extends EventEmitter {
       ws.close();
     }
   };
-
-  private tryConnect = async ({
-    token,
-    urlOptions,
-    polling,
-    timeout,
-    WebSocketClass,
-  }: Required<ConnectOptions>) => {
-    this.debug({ type: 'breadcrumb', message: 'connect internal', data: { polling } });
-
-    if (this.connectionState === ConnectionState.DISCONNECTED) {
-      throw new Error('closed while connecting');
-    }
-
-    this.token = token;
-
-    const connStr = Client.getConnectionStr(token, urlOptions);
-
-    const ws = new WebSocketClass(connStr);
-
-    ws.binaryType = 'arraybuffer';
-
-    ws.onmessage = this.onSocketMessage;
-    this.ws = ws;
-
-    /**
-     * success is only called when we get
-     * ContainerState.READY command
-     */
-    let onSuccess: () => void;
-    /**
-     * Failure can happen due to a number of reasons
-     * 1- Abrupt socket closure
-     * 2- Timedout connection request
-     * 3- ContainerState.SLEEP command
-     * 4- Use calling `close` before we connect
-     */
-    let onFailed: (err: Error) => void;
-
-    /**
-     * Abrupt socket closures should report failed
-     */
-    ws.onclose = () => {
-      onFailed(new Error('WebSocket closed before we got READY'));
-    };
-
-    /**
-     * If the user specifies a timeout we will short circuit
-     * the connection if we don't get READY from the container
-     * within the specified timeout.
-     *
-     * Every time we get a message we reset the connection timeout
-     * this is because it signifies that the connection will eventually work.
-     */
-    let resetTimeout = () => {};
-    let cancelTimeout = () => {};
-    if (timeout) {
-      let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
-
-      cancelTimeout = () => clearTimeout(timeoutId);
-
-      resetTimeout = () => {
-        cancelTimeout();
-
-        timeoutId = setTimeout(() => {
-          this.debug({ type: 'breadcrumb', message: 'connect timeout' });
-
-          onFailed(new Error('timeout'));
-        }, timeout);
-      };
-    }
-
-    /** Listen to incoming commands
-     * Every time we get a message we reset the connection timeout (if it exists)
-     * this is because it signifies that the connection will eventually work.
-     *
-     * If we ever get a ContainterState READY we can officially
-     * say that the connection is successful and we resolve the returned promise.
-     *
-     * If we ever get ContainterState SLEEP it means that something went wrong
-     * and connection should be dropped
-     */
-    const onCommand = (cmd: api.Command) => {
-      // Everytime we get a message on channel0
-      // we will reset the timeout
-      resetTimeout();
-
-      if (cmd.containerState == null) {
-        return;
-      }
-
-      if (cmd.containerState.state == null) {
-        onFailed(new Error('Got containterState but state was not defined'));
-
-        return;
-      }
-
-      const { state } = cmd.containerState;
-
-      this.debug({
-        type: 'breadcrumb',
-        message: 'containerState',
-        data: state,
-      });
-
-      const StateEnum = api.ContainerState.State;
-
-      switch (state) {
-        case StateEnum.READY:
-          onSuccess();
-
-          if (this.getChannel(0).isOpen === false) {
-            this.getChannel(0).onOpen(0, api.OpenChannelRes.State.CREATED, this.send);
-          }
-
-          break;
-
-        case StateEnum.SLEEP:
-          onFailed(new Error('Got SLEEP as container state'));
-
-          break;
-
-        default:
-      }
-    };
-    const chan0 = this.getChannel(0);
-    chan0.on('command', onCommand);
-
-    /**
-     * The user might call `close` before we even connect
-     * we wanna make sure we reject the promise if that happens
-     * so we monkey patch our own `close` function ;)
-     */
-    const originalClose = this.close;
-    this.close = () => {
-      this.debug({ type: 'breadcrumb', message: 'user close' });
-      onFailed(new Error('You called `Client.close` before you connected'));
-    };
-
-    /**
-     * We call this as a cleanup method after we settle the connection
-     */
-    const onFinally = () => {
-      cancelTimeout();
-      this.close = originalClose;
-      chan0.off('command', onCommand);
-    };
-
-    return new Promise((_res, _rej) => {
-      onSuccess = () => {
-        onFinally();
-
-        // Update socket closure to do something else
-        ws.onclose = (closeEvent: CloseEvent) => {
-          this.debug({
-            type: 'breadcrumb',
-            message: 'wsclose',
-            data: {
-              closeReason: closeEvent ? closeEvent.reason : undefined,
-            },
-          });
-
-          this.onClose({
-            closeReason: ClientCloseReason.Disconnected,
-            wsCloseEvent: closeEvent,
-          });
-        };
-
-        _res();
-
-        this.debug({ type: 'breadcrumb', message: 'connected!' });
-      };
-
-      onFailed = (err) => {
-        onFinally();
-
-        _rej(err);
-
-        this.cleanupSocket();
-
-        this.debug({ type: 'breadcrumb', message: 'connect failed' });
-      };
-    });
-  };
 }
 
 type CloseResult =
@@ -673,8 +631,9 @@ type CloseResult =
 declare function close(c: CloseResult): void;
 
 export declare interface Client extends EventEmitter {
-  on(event: 'open', listener: () => void): this;
+  on(event: 'connect', listener: () => void): this;
   on(event: 'close', listener: typeof close): this;
+  on(event: 'error', listener: (err: Error) => void): this;
   addListener(event: 'close', listener: typeof close): this;
 
   once(event: 'close', listener: typeof close): this;
@@ -686,10 +645,11 @@ export declare interface Client extends EventEmitter {
   off(event: 'close', listener: typeof close): this;
   removeListener(event: 'close', listener: typeof close): this;
 
-  emit(event: 'open'): boolean;
+  emit(event: 'connect'): boolean;
   emit(event: 'close', ...args: Parameters<typeof close>): boolean;
+  emit(error: 'error', err: Error): boolean;
 
   removeAllListeners(event?: 'close'): this;
 
-  eventNames(): Array<'open' | 'close'>;
+  eventNames(): Array<'connect' | 'close'>;
 }

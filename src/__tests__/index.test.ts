@@ -13,7 +13,7 @@ if (!REPL_TOKEN) {
 }
 
 describe('Client.connect', () => {
-  it('opens and closes connection', (done) => {
+  it('connects and closes connection', (done) => {
     const client = new Client();
 
     client.on('close', ({ closeReason }) => {
@@ -21,14 +21,14 @@ describe('Client.connect', () => {
       done();
     });
 
-    client.on('open', () => {
+    client.on('connect', () => {
       client.close();
     });
 
     client.connect({ token: REPL_TOKEN, WebSocketClass: WebSocket });
   });
 
-  it('opens and closes connection on websocket close', (done) => {
+  it('connects and closes connection on websocket close', (done) => {
     const client = new Client();
 
     client.on('close', (e) => {
@@ -36,7 +36,7 @@ describe('Client.connect', () => {
       done();
     });
 
-    client.on('open', () => {
+    client.on('connect', () => {
       // eslint-disable-next-line
       // @ts-ignore: trigger unintentional disconnect
       client.ws?.onclose();
@@ -49,7 +49,7 @@ describe('Client.connect', () => {
     const client = new Client();
 
     let disconnectTriggerd = false;
-    let timesOpened = 0;
+    let timesconnected = 0;
     let timesClosedUnintentionally = 0;
     let timesClosedIntentionally = 0;
 
@@ -60,7 +60,7 @@ describe('Client.connect', () => {
         timesClosedIntentionally += 1;
       }
 
-      if (timesOpened === 2) {
+      if (timesconnected === 2) {
         expect(timesClosedUnintentionally).toEqual(1);
         expect(timesClosedIntentionally).toEqual(1);
 
@@ -68,8 +68,8 @@ describe('Client.connect', () => {
       }
     });
 
-    client.on('open', () => {
-      timesOpened += 1;
+    client.on('connect', () => {
+      timesconnected += 1;
 
       if (!disconnectTriggerd) {
         // eslint-disable-next-line
