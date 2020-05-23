@@ -43,6 +43,7 @@ interface ConnectOptions {
   urlOptions?: UrlOptions;
   polling?: boolean;
   timeout?: number | null;
+  reconnect?: boolean;
   WebSocketClass?: typeof WebSocket;
 }
 
@@ -93,13 +94,13 @@ export class Client extends EventEmitter {
 
   private ws: WebSocket | null;
 
+  private connectOptions: ConnectOptions | null;
+
   private channels: {
     [id: number]: Channel;
   };
 
   private debug: DebugFunc;
-
-  private didConnect: boolean;
 
   static getConnectionStr(token: string, urlOptions: UrlOptions) {
     const { secure, host, port } = urlOptions;
@@ -111,13 +112,13 @@ export class Client extends EventEmitter {
     super();
 
     this.ws = null;
+    this.connectOptions = null;
     this.channels = {
       0: new Channel(),
     };
     this.token = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
-    this.didConnect = false;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -130,16 +131,6 @@ export class Client extends EventEmitter {
    */
   public connect = async (options: ConnectOptions): Promise<void> => {
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
-
-    if (this.didConnect) {
-      // We don't want to allow connections if we ever connected
-      const error = new Error(
-        'Reconnecting using the same client after it connected once is not allowed',
-      );
-
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-      throw error;
-    }
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       const error = new Error('Client must be disconnected to connect');
@@ -178,6 +169,7 @@ export class Client extends EventEmitter {
       polling: !!options.polling,
     };
 
+    this.connectOptions = options;
     this.connectionState = ConnectionState.CONNECTING;
 
     try {
@@ -190,7 +182,7 @@ export class Client extends EventEmitter {
     }
 
     this.connectionState = ConnectionState.CONNECTED;
-    this.didConnect = true;
+    this.emit('open');
   };
 
   /**
@@ -443,6 +435,18 @@ export class Client extends EventEmitter {
     }
 
     this.connectionState = ConnectionState.DISCONNECTED;
+
+    if (this.connectOptions && this.connectOptions.reconnect) {
+      this.debug({
+        type: 'breadcrumb',
+        message: 'reconnecting',
+      });
+      this.channels = {
+        0: new Channel(),
+      };
+
+      this.connect(this.connectOptions);
+    }
   };
 
   private cleanupSocket = () => {
@@ -523,7 +527,7 @@ export class Client extends EventEmitter {
     let resetTimeout = () => {};
     let cancelTimeout = () => {};
     if (timeout) {
-      let timeoutId: NodeJS.Timer; // Can also be of type `number` in the browser
+      let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
 
       cancelTimeout = () => clearTimeout(timeoutId);
 
@@ -669,6 +673,7 @@ type CloseResult =
 declare function close(c: CloseResult): void;
 
 export declare interface Client extends EventEmitter {
+  on(event: 'open', listener: () => void): this;
   on(event: 'close', listener: typeof close): this;
   addListener(event: 'close', listener: typeof close): this;
 
@@ -681,9 +686,10 @@ export declare interface Client extends EventEmitter {
   off(event: 'close', listener: typeof close): this;
   removeListener(event: 'close', listener: typeof close): this;
 
+  emit(event: 'open'): boolean;
   emit(event: 'close', ...args: Parameters<typeof close>): boolean;
 
   removeAllListeners(event?: 'close'): this;
 
-  eventNames(): Array<'close'>;
+  eventNames(): Array<'open' | 'close'>;
 }
