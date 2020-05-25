@@ -67,6 +67,15 @@ export class Channel extends EventEmitter {
   };
 
   /**
+   * Called every time channel connects
+   */
+  public onError = (listener: (error: Error) => void) => {
+    this.on('error', listener);
+
+    return () => this.removeListener('error', listener);
+  };
+
+  /**
    * Closes the channel
    *
    * see http://protodoc.turbio.repl.co/protov2#closing-channels
@@ -193,7 +202,6 @@ export class Channel extends EventEmitter {
    * Called when the channel has an error opening
    */
   public handleError = (error: Error) => {
-    // TODO: figure out what to do here
-    console.log(error);
+    this.emit('error', error);
   };
 }

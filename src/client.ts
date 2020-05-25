@@ -301,8 +301,6 @@ export class Client extends EventEmitter {
     };
 
     onSuccess = () => {
-      // console.log('onSuccess', Object.keys(this.channels));
-
       Object.values(this.channels).forEach((channel) => {
         if (channel.options) {
           this.openChannel({ channel, ...channel.options });
@@ -310,13 +308,6 @@ export class Client extends EventEmitter {
       });
 
       onFinally();
-
-      // this.channelRequests.forEach((cr) => {
-      // cr.openChannel({
-      // chan0: this.getChannel(0),
-      // send: this.send,
-      // });
-      // });
 
       // Update socket closure to do something else
       ws.onclose = (closeEvent: CloseEvent) => {
@@ -340,12 +331,11 @@ export class Client extends EventEmitter {
     };
 
     onFailed = (err: Error) => {
-      // console.log('onFailed');
       onFinally();
 
-      // this.channelRequests.forEach((cr) => {
-      // cr.onOpenError(err);
-      // });
+      Object.values(this.channels).forEach((channel) => {
+        channel.handleError(err);
+      });
 
       this.connectionState = ConnectionState.DISCONNECTED;
       this.cleanupSocket();
@@ -376,6 +366,7 @@ export class Client extends EventEmitter {
    * @param name Channel name (can be anything)
    * @param service One of goval's services
    * @param action [[api.OpenChannel.Action]]
+   * @param an optional existing channel to reconnect (used internally)
    */
   public openChannel = (options: ChannelOptions & { channel?: Channel }) => {
     let { action } = options;
@@ -443,7 +434,6 @@ export class Client extends EventEmitter {
         return;
       }
 
-      // console.log('onResponse', res);
       if (res.openChanRes == null) {
         throw new Error('Expected openChanRes on command');
       }
