@@ -2,9 +2,11 @@
 
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
-import { Channel } from './channel';
+import { Channel, ChannelOptions } from './channel';
 import { EIOCompat } from './EIOCompat';
-import { ClientCloseReason, ChannelCloseReason } from './closeReasons';
+import { ClientCloseReason, CloseResult } from './closeReasons';
+
+type OnCloseFn = (closeResult: CloseResult) => void;
 
 enum ConnectionState {
   CONNECTING = 0,
@@ -110,7 +112,9 @@ export class Client extends EventEmitter {
     super();
 
     this.ws = null;
-    this.channels = {};
+    this.channels = {
+      0: new Channel(),
+    };
     this.connectOptions = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
@@ -149,9 +153,6 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    this.channels = {
-      0: new Channel(),
-    };
     this.connectOptions = options;
     this.connectionState = ConnectionState.CONNECTING;
 
@@ -257,7 +258,11 @@ export class Client extends EventEmitter {
           onSuccess();
 
           if (this.getChannel(0).isOpen === false) {
-            this.getChannel(0).onOpen(0, api.OpenChannelRes.State.CREATED, this.send);
+            this.getChannel(0).handleOpen({
+              id: 0,
+              state: api.OpenChannelRes.State.CREATED,
+              send: this.send,
+            });
           }
 
           this.emit('connect');
@@ -296,7 +301,22 @@ export class Client extends EventEmitter {
     };
 
     onSuccess = () => {
+      // console.log('onSuccess', Object.keys(this.channels));
+
+      Object.values(this.channels).forEach((channel) => {
+        if (channel.options) {
+          this.openChannel({ channel, ...channel.options });
+        }
+      });
+
       onFinally();
+
+      // this.channelRequests.forEach((cr) => {
+      // cr.openChannel({
+      // chan0: this.getChannel(0),
+      // send: this.send,
+      // });
+      // });
 
       // Update socket closure to do something else
       ws.onclose = (closeEvent: CloseEvent) => {
@@ -308,7 +328,7 @@ export class Client extends EventEmitter {
           },
         });
 
-        this.onClose({
+        this.handleClose({
           closeReason: ClientCloseReason.Disconnected,
           wsCloseEvent: closeEvent,
         });
@@ -320,7 +340,12 @@ export class Client extends EventEmitter {
     };
 
     onFailed = (err: Error) => {
+      // console.log('onFailed');
       onFinally();
+
+      // this.channelRequests.forEach((cr) => {
+      // cr.onOpenError(err);
+      // });
 
       this.connectionState = ConnectionState.DISCONNECTED;
       this.cleanupSocket();
@@ -329,6 +354,15 @@ export class Client extends EventEmitter {
 
       this.debug({ type: 'breadcrumb', message: 'connect failed', data: err.message });
     };
+  };
+
+  /**
+   * Called every time channel connects
+   */
+  public onClose = (listener: OnCloseFn) => {
+    this.on('close', listener);
+
+    return () => this.removeListener('close', listener);
   };
 
   /**
@@ -343,31 +377,33 @@ export class Client extends EventEmitter {
    * @param service One of goval's services
    * @param action [[api.OpenChannel.Action]]
    */
-  public openChannel = ({
-    name,
-    service,
-    action,
-  }: {
-    name?: string;
-    service: string;
-    action?: api.OpenChannel.Action;
-  }): Channel => {
-    let ac = action;
-    if (!ac) {
-      ac = name == null ? api.OpenChannel.Action.CREATE : api.OpenChannel.Action.ATTACH_OR_CREATE;
+  public openChannel = (options: ChannelOptions & { channel?: Channel }) => {
+    let { action } = options;
+
+    if (!action) {
+      action =
+        options.name == null
+          ? api.OpenChannel.Action.CREATE
+          : api.OpenChannel.Action.ATTACH_OR_CREATE;
     }
 
     this.debug({
       type: 'breadcrumb',
       message: 'openChannel',
       data: {
-        name,
-        service,
-        action: ac,
+        name: options.name,
+        service: options.service,
+        action,
       },
     });
 
-    const channel = new Channel();
+    const channel =
+      options.channel ||
+      new Channel({
+        name: options.name,
+        service: options.service,
+        action,
+      });
 
     // Random base36 int
     const ref = Number(
@@ -379,30 +415,75 @@ export class Client extends EventEmitter {
     const chan0 = this.getChannel(0);
     // avoid warnings on listener count
     chan0.setMaxListeners(chan0.getMaxListeners() + 1);
+
+    const cmd = {
+      ref,
+      openChan: {
+        name: options.name,
+        service: options.service,
+        action,
+      },
+    };
+
+    if (chan0.isOpen) {
+      chan0.send(cmd);
+    } else {
+      chan0.onOpen(({ send }) => {
+        send(cmd);
+      });
+    }
+
     // Not using Channel.request here because we want to
     // resolve the response synchronously. We can receive
     // openChanRes and a command on the requested channel
     // in a single tick, using promises here would causes us to
     // handle the incoming command before openChanRes, leading to errors
-    chan0.send({
-      ref,
-      openChan: {
-        name,
-        service,
-        action: ac,
-      },
-    });
-
-    const onResponse = (cmd: api.Command) => {
-      if (ref !== cmd.ref) {
+    const onResponse = (res: api.ICommand) => {
+      if (ref !== res.ref) {
         return;
       }
 
-      if (cmd.openChanRes == null) {
+      // console.log('onResponse', res);
+      if (res.openChanRes == null) {
         throw new Error('Expected openChanRes on command');
       }
 
-      this.handleOpenChanRes(channel, cmd.openChanRes);
+      const { id, state, error } = res.openChanRes;
+      this.debug({ type: 'breadcrumb', message: 'openChanres' });
+
+      if (state === api.OpenChannelRes.State.ERROR) {
+        this.debug({ type: 'breadcrumb', message: 'error', data: error });
+
+        channel.handleError(new Error(error || 'Something went wrong'));
+
+        return;
+      }
+
+      if (id == null || state == null) {
+        throw new Error('Expected state and channel id');
+      }
+
+      // Remove old channel from map. It gets added back with a new id right after this block
+      // This happens when client reconnects
+      if (options.channel) {
+        const oldId = Object.keys(this.channels).reduce((result: number | null, key) => {
+          if (this.channels[Number(key)] === options.channel) {
+            return Number(key);
+          }
+
+          return result;
+        }, null);
+
+        if (!oldId) {
+          throw Error('Expected an existing channel');
+        }
+
+        delete this.channels[oldId];
+      }
+
+      this.channels[id] = channel;
+
+      channel.handleOpen({ id, state, send: this.send });
 
       chan0.setMaxListeners(chan0.getMaxListeners() - 1);
       chan0.off('command', onResponse);
@@ -422,7 +503,7 @@ export class Client extends EventEmitter {
   public close = () => {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
-    this.onClose({ closeReason: ClientCloseReason.Intentional });
+    this.handleClose({ closeReason: ClientCloseReason.Intentional });
   };
 
   /** Gets a channel by Id */
@@ -511,7 +592,7 @@ export class Client extends EventEmitter {
     this.debug({ type: 'log', log: { direction: 'in', cmd } });
 
     // Pass it to the right channel
-    this.getChannel(cmd.channel).onCommand(cmd);
+    this.getChannel(cmd.channel).handleCommand(cmd);
 
     switch (cmd.body) {
       case 'closeChanRes':
@@ -525,54 +606,44 @@ export class Client extends EventEmitter {
           );
         }
 
-        this.handleCloseChannel(cmd.closeChanRes.id, {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'handleCloseChannel',
+          data: {
+            id: cmd.closeChanRes.id,
+            reason: cmd.closeChanRes.status,
+          },
+        });
+
+        this.channels[Number(cmd.closeChanRes.id)].handleClose({
           initiator: 'channel',
           closeStatus: cmd.closeChanRes.status,
         });
+        delete this.channels[Number(cmd.closeChanRes.id)];
 
         break;
       default:
     }
   };
 
-  private handleOpenChanRes = (channel: Channel, { id, state, error }: api.IOpenChannelRes) => {
-    this.debug({ type: 'breadcrumb', message: 'openChanres' });
-
-    if (state === api.OpenChannelRes.State.ERROR) {
-      this.debug({ type: 'breadcrumb', message: 'error', data: error });
-
-      channel.onOpenError({ error });
-
-      return;
-    }
-
-    if (id == null || state == null) {
-      throw new Error('Expected state and channel id');
-    }
-
-    this.channels[id] = channel;
-    channel.onOpen(id, state, this.send);
-  };
-
-  private handleCloseChannel = (id: number, reason: ChannelCloseReason) => {
-    this.debug({
-      type: 'breadcrumb',
-      message: 'handleCloseChannel',
-      data: { id, reason },
-    });
-
-    this.channels[id].onClose(reason);
-    delete this.channels[id];
-  };
-
-  private onClose = (closeResult: CloseResult) => {
+  private handleClose = (closeResult: CloseResult) => {
     this.cleanupSocket();
+    const reconnect =
+      closeResult.closeReason === ClientCloseReason.Disconnected &&
+      !!this.connectOptions &&
+      !!this.connectOptions.reconnect;
 
-    Object.keys(this.channels).forEach((id) => {
-      this.handleCloseChannel(Number(id), {
-        initiator: 'client',
-        clientCloseReason: closeResult.closeReason,
-      });
+    Object.values(this.channels).forEach((channel) => {
+      if (channel.isOpen) {
+        channel.handleClose({
+          initiator: 'client',
+          clientCloseReason: closeResult.closeReason,
+        });
+
+        if (!reconnect) {
+          channel.removeAllListeners();
+        }
+      }
     });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
@@ -581,13 +652,19 @@ export class Client extends EventEmitter {
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
-    if (this.connectOptions && this.connectOptions.reconnect) {
+    if (reconnect && this.connectOptions) {
       this.debug({
         type: 'breadcrumb',
         message: 'reconnecting',
       });
 
       this.connect(this.connectOptions);
+    } else {
+      this.channels = {
+        0: new Channel(),
+      };
+
+      this.removeAllListeners();
     }
   };
 
@@ -612,44 +689,4 @@ export class Client extends EventEmitter {
       ws.close();
     }
   };
-}
-
-type CloseResult =
-  | {
-      closeReason: ClientCloseReason.Intentional;
-    }
-  | {
-      closeReason: ClientCloseReason.Disconnected;
-      wsCloseEvent: CloseEvent;
-    };
-
-/**
- * Emitted when there's an error while the channel is opening
- * @asMemberOf Channel
- * @event
- */
-declare function close(c: CloseResult): void;
-
-export declare interface Client extends EventEmitter {
-  on(event: 'connect', listener: () => void): this;
-  on(event: 'close', listener: typeof close): this;
-  on(event: 'error', listener: (err: Error) => void): this;
-  addListener(event: 'close', listener: typeof close): this;
-
-  once(event: 'close', listener: typeof close): this;
-
-  prependListener(event: 'close', listener: typeof close): this;
-
-  prependOnceListener(event: 'close', listener: typeof close): this;
-
-  off(event: 'close', listener: typeof close): this;
-  removeListener(event: 'close', listener: typeof close): this;
-
-  emit(event: 'connect'): boolean;
-  emit(event: 'close', ...args: Parameters<typeof close>): boolean;
-  emit(error: 'error', err: Error): boolean;
-
-  removeAllListeners(event?: 'close'): this;
-
-  eventNames(): Array<'connect' | 'close'>;
 }
