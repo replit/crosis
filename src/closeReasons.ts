@@ -25,12 +25,3 @@ export type ChannelCloseReason =
       closeStatus: api.CloseChannelRes.Status;
     };
 
-export type CloseResult =
-  | {
-      closeReason: ClientCloseReason.Intentional;
-    }
-  | {
-      closeReason: ClientCloseReason.Disconnected;
-      wsCloseEvent: CloseEvent;
-    };
-

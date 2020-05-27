@@ -2,17 +2,14 @@ import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { ChannelCloseReason } from './closeReasons';
 
-interface RequestResult extends api.Command {
+export interface RequestResult extends api.Command {
   channelClosed?: ChannelCloseReason;
 }
 
-type SendFn = (cmd: api.ICommand) => void;
-
-type RequestFn = (cmd: api.ICommand) => Promise<RequestResult>;
-
-type OnOpenFn = (args: { send: SendFn; request: RequestFn }) => void;
-
 type OnCloseFn = (reason: ChannelCloseReason) => void;
+
+export type ChanReqRes = { error: null; channel: Channel } | { error: Error; channel: null };
+export type ChanReqFn = (res: ChanReqRes) => void | OnCloseFn;
 
 export interface ChannelOptions {
   name?: string;
@@ -28,51 +25,36 @@ export class Channel extends EventEmitter {
 
   public isOpen: boolean;
 
-  public options?: ChannelOptions;
-
   public closed: boolean;
+
+  public options: ChannelOptions | null;
 
   private sendToClient: ((cmd: api.Command) => void) | null;
 
   private requestMap: { [ref: string]: (res: RequestResult) => void };
 
-  constructor(options?: ChannelOptions) {
+  private chanReq: ChanReqFn;
+
+  private chanReqClose: ReturnType<ChanReqFn> | null;
+
+  constructor(config: { chanReq: ChanReqFn; options?: ChannelOptions }) {
     super();
 
-    this.options = options;
     this.id = null;
     this.sendToClient = null;
     this.state = null;
     this.isOpen = false;
     this.closed = false;
     this.requestMap = {};
+    this.chanReq = config.chanReq;
+    this.chanReqClose = null;
+    this.options = config.options || null;
   }
 
-  /**
-   * Called every time channel connects
-   */
-  public onOpen = (listener: OnOpenFn) => {
-    this.on('open', listener);
+  public onCommand = (listener: (cmd: api.Command) => void) => {
+    this.on('command', listener);
 
-    return () => this.removeListener('open', listener);
-  };
-
-  /**
-   * Called every time channel connects
-   */
-  public onClose = (listener: OnCloseFn) => {
-    this.on('close', listener);
-
-    return () => this.removeListener('close', listener);
-  };
-
-  /**
-   * Called every time channel connects
-   */
-  public onError = (listener: (error: Error) => void) => {
-    this.on('error', listener);
-
-    return () => this.removeListener('error', listener);
+    return () => this.removeListener('command', listener);
   };
 
   /**
@@ -81,7 +63,7 @@ export class Channel extends EventEmitter {
    * see http://protodoc.turbio.repl.co/protov2#closing-channels
    * @param action [[api.OpenChannel.Action]] specifies how you want to close the channel
    */
-  public close = async (action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE) => {
+  public close = (action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE) => {
     if (this.closed === true) {
       throw new Error('Channel already closed');
     }
@@ -102,8 +84,6 @@ export class Channel extends EventEmitter {
   };
 
   /**
-   * @hidden get's passed to `onOpen` listener and called by [[Client]] to setup chan0
-   *
    * Receives a command and sends it over the wire
    * along with the channel id.
    * @param cmdJson shape of a command see [[api.ICommand]]
@@ -122,7 +102,7 @@ export class Channel extends EventEmitter {
    * that is resolved when we get a response.
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
-  private request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
+  public request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
     // Random base36 int
     const ref = Number(
       Math.random()
@@ -157,10 +137,7 @@ export class Channel extends EventEmitter {
     this.state = state;
     this.isOpen = true;
 
-    this.emit('open', {
-      send: this.send.bind(this),
-      request: this.request.bind(this),
-    });
+    this.chanReqClose = this.chanReq({ channel: this, error: null });
   };
 
   /**
@@ -194,6 +171,13 @@ export class Channel extends EventEmitter {
     this.isOpen = false;
     this.closed = true;
     this.emit('close', reason);
+
+    if (this.chanReqClose) {
+      this.chanReqClose(reason);
+      this.chanReqClose = null;
+    }
+
+    this.removeAllListeners();
   };
 
   /**
@@ -203,5 +187,12 @@ export class Channel extends EventEmitter {
    */
   public handleError = (error: Error) => {
     this.emit('error', error);
+
+    if (this.chanReqClose) {
+      this.chanReq({ error, channel: null });
+      this.chanReqClose = null;
+    }
+
+    this.removeAllListeners();
   };
 }
