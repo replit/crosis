@@ -481,7 +481,8 @@ export class Client extends EventEmitter {
         this.channels[Number(id)] = channel;
 
         channel.handleOpen({ id, state, send: this.send });
-      });
+      })
+      .catch((e) => channel.handleError(e));
   };
 
   /**
