@@ -223,8 +223,13 @@ export class Client extends EventEmitter {
 
     this.connectionState = ConnectionState.CONNECTING;
 
-    const WebSocketClass = this.connectOptions.polling ? EIOCompat : getWebSocketClass(this.connectOptions);
-    const connStr = Client.getConnectionStr(this.connectOptions.token, this.connectOptions?.urlOptions);
+    const WebSocketClass = this.connectOptions.polling
+      ? EIOCompat
+      : getWebSocketClass(this.connectOptions);
+    const connStr = Client.getConnectionStr(
+      this.connectOptions.token,
+      this.connectOptions.urlOptions,
+    );
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
@@ -493,7 +498,7 @@ export class Client extends EventEmitter {
 
   /**
    * Closes the connection.
-   * - If `connect` was called and not settled it will also reject the promise
+   * - If `connect` was called but we didn't connect yet treat it as a connection error
    * - If there's an open WebSocket connection it will be closed
    * - Any open channels or channel requests are closed
    */
