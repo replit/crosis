@@ -140,45 +140,37 @@ export class Client extends EventEmitter {
 
   public isConnected = () => this.connectionState === ConnectionState.CONNECTED;
 
+  /**
+   * `listener` is called every time client connects
+   */
   public onConnect = (listener: (chan0: Channel) => void) => {
     this.on('connect', listener);
 
     return () => this.removeListener('connect', listener);
   };
 
-  private handleConnect = (res: ChanReqRes) => {
-    if (res.error) {
-      this.emit('error', res.error);
+  /**
+   * `listener` is called every time client disconnects
+   */
+  public onClose = (listener: (closeResult: CloseResult) => void) => {
+    this.on('close', listener);
 
-      return;
-    }
+    return () => this.removeListener('close', listener);
+  };
 
-    this.emit('connect', res.channel);
+  /**
+   * `listener` is called every time client has an error connecting
+   */
+  public onError = (listener: (error: Error) => void) => {
+    this.on('error', listener);
 
-    // Pending channels exists if `openChannel` was called before client connects
-    while (this.pendingChannels.length) {
-      const channel = this.pendingChannels.shift();
-
-      if (!channel) {
-        throw new Error('Expected channel');
-      }
-
-      if (channel.options) {
-        this.handleOpenChannel(channel);
-      }
-    }
-
-    // Open existing channels when we connect
-    Object.values(this.channels).forEach((channel) => {
-      if (channel.options) {
-        this.handleOpenChannel(channel);
-      }
-    });
+    return () => this.removeListener('error', listener);
   };
 
   /**
    * Connects to the server and primes the client to start sending data
-   * @returns it returns a promise that is resolved when the server is ready (sends cotainer state)
+   * - Calls `onConnect` with open chan0 once connected
+   * -
    */
   public connect = (options: ConnectArgs) => {
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
@@ -226,6 +218,7 @@ export class Client extends EventEmitter {
     const WebSocketClass = this.connectOptions.polling
       ? EIOCompat
       : getWebSocketClass(this.connectOptions);
+
     const connStr = Client.getConnectionStr(
       this.connectOptions.token,
       this.connectOptions.urlOptions,
@@ -390,15 +383,6 @@ export class Client extends EventEmitter {
   };
 
   /**
-   * Called every time channel connects
-   */
-  public onClose = (listener: (closeResult: CloseResult) => void) => {
-    this.on('close', listener);
-
-    return () => this.removeListener('close', listener);
-  };
-
-  /**
    * Opens a service channel.
    * If action is specified the action will be sent with the request
    * If action is not specfied it will:
@@ -461,6 +445,10 @@ export class Client extends EventEmitter {
         },
       })
       .then((res: RequestResult) => {
+        if (this.connectionState !== ConnectionState.CONNECTED) {
+          channel.handleError(new Error('Client not connected'));
+        }
+
         if (res.channelClosed) {
           channel.handleError(new Error('Channel closed'));
 
@@ -631,6 +619,39 @@ export class Client extends EventEmitter {
         break;
       default:
     }
+  };
+
+  /**
+   * Called when chan0 connects. Opens all other required channels
+   */
+  private handleConnect = (res: ChanReqRes) => {
+    if (res.error) {
+      this.handleConnectionError(res.error);
+
+      return;
+    }
+
+    this.emit('connect', res.channel);
+
+    // Pending channels exists if `openChannel` was called before client connects
+    while (this.pendingChannels.length) {
+      const channel = this.pendingChannels.shift();
+
+      if (!channel) {
+        throw new Error('Expected channel');
+      }
+
+      if (channel.options) {
+        this.handleOpenChannel(channel);
+      }
+    }
+
+    // Open existing channels when we connect
+    Object.values(this.channels).forEach((channel) => {
+      if (channel.options) {
+        this.handleOpenChannel(channel);
+      }
+    });
   };
 
   private handleClose = (closeResult: CloseResult) => {

@@ -23,6 +23,10 @@ test('client connect', (done) => {
 
   client.onConnect((chan0: Channel) => {
     expect(chan0.isOpen).toEqual(true);
+    client.close();
+  });
+
+  client.onClose(() => {
     done();
   });
 });
@@ -35,6 +39,10 @@ test('channel open and close', (done) => {
     WebSocketClass: WebSocket,
   });
 
+  client.onClose(() => {
+    done();
+  });
+
   const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
     expect(channel).toBeInstanceOf(Channel);
     expect(error).toBe(null);
@@ -42,7 +50,7 @@ test('channel open and close', (done) => {
     close();
 
     return () => {
-      done();
+      client.close();
     };
   });
 });
@@ -50,38 +58,38 @@ test('channel open and close', (done) => {
 test('client reconnect', (done) => {
   const client = new Client();
 
-    let disconnectTriggered = false;
-    let timesConnected = 0;
-    let timesClosedUnintentionally = 0;
-    let timesClosedIntentionally = 0;
+  let disconnectTriggered = false;
+  let timesConnected = 0;
+  let timesClosedUnintentionally = 0;
+  let timesClosedIntentionally = 0;
 
   client.onConnect(() => {
-      timesConnected += 1;
+    timesConnected += 1;
 
-      if (!disconnectTriggered) {
-        // eslint-disable-next-line
-        // @ts-ignore: trigger unintentional disconnect
-        client.ws?.onclose();
-        disconnectTriggered = true;
-      } else {
-        client.close();
-      }
+    if (!disconnectTriggered) {
+      // eslint-disable-next-line
+      // @ts-ignore: trigger unintentional disconnect
+      client.ws?.onclose();
+      disconnectTriggered = true;
+    } else {
+      client.close();
+    }
   });
 
-   client.onClose(({ closeReason }) => {
-     if (closeReason === ClientCloseReason.Disconnected) {
-       timesClosedUnintentionally += 1;
-     } else if (closeReason === ClientCloseReason.Intentional) {
-       timesClosedIntentionally += 1;
-     }
+  client.onClose(({ closeReason }) => {
+    if (closeReason === ClientCloseReason.Disconnected) {
+      timesClosedUnintentionally += 1;
+    } else if (closeReason === ClientCloseReason.Intentional) {
+      timesClosedIntentionally += 1;
+    }
 
-     if (timesConnected === 2) {
-       expect(timesClosedUnintentionally).toEqual(1);
-       expect(timesClosedIntentionally).toEqual(1);
+    if (timesConnected === 2) {
+      expect(timesClosedUnintentionally).toEqual(1);
+      expect(timesClosedIntentionally).toEqual(1);
 
-       done();
-     }
-   });
+      done();
+    }
+  });
 
   client.connect({
     token: REPL_TOKEN,
