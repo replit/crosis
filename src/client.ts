@@ -54,6 +54,7 @@ interface ConnectOptions {
   timeout: number | null;
   reconnect: boolean;
   WebSocketClass?: typeof WebSocket;
+  maxConnectRetries?: number;
 }
 
 interface ConnectArgs extends Partial<Omit<ConnectOptions, 'token'>> {
@@ -221,6 +222,7 @@ export class Client extends EventEmitter {
       polling: false,
       timeout: 10000,
       reconnect: false,
+      maxConnectRetries: 2,
       urlOptions: {
         secure: false,
         host: 'eval.repl.it',
@@ -367,7 +369,7 @@ export class Client extends EventEmitter {
       // What should max retries be?
       // Should it be configurable?
       // Should this also handle a fall back to polling?
-      if (this.connectTrys < 2) {
+      if (this.connectTrys <= connectOptions.maxConnectRetries) {
         this.retryTimer = setTimeout(() => {
           this.connectionState = ConnectionState.DISCONNECTED;
           this.connect(connectOptions);
