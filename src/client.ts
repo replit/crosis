@@ -12,7 +12,7 @@ type CloseResult =
     }
   | {
       closeReason: ClientCloseReason.Disconnected;
-      wsCloseEvent: CloseEvent;
+      wsEvent: CloseEvent | ErrorEvent;
     };
 
 enum ConnectionState {
@@ -58,6 +58,17 @@ interface ConnectOptions {
 
 interface ConnectArgs extends Partial<Omit<ConnectOptions, 'token'>> {
   token: string;
+}
+
+const backoffFactor = 1.7;
+const maxBackoff = 15000;
+function getNextRetryDelay(retryNumber: number) {
+  const randomMs = Math.floor(Math.random() * 500);
+  // TODO: why no Math.pow?
+  // eslint-disable-next-line no-restricted-properties
+  const backoff = Math.pow(backoffFactor, retryNumber) * 1000;
+
+  return Math.min(backoff, maxBackoff) + randomMs;
 }
 
 /**
@@ -115,6 +126,10 @@ export class Client extends EventEmitter {
 
   private debug: DebugFunc;
 
+  private retryTimer: ReturnType<typeof setTimeout> | null;
+
+  private connectTrys: number;
+
   static getConnectionStr(token: string, urlOptions: UrlOptions) {
     const { secure, host, port } = urlOptions;
 
@@ -126,7 +141,10 @@ export class Client extends EventEmitter {
 
     this.ws = null;
     this.channels = {
+      // Every client automatically "has" channel 0 and can use it to open more channels.
+      // See http://protodoc.turbio.repl.co/protov2 from more info
       0: new Channel({
+        // Once thi channel connects the client is connected
         chanReq: this.handleConnect,
       }),
     };
@@ -134,6 +152,8 @@ export class Client extends EventEmitter {
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
     this.pendingChannels = [];
+    this.connectTrys = 0;
+    this.retryTimer = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -173,37 +193,33 @@ export class Client extends EventEmitter {
    * -
    */
   public connect = (options: ConnectArgs) => {
+    this.connectTrys += 1;
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       const error = new Error('Client must be disconnected to connect');
-      this.handleConnectionError(error);
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-
-      return;
+      throw error;
     }
 
     if (!options.token) {
       const error = new Error('You must provide a token');
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-
       throw error;
     }
 
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
       const error = new Error('Client already connected to an active websocket connection');
-      this.handleConnectionError(error);
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-
-      return;
+      throw error;
     }
 
-    this.connectOptions = {
+    const connectOptions = {
       polling: false,
-      timeout: null,
+      timeout: 10000,
       reconnect: false,
       urlOptions: {
         secure: false,
@@ -213,16 +229,13 @@ export class Client extends EventEmitter {
       ...options,
     };
 
+    this.connectOptions = connectOptions;
+
     this.connectionState = ConnectionState.CONNECTING;
 
-    const WebSocketClass = this.connectOptions.polling
-      ? EIOCompat
-      : getWebSocketClass(this.connectOptions);
+    const WebSocketClass = connectOptions.polling ? EIOCompat : getWebSocketClass(connectOptions);
 
-    const connStr = Client.getConnectionStr(
-      this.connectOptions.token,
-      this.connectOptions.urlOptions,
-    );
+    const connStr = Client.getConnectionStr(connectOptions.token, connectOptions.urlOptions);
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
@@ -248,6 +261,10 @@ export class Client extends EventEmitter {
      */
     ws.onclose = () => {
       onFailed(new Error('WebSocket closed before we got READY'));
+    };
+
+    ws.onerror = () => {
+      onFailed(new Error('WebSocket errored before we got READY'));
     };
 
     /**
@@ -335,50 +352,34 @@ export class Client extends EventEmitter {
       }
     };
 
-    const onCommandOff = chan0.onCommand(onCommand);
-
-    /**
-     * We call this as a cleanup method after we settle the connection
-     */
-    const onFinally = () => {
-      cancelTimeout();
-      onCommandOff();
-    };
+    const dispose = chan0.onCommand(onCommand);
 
     onSuccess = () => {
-      Object.values(this.channels).forEach((channel) => {
-        if (channel.options) {
-          // this.openChannel({ channel, ...channel.options });
-        }
-      });
-
-      onFinally();
-
-      // Update socket closure to do something else
-      ws.onclose = (closeEvent: CloseEvent) => {
-        this.debug({
-          type: 'breadcrumb',
-          message: 'wsclose',
-          data: {
-            closeReason: closeEvent ? closeEvent.reason : undefined,
-          },
-        });
-
-        this.handleClose({
-          closeReason: ClientCloseReason.Disconnected,
-          wsCloseEvent: closeEvent,
-        });
-      };
-
-      this.connectionState = ConnectionState.CONNECTED;
-
-      this.debug({ type: 'breadcrumb', message: 'connected!' });
+      if (this.retryTimer) {
+        clearTimeout(this.retryTimer);
+      }
+      cancelTimeout();
+      dispose();
     };
 
     onFailed = (error: Error) => {
-      onFinally();
+      // TODO: Details
+      // What should max retries be?
+      // Should it be configurable?
+      // Should this also handle a fall back to polling?
+      if (this.connectTrys < 2) {
+        this.retryTimer = setTimeout(() => {
+          this.connectionState = ConnectionState.DISCONNECTED;
+          this.connect(connectOptions);
+        }, getNextRetryDelay(this.connectTrys));
 
-      this.handleConnectionError(error);
+        return;
+      }
+
+      cancelTimeout();
+      dispose();
+
+      this.handleConnectError(error);
     };
   };
 
@@ -495,9 +496,7 @@ export class Client extends EventEmitter {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
     if (!this.connectOptions) {
-      this.handleConnectionError(new Error('Client never connected'));
-
-      return;
+      throw new Error('Must call client.connect before closing');
     }
 
     this.handleClose({ closeReason: ClientCloseReason.Intentional });
@@ -627,10 +626,48 @@ export class Client extends EventEmitter {
    */
   private handleConnect = (res: ChanReqRes) => {
     if (res.error) {
-      this.handleConnectionError(res.error);
-
-      return;
+      /**
+       * This should never happen since we either
+       * 1. successfully opon chan0 once READY
+       * 2. treat an error as a client disconnect
+       */
+      throw res.error;
     }
+
+    /**
+     * Set back to 0 for the next time the client connects
+     */
+    this.connectTrys = 0;
+
+    this.connectionState = ConnectionState.CONNECTED;
+
+    this.debug({ type: 'breadcrumb', message: 'connected!' });
+
+    if (!this.ws) {
+      throw new Error('Expected Websocket instance');
+    }
+
+    // Update socket closure to do something else
+    const onClose = (event: CloseEvent | ErrorEvent) => {
+      this.debug({
+        type: 'breadcrumb',
+        message: 'wsclose',
+        data: {
+          event,
+        },
+      });
+
+      this.handleClose({
+        closeReason: ClientCloseReason.Disconnected,
+        wsEvent: event,
+      });
+    };
+
+    this.ws.onclose = onClose;
+
+    // Once connected treat any future error as a close event
+    // @ts-ignore seems like a type issue related to browser/node env
+    this.ws.onerror = onClose;
 
     this.emit('connect', res.channel);
 
@@ -658,8 +695,9 @@ export class Client extends EventEmitter {
   private handleClose = (closeResult: CloseResult) => {
     this.cleanupSocket();
 
-    if (!this.connectOptions) {
-      throw new Error('Expected connectOptions');
+    if (this.retryTimer) {
+      // Client was closed while reconnecting
+      clearTimeout(this.retryTimer);
     }
 
     Object.values(this.channels).forEach((channel) => {
@@ -677,6 +715,16 @@ export class Client extends EventEmitter {
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
+    if (closeResult.closeReason == ClientCloseReason.Intentional) {
+      // Client is done being used
+      this.removeAllListeners();
+      return;
+    }
+
+    if (!this.connectOptions) {
+      throw new Error('Expected connectOptions');
+    }
+
     if (this.connectOptions.reconnect) {
       this.debug({
         type: 'breadcrumb',
@@ -684,12 +732,10 @@ export class Client extends EventEmitter {
       });
 
       this.connect(this.connectOptions);
-    } else {
-      this.removeAllListeners();
     }
   };
 
-  private handleConnectionError = (err: Error) => {
+  private handleConnectError = (err: Error) => {
     Object.values(this.channels).forEach((channel) => {
       channel.handleError(err);
     });
@@ -700,8 +746,6 @@ export class Client extends EventEmitter {
     this.emit('error', err);
 
     this.debug({ type: 'breadcrumb', message: 'connect failed', data: err.message });
-
-    // TODO retry
   };
 
   private cleanupSocket = () => {
