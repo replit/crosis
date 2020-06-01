@@ -1,7 +1,6 @@
 /* eslint-env jest */
 
 import { Client } from '../client';
-import { Channel } from '../channel';
 import { ClientCloseReason } from '../closeReasons';
 
 // eslint-disable-next-line
@@ -16,35 +15,45 @@ if (!REPL_TOKEN) {
 test('client connect', (done) => {
   const client = new Client();
 
-  client.connect({
-    token: REPL_TOKEN,
-    WebSocketClass: WebSocket,
-  });
+  const close = client.connect(
+    {
+      token: REPL_TOKEN,
+      WebSocketClass: WebSocket,
+    },
+    ({ channel, error }) => {
+      expect(channel?.isOpen).toEqual(true);
+      expect(error).toEqual(null);
 
-  client.onConnect((chan0: Channel) => {
-    expect(chan0.isOpen).toEqual(true);
-    client.close();
-  });
+      // TODO should it be allowed to call `close` synchronously?
+      setTimeout(close);
 
-  client.onClose(() => {
-    done();
-  });
+      return () => {
+        done();
+      };
+    },
+  );
 });
 
 test('channel open and close', (done) => {
   const client = new Client();
 
-  client.connect({
-    token: REPL_TOKEN,
-    WebSocketClass: WebSocket,
-  });
+  client.connect(
+    {
+      token: REPL_TOKEN,
+      WebSocketClass: WebSocket,
+    },
+    ({ channel, error }) => {
+      expect(channel?.isOpen).toEqual(true);
+      expect(error).toEqual(null);
 
-  client.onClose(() => {
-    done();
-  });
+      return () => {
+        done();
+      };
+    },
+  );
 
   const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
-    expect(channel).toBeInstanceOf(Channel);
+    expect(channel?.isOpen).toBe(true);
     expect(error).toBe(null);
 
     close();
@@ -52,6 +61,48 @@ test('channel open and close', (done) => {
     return () => {
       client.close();
     };
+  });
+});
+
+test('client errors opening', (done) => {
+  const client = new Client();
+  let errorCount = 0;
+
+  const clientClose = jest.fn();
+  const channelClose = jest.fn();
+
+  const maybeDone = () => {
+    if (errorCount === 2) {
+      // Close functions are not called when connect/openChannel error
+      expect(clientClose).not.toHaveBeenCalled();
+      expect(channelClose).not.toHaveBeenCalled();
+
+      done();
+    }
+  };
+
+  client.connect({
+    maxConnectRetries: 0,
+    token: 'test - no good',
+    WebSocketClass: WebSocket,
+  }, ({ channel, error }) => {
+      expect(error).toBeTruthy();
+      expect(channel).toEqual(null);
+      errorCount += 1;
+
+      setTimeout(maybeDone);
+
+      return clientClose;
+  });
+
+  client.openChannel({ service: 'shell' }, ({ channel, error }) => {
+    expect(error).toBeTruthy();
+    expect(channel).toEqual(null);
+    errorCount += 1;
+
+    setTimeout(maybeDone);
+
+    return channelClose;
   });
 });
 
@@ -63,37 +114,48 @@ test('client reconnect', (done) => {
   let timesClosedUnintentionally = 0;
   let timesClosedIntentionally = 0;
 
-  client.onConnect(() => {
-    timesConnected += 1;
+  client.connect(
+    {
+      token: REPL_TOKEN,
+      WebSocketClass: WebSocket,
+      reconnect: true,
+    },
+    ({ channel, error }) => {
+      expect(channel?.isOpen).toEqual(true);
+      expect(error).toEqual(null);
 
-    if (!disconnectTriggered) {
-      // eslint-disable-next-line
-      // @ts-ignore: trigger unintentional disconnect
-      client.ws?.onclose();
-      disconnectTriggered = true;
-    } else {
-      client.close();
-    }
-  });
+      timesConnected += 1;
 
-  client.onClose(({ closeReason }) => {
-    if (closeReason === ClientCloseReason.Disconnected) {
-      timesClosedUnintentionally += 1;
-    } else if (closeReason === ClientCloseReason.Intentional) {
-      timesClosedIntentionally += 1;
-    }
+      if (!disconnectTriggered) {
+        setTimeout(() => {
+          // eslint-disable-next-line
+          // @ts-ignore: trigger unintentional disconnect
+          client.ws?.onclose();
+          disconnectTriggered = true;
+        });
+      } else {
+        // TODO should it be allowed to call `close` synchronously?
+        setTimeout(() => client.close());
+      }
 
-    if (timesConnected === 2) {
-      expect(timesClosedUnintentionally).toEqual(1);
-      expect(timesClosedIntentionally).toEqual(1);
+      return (closeReason) => {
+        if (closeReason.initiator !== 'client') {
+          throw new Error('Expected "client" initiator');
+        }
 
-      done();
-    }
-  });
+        if (closeReason.clientCloseReason === ClientCloseReason.Disconnected) {
+          timesClosedUnintentionally += 1;
+        } else if (closeReason.clientCloseReason === ClientCloseReason.Intentional) {
+          timesClosedIntentionally += 1;
+        }
 
-  client.connect({
-    token: REPL_TOKEN,
-    reconnect: true,
-    WebSocketClass: WebSocket,
-  });
+        if (timesConnected === 2) {
+          expect(timesClosedUnintentionally).toEqual(1);
+          expect(timesClosedIntentionally).toEqual(1);
+
+          done();
+        }
+      };
+    },
+  );
 });

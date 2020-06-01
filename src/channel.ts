@@ -160,7 +160,6 @@ export class Channel extends EventEmitter {
    * Called when the channel or client is closed
    */
   public handleClose = (reason: ChannelCloseReason) => {
-    // console.log('handleClose');
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;
@@ -170,7 +169,6 @@ export class Channel extends EventEmitter {
 
     this.isOpen = false;
     this.closed = true;
-    this.emit('close', reason);
 
     if (this.chanReqClose) {
       this.chanReqClose(reason);
@@ -186,13 +184,8 @@ export class Channel extends EventEmitter {
    * Called when the channel has an error opening
    */
   public handleError = (error: Error) => {
-    this.emit('error', error);
-
-    if (this.chanReqClose) {
-      this.chanReq({ error, channel: null });
-      this.chanReqClose = null;
-    }
-
+    this.chanReq({ error, channel: null });
+    this.chanReqClose = null;
     this.removeAllListeners();
   };
 }

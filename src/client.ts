@@ -2,7 +2,7 @@
 
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
-import { Channel, ChannelOptions, ChanReqFn, ChanReqRes, RequestResult } from './channel';
+import { Channel, ChannelOptions, ChanReqFn, RequestResult } from './channel';
 import { EIOCompat } from './EIOCompat';
 import { ClientCloseReason } from './closeReasons';
 
@@ -119,6 +119,8 @@ export class Client extends EventEmitter {
 
   private connectOptions: ConnectOptions | null;
 
+  private chan0Req: ChanReqFn | null;
+
   private pendingChannels: Array<Channel>;
 
   private channels: {
@@ -141,15 +143,9 @@ export class Client extends EventEmitter {
     super();
 
     this.ws = null;
-    this.channels = {
-      // Every client automatically "has" channel 0 and can use it to open more channels.
-      // See http://protodoc.turbio.repl.co/protov2 from more info
-      0: new Channel({
-        // Once thi channel connects the client is connected
-        chanReq: this.handleConnect,
-      }),
-    };
+    this.channels = {};
     this.connectOptions = null;
+    this.chan0Req = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
     this.pendingChannels = [];
@@ -162,38 +158,12 @@ export class Client extends EventEmitter {
   public isConnected = () => this.connectionState === ConnectionState.CONNECTED;
 
   /**
-   * `listener` is called every time client connects
+   * Connects to the server and and opens channel 0
+   *
+   * Every client automatically "has" channel 0 and can use it to open more channels.
+   * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public onConnect = (listener: (chan0: Channel) => void) => {
-    this.on('connect', listener);
-
-    return () => this.removeListener('connect', listener);
-  };
-
-  /**
-   * `listener` is called every time client disconnects
-   */
-  public onClose = (listener: (closeResult: CloseResult) => void) => {
-    this.on('close', listener);
-
-    return () => this.removeListener('close', listener);
-  };
-
-  /**
-   * `listener` is called every time client has an error connecting
-   */
-  public onError = (listener: (error: Error) => void) => {
-    this.on('error', listener);
-
-    return () => this.removeListener('error', listener);
-  };
-
-  /**
-   * Connects to the server and primes the client to start sending data
-   * - Calls `onConnect` with open chan0 once connected
-   * -
-   */
-  public connect = (options: ConnectArgs) => {
+  public connect = (options: ConnectArgs, chanReq: ChanReqFn) => {
     this.connectTrys += 1;
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
 
@@ -232,6 +202,7 @@ export class Client extends EventEmitter {
     };
 
     this.connectOptions = connectOptions;
+    this.chan0Req = chanReq;
 
     this.connectionState = ConnectionState.CONNECTING;
 
@@ -244,11 +215,9 @@ export class Client extends EventEmitter {
     ws.onmessage = this.onSocketMessage;
     this.ws = ws;
 
-    /**
-     * success is only called when we get
-     * ContainerState.READY command
-     */
-    let onSuccess: () => void;
+    const chan0 = new Channel({ chanReq });
+    this.channels[0] = chan0;
+
     /**
      * Failure can happen due to a number of reasons
      * 1- Abrupt socket closure
@@ -258,15 +227,17 @@ export class Client extends EventEmitter {
      */
     let onFailed: (err: Error) => void;
 
+    // eslint-disable-next-line
+    // @ts-ignore
+    ws.onerror = ({ error }: { error: Error }) => {
+      onFailed(error);
+    };
+
     /**
      * Abrupt socket closures should report failed
      */
     ws.onclose = () => {
       onFailed(new Error('WebSocket closed before we got READY'));
-    };
-
-    ws.onerror = () => {
-      onFailed(new Error('WebSocket errored before we got READY'));
     };
 
     /**
@@ -296,19 +267,17 @@ export class Client extends EventEmitter {
       };
     }
 
-    const chan0 = this.getChannel(0);
-
     /** Listen to incoming commands
      * Every time we get a message we reset the connection timeout (if it exists)
      * this is because it signifies that the connection will eventually work.
      *
      * If we ever get a ContainterState READY we can officially
-     * say that the connection is successful and we resolve the returned promise.
+     * say that the connection is successful and we open chan0 and other `chanReq`s
      *
      * If we ever get ContainterState SLEEP it means that something went wrong
      * and connection should be dropped
      */
-    const onCommand = (cmd: api.Command) => {
+    const dispose = chan0.onCommand((cmd: api.Command) => {
       // Everytime we get a message on channel0
       // we will reset the timeout
       resetTimeout();
@@ -335,13 +304,21 @@ export class Client extends EventEmitter {
 
       switch (state) {
         case StateEnum.READY:
-          onSuccess();
+          // Once we're READY we can stop listening to incoming commands
+          dispose();
+
+          if (this.retryTimer) {
+            clearTimeout(this.retryTimer);
+          }
+          cancelTimeout();
 
           chan0.handleOpen({
             id: 0,
             state: api.OpenChannelRes.State.CREATED,
             send: this.send,
           });
+
+          this.handleConnect();
 
           break;
 
@@ -352,27 +329,15 @@ export class Client extends EventEmitter {
 
         default:
       }
-    };
-
-    const dispose = chan0.onCommand(onCommand);
-
-    onSuccess = () => {
-      if (this.retryTimer) {
-        clearTimeout(this.retryTimer);
-      }
-      cancelTimeout();
-      dispose();
-    };
+    });
 
     onFailed = (error: Error) => {
       // TODO: Details
-      // What should max retries be?
-      // Should it be configurable?
       // Should this also handle a fall back to polling?
       if (this.connectTrys <= connectOptions.maxConnectRetries) {
         this.retryTimer = setTimeout(() => {
           this.connectionState = ConnectionState.DISCONNECTED;
-          this.connect(connectOptions);
+          this.connect(connectOptions, chanReq);
         }, getNextRetryDelay(this.connectTrys));
 
         return;
@@ -382,7 +347,10 @@ export class Client extends EventEmitter {
       dispose();
 
       this.handleConnectError(error);
+      this.cleanupSocket();
     };
+
+    return () => this.close();
   };
 
   /**
@@ -501,6 +469,11 @@ export class Client extends EventEmitter {
       throw new Error('Must call client.connect before closing');
     }
 
+    // TODO: wrap in `setTimeout` to make async? Would need to do this
+    // to support calling `close` synchronously in `connect` callback
+    // This is only an issue with channel 0 since it never closes. Other
+    // channels close asynchronously so calling close inside `openChannel`
+    // is fine sice the callback function exits.
     this.handleClose({ closeReason: ClientCloseReason.Intentional });
   };
 
@@ -626,16 +599,7 @@ export class Client extends EventEmitter {
   /**
    * Called when chan0 connects. Opens all other required channels
    */
-  private handleConnect = (res: ChanReqRes) => {
-    if (res.error) {
-      /**
-       * This should never happen since we either
-       * 1. successfully opon chan0 once READY
-       * 2. treat an error as a client disconnect
-       */
-      throw res.error;
-    }
-
+  private handleConnect = () => {
     /**
      * Set back to 0 for the next time the client connects
      */
@@ -668,10 +632,9 @@ export class Client extends EventEmitter {
     this.ws.onclose = onClose;
 
     // Once connected treat any future error as a close event
+    // eslint-disable-next-line
     // @ts-ignore seems like a type issue related to browser/node env
     this.ws.onerror = onClose;
-
-    this.emit('connect', res.channel);
 
     // Pending channels exists if `openChannel` was called before client connects
     while (this.pendingChannels.length) {
@@ -717,7 +680,7 @@ export class Client extends EventEmitter {
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
-    if (closeResult.closeReason == ClientCloseReason.Intentional) {
+    if (closeResult.closeReason === ClientCloseReason.Intentional) {
       // Client is done being used
       this.removeAllListeners();
       return;
@@ -727,25 +690,27 @@ export class Client extends EventEmitter {
       throw new Error('Expected connectOptions');
     }
 
+    if (!this.chan0Req) {
+      throw new Error('Expected chan0Req');
+    }
+
     if (this.connectOptions.reconnect) {
       this.debug({
         type: 'breadcrumb',
         message: 'reconnecting',
       });
 
-      this.connect(this.connectOptions);
+      this.connect(this.connectOptions, this.chan0Req);
     }
   };
 
   private handleConnectError = (err: Error) => {
-    Object.values(this.channels).forEach((channel) => {
+    [...this.pendingChannels, ...Object.values(this.channels)].forEach((channel) => {
       channel.handleError(err);
     });
 
     this.connectionState = ConnectionState.DISCONNECTED;
     this.cleanupSocket();
-
-    this.emit('error', err);
 
     this.debug({ type: 'breadcrumb', message: 'connect failed', data: err.message });
   };
@@ -761,6 +726,7 @@ export class Client extends EventEmitter {
 
     ws.onmessage = null;
     ws.onclose = null;
+    ws.onerror = null;
 
     if (ws.readyState === 0 || ws.readyState === 1) {
       this.debug({
