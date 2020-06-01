@@ -15,7 +15,7 @@ if (!REPL_TOKEN) {
 test('client connect', (done) => {
   const client = new Client();
 
-  const close = client.connect(
+  client.connect(
     {
       token: REPL_TOKEN,
       WebSocketClass: WebSocket,
@@ -25,7 +25,7 @@ test('client connect', (done) => {
       expect(error).toEqual(null);
 
       // TODO should it be allowed to call `close` synchronously?
-      setTimeout(close);
+      setTimeout(() => client.close());
 
       return () => {
         done();

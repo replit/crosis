@@ -349,8 +349,6 @@ export class Client extends EventEmitter {
       this.handleConnectError(error);
       this.cleanupSocket();
     };
-
-    return () => this.close();
   };
 
   /**
