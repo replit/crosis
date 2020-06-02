@@ -17,7 +17,7 @@ test('client connect', (done) => {
 
   client.connect(
     {
-      token: REPL_TOKEN,
+      token: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -39,7 +39,7 @@ test('channel open and close', (done) => {
 
   client.connect(
     {
-      token: REPL_TOKEN,
+      token: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -83,7 +83,7 @@ test('client errors opening', (done) => {
 
   client.connect({
     maxConnectRetries: 0,
-    token: 'test - no good',
+    token: () => Promise.resolve('test - no good'),
     WebSocketClass: WebSocket,
   }, ({ channel, error }) => {
       expect(error).toBeTruthy();
@@ -116,7 +116,7 @@ test('client reconnect', (done) => {
 
   client.connect(
     {
-      token: REPL_TOKEN,
+      token: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
       reconnect: true,
     },

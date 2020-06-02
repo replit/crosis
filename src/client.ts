@@ -48,7 +48,7 @@ type DebugLog =
 type DebugFunc = (log: DebugLog) => void;
 
 interface ConnectOptions {
-  token: string;
+  token: () => Promise<string>;
   urlOptions: UrlOptions;
   polling: boolean;
   timeout: number | null;
@@ -58,7 +58,7 @@ interface ConnectOptions {
 }
 
 interface ConnectArgs extends Partial<Omit<ConnectOptions, 'token'>> {
-  token: string;
+  token: () => Promise<string>;
 }
 
 const backoffFactor = 1.7;
@@ -133,6 +133,8 @@ export class Client extends EventEmitter {
 
   private connectTrys: number;
 
+  private connectToken: string | null;
+
   static getConnectionStr(token: string, urlOptions: UrlOptions) {
     const { secure, host, port } = urlOptions;
 
@@ -151,6 +153,7 @@ export class Client extends EventEmitter {
     this.pendingChannels = [];
     this.connectTrys = 0;
     this.retryTimer = null;
+    this.connectToken = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -175,7 +178,7 @@ export class Client extends EventEmitter {
     }
 
     if (!options.token) {
-      const error = new Error('You must provide a token');
+      const error = new Error('You must provide a token function');
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
       throw error;
@@ -206,149 +209,158 @@ export class Client extends EventEmitter {
 
     this.connectionState = ConnectionState.CONNECTING;
 
-    const WebSocketClass = connectOptions.polling ? EIOCompat : getWebSocketClass(connectOptions);
-
-    const connStr = Client.getConnectionStr(connectOptions.token, connectOptions.urlOptions);
-    const ws = new WebSocketClass(connStr);
-
-    ws.binaryType = 'arraybuffer';
-    ws.onmessage = this.onSocketMessage;
-    this.ws = ws;
-
     const chan0 = new Channel({ chanReq });
     this.channels[0] = chan0;
 
-    /**
-     * Failure can happen due to a number of reasons
-     * 1- Abrupt socket closure
-     * 2- Timedout connection request
-     * 3- ContainerState.SLEEP command
-     * 4- User calling `close` before we connect
-     */
-    let onFailed: (err: Error) => void;
+    const WebSocketClass = connectOptions.polling ? EIOCompat : getWebSocketClass(connectOptions);
 
-    // eslint-disable-next-line
-    // @ts-ignore
-    ws.onerror = ({ error }: { error: Error }) => {
-      onFailed(error);
-    };
+    connectOptions.token().then((token) => {
+      if (this.connectionState !== ConnectionState.CONNECTING) {
+        this.handleConnectError(new Error('Client was closed before connecting'));
 
-    /**
-     * Abrupt socket closures should report failed
-     */
-    ws.onclose = () => {
-      onFailed(new Error('WebSocket closed before we got READY'));
-    };
+        return;
+      }
 
-    /**
-     * If the user specifies a timeout we will short circuit
-     * the connection if we don't get READY from the container
-     * within the specified timeout.
-     *
-     * Every time we get a message we reset the connection timeout
-     * this is because it signifies that the connection will eventually work.
-     */
-    let resetTimeout = () => {};
-    let cancelTimeout = () => {};
-    if (options.timeout) {
-      const { timeout } = options;
-      let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
+      const connStr = Client.getConnectionStr(token, connectOptions.urlOptions);
+      const ws = new WebSocketClass(connStr);
 
-      cancelTimeout = () => clearTimeout(timeoutId);
+      ws.binaryType = 'arraybuffer';
+      ws.onmessage = this.onSocketMessage;
+      this.ws = ws;
 
-      resetTimeout = () => {
-        cancelTimeout();
+      /**
+       * Failure can happen due to a number of reasons
+       * 1- Abrupt socket closure
+       * 2- Timedout connection request
+       * 3- ContainerState.SLEEP command
+       * 4- User calling `close` before we connect
+       */
+      let onFailed: (err: Error) => void;
 
-        timeoutId = setTimeout(() => {
-          this.debug({ type: 'breadcrumb', message: 'connect timeout' });
-
-          onFailed(new Error('timeout'));
-        }, timeout);
+      // eslint-disable-next-line
+      // @ts-ignore
+      ws.onerror = ({ error }: { error: Error }) => {
+        onFailed(error);
       };
-    }
 
-    /** Listen to incoming commands
-     * Every time we get a message we reset the connection timeout (if it exists)
-     * this is because it signifies that the connection will eventually work.
-     *
-     * If we ever get a ContainterState READY we can officially
-     * say that the connection is successful and we open chan0 and other `chanReq`s
-     *
-     * If we ever get ContainterState SLEEP it means that something went wrong
-     * and connection should be dropped
-     */
-    const dispose = chan0.onCommand((cmd: api.Command) => {
-      // Everytime we get a message on channel0
-      // we will reset the timeout
-      resetTimeout();
+      /**
+       * Abrupt socket closures should report failed
+       */
+      ws.onclose = () => {
+        onFailed(new Error('WebSocket closed before we got READY'));
+      };
 
-      if (cmd.containerState == null) {
-        return;
-      }
+      /**
+       * If the user specifies a timeout we will short circuit
+       * the connection if we don't get READY from the container
+       * within the specified timeout.
+       *
+       * Every time we get a message we reset the connection timeout
+       * this is because it signifies that the connection will eventually work.
+       */
+      let resetTimeout = () => {};
+      let cancelTimeout = () => {};
+      if (options.timeout) {
+        const { timeout } = options;
+        let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
 
-      if (cmd.containerState.state == null) {
-        onFailed(new Error('Got containterState but state was not defined'));
+        cancelTimeout = () => clearTimeout(timeoutId);
 
-        return;
-      }
-
-      const { state } = cmd.containerState;
-
-      this.debug({
-        type: 'breadcrumb',
-        message: 'containerState',
-        data: state,
-      });
-
-      const StateEnum = api.ContainerState.State;
-
-      switch (state) {
-        case StateEnum.READY:
-          // Once we're READY we can stop listening to incoming commands
-          dispose();
-
-          if (this.retryTimer) {
-            clearTimeout(this.retryTimer);
-          }
+        resetTimeout = () => {
           cancelTimeout();
 
-          chan0.handleOpen({
-            id: 0,
-            state: api.OpenChannelRes.State.CREATED,
-            send: this.send,
-          });
+          timeoutId = setTimeout(() => {
+            this.debug({ type: 'breadcrumb', message: 'connect timeout' });
 
-          this.handleConnect();
-
-          break;
-
-        case StateEnum.SLEEP:
-          onFailed(new Error('Got SLEEP as container state'));
-
-          break;
-
-        default:
+            onFailed(new Error('timeout'));
+          }, timeout);
+        };
       }
+
+      /** Listen to incoming commands
+       * Every time we get a message we reset the connection timeout (if it exists)
+       * this is because it signifies that the connection will eventually work.
+       *
+       * If we ever get a ContainterState READY we can officially
+       * say that the connection is successful and we open chan0 and other `chanReq`s
+       *
+       * If we ever get ContainterState SLEEP it means that something went wrong
+       * and connection should be dropped
+       */
+      const dispose = chan0.onCommand((cmd: api.Command) => {
+        // Everytime we get a message on channel0
+        // we will reset the timeout
+        resetTimeout();
+
+        if (cmd.containerState == null) {
+          return;
+        }
+
+        if (cmd.containerState.state == null) {
+          onFailed(new Error('Got containterState but state was not defined'));
+
+          return;
+        }
+
+        const { state } = cmd.containerState;
+
+        this.debug({
+          type: 'breadcrumb',
+          message: 'containerState',
+          data: state,
+        });
+
+        const StateEnum = api.ContainerState.State;
+
+        switch (state) {
+          case StateEnum.READY:
+            // Once we're READY we can stop listening to incoming commands
+            dispose();
+
+            if (this.retryTimer) {
+              clearTimeout(this.retryTimer);
+            }
+            cancelTimeout();
+
+            chan0.handleOpen({
+              id: 0,
+              state: api.OpenChannelRes.State.CREATED,
+              send: this.send,
+            });
+
+            this.connectToken = token;
+
+            this.handleConnect();
+
+            break;
+
+          case StateEnum.SLEEP:
+            onFailed(new Error('Got SLEEP as container state'));
+
+            break;
+
+          default:
+        }
+      });
+
+      onFailed = (error: Error) => {
+        // TODO: Details
+        // Should this also handle a fall back to polling?
+        if (this.connectTrys <= connectOptions.maxConnectRetries) {
+          this.retryTimer = setTimeout(() => {
+            this.connectionState = ConnectionState.DISCONNECTED;
+            this.connect(connectOptions, chanReq);
+          }, getNextRetryDelay(this.connectTrys));
+
+          return;
+        }
+
+        cancelTimeout();
+        dispose();
+
+        this.handleConnectError(error);
+      };
     });
-
-    onFailed = (error: Error) => {
-      // TODO: Details
-      // Should this also handle a fall back to polling?
-      if (this.connectTrys <= connectOptions.maxConnectRetries) {
-        this.retryTimer = setTimeout(() => {
-          this.connectionState = ConnectionState.DISCONNECTED;
-          this.connect(connectOptions, chanReq);
-        }, getNextRetryDelay(this.connectTrys));
-
-        return;
-      }
-
-      cancelTimeout();
-      dispose();
-
-      this.handleConnectError(error);
-      this.cleanupSocket();
-    };
   };
 
   /**
@@ -499,11 +511,7 @@ export class Client extends EventEmitter {
 
   /** Gets the token that was used to connect */
   public getToken(): string | null {
-    if (!this.connectOptions) {
-      return null;
-    }
-
-    return this.connectOptions.token;
+    return this.connectToken;
   }
 
   /** Sets a logging/debugging function */
@@ -658,6 +666,8 @@ export class Client extends EventEmitter {
   private handleClose = (closeResult: CloseResult) => {
     this.cleanupSocket();
 
+    this.connectToken = null;
+
     if (this.retryTimer) {
       // Client was closed while reconnecting
       clearTimeout(this.retryTimer);
@@ -703,6 +713,8 @@ export class Client extends EventEmitter {
   };
 
   private handleConnectError = (err: Error) => {
+    this.connectToken = null;
+
     [...this.pendingChannels, ...Object.values(this.channels)].forEach((channel) => {
       channel.handleError(err);
     });
