@@ -24,7 +24,6 @@ test('client connect', (done) => {
       expect(channel?.isOpen).toEqual(true);
       expect(error).toEqual(null);
 
-      // TODO should it be allowed to call `close` synchronously?
       setTimeout(() => client.close());
 
       return () => {
@@ -134,7 +133,6 @@ test('client reconnect', (done) => {
           disconnectTriggered = true;
         });
       } else {
-        // TODO should it be allowed to call `close` synchronously?
         setTimeout(() => client.close());
       }
 
@@ -158,4 +156,91 @@ test('client reconnect', (done) => {
       };
     },
   );
+});
+
+test('client is closed while reconnecting', (done) => {
+  const client = new Client();
+
+  let didOpen = false;
+
+  const open = jest.fn();
+  const close = jest.fn();
+
+  const token = () => {
+    if (didOpen) {
+      // We're reconnecting
+      setTimeout(() => {
+        // Close client while reconnecting
+        client.close();
+
+        expect(open).toHaveBeenCalledTimes(1);
+        expect(close).toHaveBeenCalledTimes(1);
+
+        done();
+      });
+    }
+
+    return Promise.resolve(REPL_TOKEN);
+  };
+
+  client.connect({
+    token,
+    WebSocketClass: WebSocket,
+    reconnect: true,
+  }, () => {
+    // called once after initial connect
+    open();
+
+    didOpen = true;
+
+    setTimeout(() => {
+      // eslint-disable-next-line
+      // @ts-ignore: trigger unintentional disconnect
+      client.ws?.onclose();
+    });
+
+    return () => {
+      // called once after dissconnect
+      close();
+    };
+  });
+});
+
+test('closing before ever connecting', () => {
+  const client = new Client();
+
+  const open = jest.fn();
+  const close = jest.fn();
+
+  client.connect({
+    token: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    reconnect: true,
+  }, () => {
+    open();
+    return () => {
+      close();
+    };
+  });
+
+  // `close` called before connecting
+  client.close();
+
+  expect(open).not.toHaveBeenCalled();
+  expect(close).not.toHaveBeenCalled();
+});
+
+test('closing client while opening', (done) => {
+  const client = new Client();
+
+  client.connect({
+    token: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+  }, () => {
+    try {
+      client.close();
+    } catch {
+      done();
+    }
+  });
 });

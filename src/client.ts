@@ -135,6 +135,8 @@ export class Client extends EventEmitter {
 
   private connectToken: string | null;
 
+  private isOpenningChan0: boolean;
+
   static getConnectionStr(token: string, urlOptions: UrlOptions) {
     const { secure, host, port } = urlOptions;
 
@@ -154,6 +156,7 @@ export class Client extends EventEmitter {
     this.connectTrys = 0;
     this.retryTimer = null;
     this.connectToken = null;
+    this.isOpenningChan0 = false;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -322,11 +325,16 @@ export class Client extends EventEmitter {
             }
             cancelTimeout();
 
+            // To
+            this.isOpenningChan0 = true;
+
             chan0.handleOpen({
               id: 0,
               state: api.OpenChannelRes.State.CREATED,
               send: this.send,
             });
+
+            this.isOpenningChan0 = false;
 
             this.connectToken = token;
 
@@ -477,6 +485,10 @@ export class Client extends EventEmitter {
 
     if (!this.connectOptions) {
       throw new Error('Must call client.connect before closing');
+    }
+
+    if (this.isOpenningChan0) {
+      throw new Error('Cannot call close while connecting');
     }
 
     // TODO: wrap in `setTimeout` to make async? Would need to do this
@@ -734,10 +746,6 @@ export class Client extends EventEmitter {
 
     this.ws = null;
 
-    ws.onmessage = null;
-    ws.onclose = null;
-    ws.onerror = null;
-
     if (ws.readyState === 0 || ws.readyState === 1) {
       this.debug({
         type: 'breadcrumb',
@@ -746,5 +754,9 @@ export class Client extends EventEmitter {
 
       ws.close();
     }
+
+    ws.onmessage = null;
+    ws.onclose = null;
+    ws.onerror = null;
   };
 }
