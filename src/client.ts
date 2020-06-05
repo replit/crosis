@@ -2,7 +2,7 @@
 
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
-import { Channel, ChannelOptions, ChanReqFn, RequestResult } from './channel';
+import { Channel, ChannelOptions, ChanReqFn } from './channel';
 import { EIOCompat } from './EIOCompat';
 import { ClientCloseReason } from './closeReasons';
 
@@ -425,53 +425,68 @@ export class Client extends EventEmitter {
 
     const chan0 = this.getChannel(0);
 
-    chan0
-      .request({
-        openChan: {
-          name: options.name,
-          service: options.service,
-          action,
-        },
-      })
-      .then((res: RequestResult) => {
-        if (this.connectionState !== ConnectionState.CONNECTED) {
-          channel.handleError(new Error('Client not connected'));
-        }
+    // Random base36 int
+    const ref = Number(
+      Math.random()
+        .toString()
+        .split('.')[1],
+    ).toString(36);
 
-        if (res.channelClosed) {
-          channel.handleError(new Error('Channel closed'));
+    // avoid warnings on listener count
+    chan0.setMaxListeners(chan0.getMaxListeners() + 1);
+    // Not using Channel.request here because we want to
+    // resolve the response synchronously. We can receive
+    // openChanRes and a command on the requested channel
+    // in a single tick, using promises here would causes us to
+    // handle the incoming command before openChanRes, leading to errors
 
-          return;
-        }
+    chan0.send({
+      ref,
+      openChan: {
+        name: options.name,
+        service: options.service,
+        action,
+      },
+    });
 
-        if (res.openChanRes == null) {
-          throw new Error('Expected openChanRes on command');
-        }
+    const dispose = chan0.onCommand((cmd: api.Command) => {
+      if (ref !== cmd.ref) {
+        return;
+      }
 
-        const { id, state, error } = res.openChanRes;
-        this.debug({ type: 'breadcrumb', message: 'openChanres' });
+      if (this.connectionState !== ConnectionState.CONNECTED) {
+        channel.handleError(new Error('Client not connected'));
+      }
 
-        if (state === api.OpenChannelRes.State.ERROR) {
-          this.debug({ type: 'breadcrumb', message: 'error', data: error });
-          channel.handleError(new Error(error || 'Something went wrong'));
+      if (cmd.openChanRes == null) {
+        throw new Error('Expected openChanRes on command');
+      }
 
-          return;
-        }
+      dispose();
 
-        if (id == null || state == null) {
-          throw new Error('Expected state and channel id');
-        }
+      const { id, state, error } = cmd.openChanRes;
+      this.debug({ type: 'breadcrumb', message: 'openChanres' });
 
-        if (channel.id) {
-          // Remove old channel from map. It gets added back with a new id right after this block
-          // This happens when client reconnects
-          delete this.channels[channel.id];
-        }
-        this.channels[Number(id)] = channel;
+      if (state === api.OpenChannelRes.State.ERROR) {
+        this.debug({ type: 'breadcrumb', message: 'error', data: error });
+        channel.handleError(new Error(error || 'Something went wrong'));
 
-        channel.handleOpen({ id, state, send: this.send });
-      })
-      .catch((e) => channel.handleError(e));
+        return;
+      }
+
+      if (id == null || state == null) {
+        throw new Error('Expected state and channel id');
+      }
+
+      if (channel.id) {
+        // Remove old channel from map. It gets added back with a new id right after this block
+        // This happens when client reconnects
+        delete this.channels[channel.id];
+      }
+      this.channels[Number(id)] = channel;
+
+      channel.handleOpen({ id, state, send: this.send });
+    });
   };
 
   /**
