@@ -11,6 +11,7 @@ type CloseResult =
       closeReason: ClientCloseReason.Intentional;
     }
   | {
+      willReconnect: boolean;
       closeReason: ClientCloseReason.Disconnected;
       wsEvent: CloseEvent | ErrorEvent;
     };
@@ -655,6 +656,7 @@ export class Client extends EventEmitter {
       });
 
       this.handleClose({
+        willReconnect: Boolean(this.connectOptions?.reconnect),
         closeReason: ClientCloseReason.Disconnected,
         wsEvent: event,
       });
