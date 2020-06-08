@@ -66,9 +66,7 @@ const backoffFactor = 1.7;
 const maxBackoff = 15000;
 function getNextRetryDelay(retryNumber: number) {
   const randomMs = Math.floor(Math.random() * 500);
-  // TODO: why no Math.pow?
-  // eslint-disable-next-line no-restricted-properties
-  const backoff = Math.pow(backoffFactor, retryNumber) * 1000;
+  const backoff = (backoffFactor ** retryNumber) * 1000;
 
   return Math.min(backoff, maxBackoff) + randomMs;
 }
