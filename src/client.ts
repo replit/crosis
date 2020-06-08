@@ -131,7 +131,7 @@ export class Client extends EventEmitter {
 
   private retryTimer: ReturnType<typeof setTimeout> | null;
 
-  private connectTrys: number;
+  private connectTries: number;
 
   private connectToken: string | null;
 
@@ -153,15 +153,13 @@ export class Client extends EventEmitter {
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
     this.pendingChannels = [];
-    this.connectTrys = 0;
+    this.connectTries = 0;
     this.retryTimer = null;
     this.connectToken = null;
     this.isOpenningChan0 = false;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
-
-  public isConnected = () => this.connectionState === ConnectionState.CONNECTED;
 
   /**
    * Connects to the server and and opens channel 0
@@ -170,7 +168,7 @@ export class Client extends EventEmitter {
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
   public connect = (options: ConnectArgs, chanReq: ChanReqFn) => {
-    this.connectTrys += 1;
+    this.connectTries += 1;
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
@@ -354,11 +352,11 @@ export class Client extends EventEmitter {
       onFailed = (error: Error) => {
         // TODO: Details
         // Should this also handle a fall back to polling?
-        if (this.connectTrys <= connectOptions.maxConnectRetries) {
+        if (this.connectTries <= connectOptions.maxConnectRetries) {
           this.retryTimer = setTimeout(() => {
             this.connectionState = ConnectionState.DISCONNECTED;
             this.connect(connectOptions, chanReq);
-          }, getNextRetryDelay(this.connectTrys));
+          }, getNextRetryDelay(this.connectTries));
 
           return;
         }
@@ -503,7 +501,7 @@ export class Client extends EventEmitter {
     }
 
     if (this.isOpenningChan0) {
-      throw new Error('Cannot call close while connecting');
+      throw new Error('Cannot call close inside connect callback');
     }
 
     // TODO: wrap in `setTimeout` to make async? Would need to do this
@@ -636,7 +634,7 @@ export class Client extends EventEmitter {
     /**
      * Set back to 0 for the next time the client connects
      */
-    this.connectTrys = 0;
+    this.connectTries = 0;
 
     this.connectionState = ConnectionState.CONNECTED;
 
