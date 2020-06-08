@@ -48,7 +48,7 @@ type DebugLog =
 type DebugFunc = (log: DebugLog) => void;
 
 interface ConnectOptions {
-  token: () => Promise<string>;
+  fetchToken: () => Promise<string>;
   urlOptions: UrlOptions;
   polling: boolean;
   timeout: number | null;
@@ -57,8 +57,8 @@ interface ConnectOptions {
   maxConnectRetries?: number;
 }
 
-interface ConnectArgs extends Partial<Omit<ConnectOptions, 'token'>> {
-  token: () => Promise<string>;
+interface ConnectArgs extends Partial<Omit<ConnectOptions, 'fetchToken'>> {
+  fetchToken: () => Promise<string>;
 }
 
 const backoffFactor = 1.7;
@@ -178,8 +178,8 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    if (!options.token) {
-      const error = new Error('You must provide a token function');
+    if (!options.fetchToken) {
+      const error = new Error('You must provide a fetchToken function');
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
       throw error;
@@ -215,7 +215,7 @@ export class Client extends EventEmitter {
 
     const WebSocketClass = connectOptions.polling ? EIOCompat : getWebSocketClass(connectOptions);
 
-    connectOptions.token().then((token) => {
+    connectOptions.fetchToken().then((token) => {
       if (this.connectionState !== ConnectionState.CONNECTING) {
         this.handleConnectError(new Error('Client was closed before connecting'));
 

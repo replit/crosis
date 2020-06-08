@@ -17,7 +17,7 @@ test('client connect', (done) => {
 
   client.connect(
     {
-      token: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -38,7 +38,7 @@ test('channel open and close', (done) => {
 
   client.connect(
     {
-      token: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -82,7 +82,7 @@ test('client errors opening', (done) => {
 
   client.connect({
     maxConnectRetries: 0,
-    token: () => Promise.resolve('test - no good'),
+    fetchToken: () => Promise.resolve('test - no good'),
     WebSocketClass: WebSocket,
   }, ({ channel, error }) => {
       expect(error).toBeTruthy();
@@ -115,7 +115,7 @@ test('client reconnect', (done) => {
 
   client.connect(
     {
-      token: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
       reconnect: true,
     },
@@ -166,7 +166,7 @@ test('client is closed while reconnecting', (done) => {
   const open = jest.fn();
   const close = jest.fn();
 
-  const token = () => {
+  const fetchToken = () => {
     if (didOpen) {
       // We're reconnecting
       setTimeout(() => {
@@ -184,7 +184,7 @@ test('client is closed while reconnecting', (done) => {
   };
 
   client.connect({
-    token,
+    fetchToken,
     WebSocketClass: WebSocket,
     reconnect: true,
   }, () => {
@@ -213,7 +213,7 @@ test('closing before ever connecting', () => {
   const close = jest.fn();
 
   client.connect({
-    token: () => Promise.resolve(REPL_TOKEN),
+    fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
     reconnect: true,
   }, () => {
@@ -234,7 +234,7 @@ test('closing client while opening', (done) => {
   const client = new Client();
 
   client.connect({
-    token: () => Promise.resolve(REPL_TOKEN),
+    fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
   }, () => {
     try {
