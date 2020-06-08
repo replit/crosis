@@ -134,8 +134,6 @@ export class Client extends EventEmitter {
 
   private connectToken: string | null;
 
-  private isOpenningChan0: boolean;
-
   static getConnectionStr(token: string, urlOptions: UrlOptions) {
     const { secure, host, port } = urlOptions;
 
@@ -155,7 +153,6 @@ export class Client extends EventEmitter {
     this.connectTries = 0;
     this.retryTimer = null;
     this.connectToken = null;
-    this.isOpenningChan0 = false;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -313,7 +310,7 @@ export class Client extends EventEmitter {
         const StateEnum = api.ContainerState.State;
 
         switch (state) {
-          case StateEnum.READY:
+          case StateEnum.READY: {
             // Once we're READY we can stop listening to incoming commands
             dispose();
 
@@ -324,7 +321,9 @@ export class Client extends EventEmitter {
 
             // To
             const originalClose = this.close;
-            this.close = () => throw new Error('Cannot call close inside connect callback');
+            this.close = () => {
+              throw new Error('Cannot call close inside connect callback');
+            };
 
             chan0.handleOpen({
               id: 0,
@@ -339,7 +338,7 @@ export class Client extends EventEmitter {
             this.handleConnect();
 
             break;
-
+          }
           case StateEnum.SLEEP:
             onFailed(new Error('Got SLEEP as container state'));
 
@@ -498,10 +497,6 @@ export class Client extends EventEmitter {
 
     if (!this.connectOptions) {
       throw new Error('Must call client.connect before closing');
-    }
-
-    if (this.isOpenningChan0) {
-      throw new Error('Cannot call close inside connect callback');
     }
 
     // TODO: wrap in `setTimeout` to make async? Would need to do this
