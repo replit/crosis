@@ -452,6 +452,8 @@ export class Client extends EventEmitter {
         return;
       }
 
+      dispose();
+
       if (this.connectionState !== ConnectionState.CONNECTED) {
         channel.handleError(new Error('Client not connected'));
       }
@@ -459,8 +461,6 @@ export class Client extends EventEmitter {
       if (cmd.openChanRes == null) {
         throw new Error('Expected openChanRes on command');
       }
-
-      dispose();
 
       const { id, state, error } = cmd.openChanRes;
       this.debug({ type: 'breadcrumb', message: 'openChanres' });
