@@ -323,7 +323,8 @@ export class Client extends EventEmitter {
             cancelTimeout();
 
             // To
-            this.isOpenningChan0 = true;
+            const originalClose = this.close;
+            this.close = () => throw new Error('Cannot call close inside connect callback');
 
             chan0.handleOpen({
               id: 0,
@@ -331,7 +332,7 @@ export class Client extends EventEmitter {
               send: this.send,
             });
 
-            this.isOpenningChan0 = false;
+            this.close = originalClose;
 
             this.connectToken = token;
 
