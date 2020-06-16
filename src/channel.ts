@@ -8,8 +8,8 @@ export interface RequestResult extends api.Command {
 
 type OnCloseFn = (reason: ChannelCloseReason) => void;
 
-export type ChanReqRes = { error: null; channel: Channel } | { error: Error; channel: null };
-export type ChanReqFn = (res: ChanReqRes) => void | OnCloseFn;
+export type OpenChannelRes = { error: null; channel: Channel } | { error: Error; channel: null };
+export type OpenChannelCb = (res: OpenChannelRes) => void | OnCloseFn;
 
 export interface ChannelOptions {
   name?: string;
@@ -23,32 +23,26 @@ export class Channel extends EventEmitter {
 
   public id: number | null;
 
-  public isOpen: boolean;
-
   public closed: boolean;
-
-  public options: ChannelOptions | null;
 
   private sendToClient: ((cmd: api.Command) => void) | null;
 
   private requestMap: { [ref: string]: (res: RequestResult) => void };
 
-  private chanReq: ChanReqFn;
+  private openChannelCb: OpenChannelCb;
 
-  private chanReqClose: ReturnType<ChanReqFn> | null;
+  private openChannelCbClose: ReturnType<OpenChannelCb> | null;
 
-  constructor(config: { chanReq: ChanReqFn; options?: ChannelOptions }) {
+  constructor(config: { openChannelCb: OpenChannelCb }) {
     super();
 
     this.id = null;
     this.sendToClient = null;
     this.state = null;
-    this.isOpen = false;
     this.closed = false;
     this.requestMap = {};
-    this.chanReq = config.chanReq;
-    this.chanReqClose = null;
-    this.options = config.options || null;
+    this.openChannelCb = config.openChannelCb;
+    this.openChannelCbClose = null;
   }
 
   public onCommand = (listener: (cmd: api.Command) => void) => {
@@ -135,9 +129,8 @@ export class Channel extends EventEmitter {
     this.id = id;
     this.sendToClient = send;
     this.state = state;
-    this.isOpen = true;
 
-    this.chanReqClose = this.chanReq({ channel: this, error: null });
+    this.openChannelCbClose = this.openChannelCb({ channel: this, error: null });
   };
 
   /**
@@ -167,12 +160,11 @@ export class Channel extends EventEmitter {
       delete this.requestMap[ref];
     });
 
-    this.isOpen = false;
     this.closed = true;
 
-    if (this.chanReqClose) {
-      this.chanReqClose(reason);
-      this.chanReqClose = null;
+    if (this.openChannelCbClose) {
+      this.openChannelCbClose(reason);
+      this.openChannelCbClose = null;
     }
 
     this.removeAllListeners();
@@ -184,8 +176,8 @@ export class Channel extends EventEmitter {
    * Called when the channel has an error opening
    */
   public handleError = (error: Error) => {
-    this.chanReq({ error, channel: null });
-    this.chanReqClose = null;
+    this.openChannelCb({ error, channel: null });
+    this.openChannelCbClose = null;
     this.removeAllListeners();
   };
 }

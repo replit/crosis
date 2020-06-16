@@ -2,7 +2,7 @@
 
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
-import { Channel, ChannelOptions, ChanReqFn } from './channel';
+import { Channel, ChannelOptions, OpenChannelCb } from './channel';
 import { EIOCompat } from './EIOCompat';
 import { ClientCloseReason } from './closeReasons';
 
@@ -58,18 +58,28 @@ interface ConnectOptions {
   maxConnectRetries?: number;
 }
 
+interface ChannelRequest {
+  options: ChannelOptions;
+  currentChannel: Channel | null;
+  openChannelCb: OpenChannelCb;
+}
+
 interface ConnectArgs extends Partial<Omit<ConnectOptions, 'fetchToken'>> {
   fetchToken: () => Promise<string>;
 }
 
 const backoffFactor = 1.7;
 const maxBackoff = 15000;
-function getNextRetryDelay(retryNumber: number) {
+
+/**
+ * @hidden
+ */
+const getNextRetryDelay = (retryNumber: number) => {
   const randomMs = Math.floor(Math.random() * 500);
   const backoff = (backoffFactor ** retryNumber) * 1000;
 
   return Math.min(backoff, maxBackoff) + randomMs;
-}
+};
 
 /**
  * @hidden
@@ -118,9 +128,9 @@ export class Client extends EventEmitter {
 
   private connectOptions: ConnectOptions | null;
 
-  private chan0Req: ChanReqFn | null;
+  private chan0Cb: OpenChannelCb | null;
 
-  private pendingChannels: Array<Channel>;
+  private channelRequests: Array<ChannelRequest>;
 
   private channels: {
     [id: number]: Channel;
@@ -146,10 +156,10 @@ export class Client extends EventEmitter {
     this.ws = null;
     this.channels = {};
     this.connectOptions = null;
-    this.chan0Req = null;
+    this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
-    this.pendingChannels = [];
+    this.channelRequests = [];
     this.connectTries = 0;
     this.retryTimer = null;
     this.connectToken = null;
@@ -163,7 +173,7 @@ export class Client extends EventEmitter {
    * Every client automatically "has" channel 0 and can use it to open more channels.
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public connect = (options: ConnectArgs, chanReq: ChanReqFn) => {
+  public connect = (options: ConnectArgs, cb: OpenChannelCb) => {
     this.connectTries += 1;
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
 
@@ -202,11 +212,11 @@ export class Client extends EventEmitter {
     };
 
     this.connectOptions = connectOptions;
-    this.chan0Req = chanReq;
+    this.chan0Cb = cb;
 
     this.connectionState = ConnectionState.CONNECTING;
 
-    const chan0 = new Channel({ chanReq });
+    const chan0 = new Channel({ openChannelCb: cb });
     this.channels[0] = chan0;
 
     const WebSocketClass = connectOptions.polling ? EIOCompat : getWebSocketClass(connectOptions);
@@ -319,7 +329,6 @@ export class Client extends EventEmitter {
             }
             cancelTimeout();
 
-            // To
             const originalClose = this.close;
             this.close = () => {
               throw new Error('Cannot call close inside connect callback');
@@ -354,7 +363,7 @@ export class Client extends EventEmitter {
         if (this.connectTries <= connectOptions.maxConnectRetries) {
           this.retryTimer = setTimeout(() => {
             this.connectionState = ConnectionState.DISCONNECTED;
-            this.connect(connectOptions, chanReq);
+            this.connect(connectOptions, cb);
           }, getNextRetryDelay(this.connectTries));
 
           return;
@@ -381,26 +390,26 @@ export class Client extends EventEmitter {
    * @param action [[api.OpenChannel.Action]]
    * @param an optional existing channel to reconnect (used internally)
    */
-  public openChannel = (options: ChannelOptions, chanReq: ChanReqFn) => {
-    const chan0 = this.getChannel(0);
-    const channel = new Channel({ chanReq, options });
+  public openChannel = (options: ChannelOptions, cb: OpenChannelCb) => {
+    const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };
+    this.channelRequests.push(channelRequest);
 
-    if (chan0.isOpen) {
+    if (this.connectionState === ConnectionState.CONNECTED) {
       // We're connected, open channel
-      this.handleOpenChannel(channel);
-    } else {
-      this.pendingChannels.push(channel);
+      this.handleOpenChannel(channelRequest);
     }
 
-    return () => channel.close();
+    return () => {
+      if (channelRequest.currentChannel !== null) {
+        channelRequest.currentChannel.close();
+      }
+
+      this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
+    };
   };
 
-  private handleOpenChannel = (channel: Channel) => {
-    if (!channel.options) {
-      throw new Error('Expected options');
-    }
-
-    const { options } = channel;
+  private handleOpenChannel = (channelRequest: ChannelRequest) => {
+    const { options, openChannelCb } = channelRequest;
 
     let { action } = options;
     if (!action) {
@@ -409,6 +418,13 @@ export class Client extends EventEmitter {
           ? api.OpenChannel.Action.CREATE
           : api.OpenChannel.Action.ATTACH_OR_CREATE;
     }
+
+    if (channelRequest.currentChannel) {
+      throw new Error('Unexpected currentChannel');
+    }
+
+    const channel = new Channel({ openChannelCb });
+    channelRequest.currentChannel = channel;
 
     this.debug({
       type: 'breadcrumb',
@@ -462,6 +478,7 @@ export class Client extends EventEmitter {
       }
 
       const { id, state, error } = cmd.openChanRes;
+
       this.debug({ type: 'breadcrumb', message: 'openChanres' });
 
       if (state === api.OpenChannelRes.State.ERROR) {
@@ -471,16 +488,12 @@ export class Client extends EventEmitter {
         return;
       }
 
-      if (id == null || state == null) {
+      if (typeof id !== 'number' || typeof state !== 'number') {
         throw new Error('Expected state and channel id');
       }
 
-      if (channel.id) {
-        // Remove old channel from map. It gets added back with a new id right after this block
-        // This happens when client reconnects
-        delete this.channels[channel.id];
-      }
-      this.channels[Number(id)] = channel;
+      this.channels[id] = channel;
+      channelRequest.currentChannel = channel;
 
       channel.handleOpen({ id, state, send: this.send });
     });
@@ -592,7 +605,7 @@ export class Client extends EventEmitter {
     this.getChannel(cmd.channel).handleCommand(cmd);
 
     switch (cmd.body) {
-      case 'closeChanRes':
+      case 'closeChanRes': {
         if (cmd.closeChanRes == null) {
           throw new Error('Expected closeChanRes');
         }
@@ -612,13 +625,25 @@ export class Client extends EventEmitter {
           },
         });
 
-        this.channels[Number(cmd.closeChanRes.id)].handleClose({
+        const channel = this.channels[cmd.closeChanRes.id];
+
+        channel.handleClose({
           initiator: 'channel',
           closeStatus: cmd.closeChanRes.status,
         });
 
+        delete this.channels[cmd.closeChanRes.id];
+
+        const channelRequest = this.channelRequests.find((cr) => cr.currentChannel === channel);
+
+        if (!channelRequest) {
+          throw new Error('Expected channelRequest for channel');
+        }
+
+        this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
+
         break;
-      default:
+      } default:
     }
   };
 
@@ -663,24 +688,8 @@ export class Client extends EventEmitter {
     // @ts-ignore seems like a type issue related to browser/node env
     this.ws.onerror = onClose;
 
-    // Pending channels exists if `openChannel` was called before client connects
-    while (this.pendingChannels.length) {
-      const channel = this.pendingChannels.shift();
-
-      if (!channel) {
-        throw new Error('Expected channel');
-      }
-
-      if (channel.options) {
-        this.handleOpenChannel(channel);
-      }
-    }
-
-    // Open existing channels when we connect
-    Object.values(this.channels).forEach((channel) => {
-      if (channel.options) {
-        this.handleOpenChannel(channel);
-      }
+    this.channelRequests.forEach((channelRequest) => {
+      this.handleOpenChannel(channelRequest);
     });
   };
 
@@ -695,17 +704,17 @@ export class Client extends EventEmitter {
     }
 
     Object.values(this.channels).forEach((channel) => {
-      if (channel.isOpen) {
-        channel.handleClose({
-          initiator: 'client',
-          clientCloseReason: closeResult.closeReason,
-        });
+      if (channel.closed) {
+        // channel was closed by user but "closeChanRes' has not been received
+        // `channel.handleClose` should be called once command is received
+        return;
       }
-    });
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      this.emit('close', closeResult);
-    }
+      channel.handleClose({
+        initiator: 'client',
+        clientCloseReason: closeResult.closeReason,
+      });
+    });
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
@@ -719,8 +728,8 @@ export class Client extends EventEmitter {
       throw new Error('Expected connectOptions');
     }
 
-    if (!this.chan0Req) {
-      throw new Error('Expected chan0Req');
+    if (!this.chan0Cb) {
+      throw new Error('Expected chan0Cb');
     }
 
     if (this.connectOptions.reconnect) {
@@ -729,21 +738,34 @@ export class Client extends EventEmitter {
         message: 'reconnecting',
       });
 
-      this.connect(this.connectOptions, this.chan0Req);
+      this.connect(this.connectOptions, this.chan0Cb);
     }
   };
 
-  private handleConnectError = (err: Error) => {
+  private handleConnectError = (error: Error) => {
     this.connectToken = null;
 
-    [...this.pendingChannels, ...Object.values(this.channels)].forEach((channel) => {
-      channel.handleError(err);
+    if (this.retryTimer) {
+      // Client was closed while reconnecting
+      clearTimeout(this.retryTimer);
+    }
+
+    const chan0 = this.getChannel(0);
+    chan0.handleError(error);
+
+    this.channelRequests.forEach(({ currentChannel, openChannelCb }) => {
+      if (currentChannel) {
+        currentChannel.handleError(error);
+      } else {
+        // Channel was never opened
+        openChannelCb({ error, channel: null });
+      }
     });
 
     this.connectionState = ConnectionState.DISCONNECTED;
     this.cleanupSocket();
 
-    this.debug({ type: 'breadcrumb', message: 'connect failed', data: err.message });
+    this.debug({ type: 'breadcrumb', message: 'connect failed', data: error.message });
   };
 
   private cleanupSocket = () => {

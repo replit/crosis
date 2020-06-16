@@ -18,10 +18,10 @@ test('client connect', (done) => {
   client.connect(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
-      WebSocketClass: WebSocket,
+        WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
-      expect(channel?.isOpen).toEqual(true);
+      expect(channel?.closed).toBe(false);
       expect(error).toEqual(null);
 
       setTimeout(() => client.close());
@@ -33,16 +33,17 @@ test('client connect', (done) => {
   );
 });
 
+
 test('channel open and close', (done) => {
   const client = new Client();
 
   client.connect(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
-      WebSocketClass: WebSocket,
+        WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
-      expect(channel?.isOpen).toEqual(true);
+      expect(channel?.closed).toBe(false);
       expect(error).toEqual(null);
 
       return () => {
@@ -52,7 +53,7 @@ test('channel open and close', (done) => {
   );
 
   const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
-    expect(channel?.isOpen).toBe(true);
+    expect(channel?.closed).toBe(false);
     expect(error).toBe(null);
 
     close();
@@ -72,7 +73,8 @@ test('client errors opening', (done) => {
 
   const maybeDone = () => {
     if (errorCount === 2) {
-      // Close functions are not called when connect/openChannel error
+      // Close functions are not called when connect/openChannel return an error
+      // Any setup logic should be avoided
       expect(clientClose).not.toHaveBeenCalled();
       expect(channelClose).not.toHaveBeenCalled();
 
@@ -83,15 +85,15 @@ test('client errors opening', (done) => {
   client.connect({
     maxConnectRetries: 0,
     fetchToken: () => Promise.resolve('test - no good'),
-    WebSocketClass: WebSocket,
+      WebSocketClass: WebSocket,
   }, ({ channel, error }) => {
-      expect(error).toBeTruthy();
-      expect(channel).toEqual(null);
-      errorCount += 1;
+    expect(error).toBeTruthy();
+    expect(channel).toEqual(null);
+    errorCount += 1;
 
-      setTimeout(maybeDone);
+    setTimeout(maybeDone);
 
-      return clientClose;
+    return clientClose;
   });
 
   client.openChannel({ service: 'shell' }, ({ channel, error }) => {
@@ -116,11 +118,11 @@ test('client reconnect', (done) => {
   client.connect(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
-      WebSocketClass: WebSocket,
+        WebSocketClass: WebSocket,
       reconnect: true,
     },
     ({ channel, error }) => {
-      expect(channel?.isOpen).toEqual(true);
+      expect(channel?.closed).toEqual(false);
       expect(error).toEqual(null);
 
       timesConnected += 1;
