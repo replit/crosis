@@ -385,10 +385,6 @@ export class Client extends EventEmitter {
    *    2- if name is not specified, it will send a request with [[api.OpenChannel.Action.CREATE]]
    *
    * http://protodoc.turbio.repl.co/protov2#opening-channels
-   * @param name Channel name (can be anything)
-   * @param service One of goval's services
-   * @param action [[api.OpenChannel.Action]]
-   * @param an optional existing channel to reconnect (used internally)
    */
   public openChannel = (options: ChannelOptions, cb: OpenChannelCb) => {
     const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };

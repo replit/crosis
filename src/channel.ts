@@ -9,6 +9,35 @@ export interface RequestResult extends api.Command {
 type OnCloseFn = (reason: ChannelCloseReason) => void;
 
 export type OpenChannelRes = { error: null; channel: Channel } | { error: Error; channel: null };
+
+/**
+ * This function gets called when a channel opens or there is an error opening.
+ * It can return a function that can be used to cleanup an logic when the channle closes.
+ * If there is an error opening the channel the cleanup function is not called. You can
+ * think of it as a stream of values that terminates if/when there is an error.
+ *
+ * Example:
+ *
+ * const closeChannel = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
+ *   if (error) {
+ *     // Bail, channel had an error connecting or reconnecting
+ *     // Tihs callback will no longer be called
+ *     return
+ *   }
+ *
+ *   // Channel is open, setup `channel` logic
+ *   // This could be the result of initial connection or a subsequent reconnect
+ *
+ *   return (reason) => {
+ *     // Channel closed, cleanup relevant logic
+ *     // We might reconnect after this
+ *   }
+ * })
+ *
+ * // Eventually when done using the channel you can close it
+ * closeChannel() // Will call potential returned cleanup function
+ *
+ */
 export type OpenChannelCb = (res: OpenChannelRes) => void | OnCloseFn;
 
 export interface ChannelOptions {
