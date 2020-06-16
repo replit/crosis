@@ -469,10 +469,6 @@ export class Client extends EventEmitter {
 
       dispose();
 
-      if (this.connectionState !== ConnectionState.CONNECTED) {
-        channel.handleError(new Error('Client not connected'));
-      }
-
       if (cmd.openChanRes == null) {
         throw new Error('Expected openChanRes on command');
       }
