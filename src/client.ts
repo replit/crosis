@@ -4,14 +4,13 @@ import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { Channel, ChannelOptions, OpenChannelCb } from './channel';
 import { EIOCompat } from './EIOCompat';
-import { ClientCloseReason } from './closeReasons';
+import { ClientCloseReason, ChannelCloseReason } from './closeReasons';
 
 type CloseResult =
   | {
       closeReason: ClientCloseReason.Intentional;
     }
   | {
-      willReconnect: boolean;
       closeReason: ClientCloseReason.Disconnected;
       wsEvent: CloseEvent | ErrorEvent;
     };
@@ -667,7 +666,6 @@ export class Client extends EventEmitter {
       });
 
       this.handleClose({
-        willReconnect: Boolean(this.connectOptions?.reconnect),
         closeReason: ClientCloseReason.Disconnected,
         wsEvent: event,
       });
@@ -695,6 +693,19 @@ export class Client extends EventEmitter {
       clearTimeout(this.retryTimer);
     }
 
+    const willReconnect = closeResult.closeReason === ClientCloseReason.Disconnected &&
+      Boolean(this.connectOptions?.reconnect);
+
+    const closeReason: ChannelCloseReason = closeResult.closeReason === ClientCloseReason.Intentional ? {
+      initiator: 'client',
+      clientCloseReason: ClientCloseReason.Intentional,
+    } : {
+      initiator: 'client',
+      clientCloseReason: ClientCloseReason.Disconnected,
+      willReconnect,
+      wsEvent: closeResult.wsEvent,
+    };
+
     Object.values(this.channels).forEach((channel) => {
       if (channel.closed) {
         // channel was closed by user but "closeChanRes' has not been received
@@ -702,10 +713,7 @@ export class Client extends EventEmitter {
         return;
       }
 
-      channel.handleClose({
-        initiator: 'client',
-        clientCloseReason: closeResult.closeReason,
-      });
+      channel.handleClose(closeReason);
     });
 
     this.connectionState = ConnectionState.DISCONNECTED;
