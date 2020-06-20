@@ -23,7 +23,7 @@
     "engine.io-client": "^3.4.0"
   },
   "devDependencies": {
-    "@replit/protocol": "0.x.x",
+    "@replit/protocol": "^0.2.10",
     "@types/engine.io-client": "^3.1.2",
     "@types/node": "^12.7.5",
     "@typescript-eslint/eslint-plugin": "^2.3.0",
