@@ -620,7 +620,7 @@ export class Client extends EventEmitter {
 
         channel.handleClose({
           initiator: 'channel',
-          closeStatus: cmd.closeChanRes.status,
+          willReconnect: false,
         });
 
         delete this.channels[cmd.closeChanRes.id];
@@ -698,12 +698,10 @@ export class Client extends EventEmitter {
 
     const closeReason: ChannelCloseReason = closeResult.closeReason === ClientCloseReason.Intentional ? {
       initiator: 'client',
-      clientCloseReason: ClientCloseReason.Intentional,
+      willReconnect: false,
     } : {
       initiator: 'client',
-      clientCloseReason: ClientCloseReason.Disconnected,
       willReconnect,
-      wsEvent: closeResult.wsEvent,
     };
 
     Object.values(this.channels).forEach((channel) => {

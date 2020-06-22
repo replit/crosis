@@ -1,7 +1,6 @@
 /* eslint-env jest */
 
 import { Client } from '../client';
-import { ClientCloseReason } from '../closeReasons';
 
 // eslint-disable-next-line
 const WebSocket = require('ws');
@@ -143,9 +142,9 @@ test('client reconnect', (done) => {
           throw new Error('Expected "client" initiator');
         }
 
-        if (closeReason.clientCloseReason === ClientCloseReason.Disconnected) {
+        if (closeReason.willReconnect) {
           timesClosedUnintentionally += 1;
-        } else if (closeReason.clientCloseReason === ClientCloseReason.Intentional) {
+        } else if (closeReason.willReconnect === false) {
           timesClosedIntentionally += 1;
         }
 
