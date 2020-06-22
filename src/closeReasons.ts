@@ -18,13 +18,7 @@ export enum ClientCloseReason {
 export type ChannelCloseReason =
   | {
       initiator: 'client';
-      clientCloseReason: ClientCloseReason.Disconnected;
       willReconnect: boolean;
-      wsEvent: CloseEvent | ErrorEvent;
-    }
-  | {
-      initiator: 'client';
-      clientCloseReason: ClientCloseReason.Intentional;
     }
   | {
       initiator: 'channel';
