@@ -215,6 +215,8 @@ export class Client extends EventEmitter {
 
     this.connectionState = ConnectionState.CONNECTING;
 
+    this.channels = {};
+
     const chan0 = new Channel({ openChannelCb: cb });
     this.channels[0] = chan0;
 
