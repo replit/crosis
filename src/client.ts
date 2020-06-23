@@ -218,7 +218,7 @@ export class Client extends EventEmitter {
     this.channels = {};
     this.channelRequests.forEach((cr) => {
       cr.currentChannel = null;
-    })
+    });
 
     const chan0 = new Channel({ openChannelCb: cb });
     this.channels[0] = chan0;
