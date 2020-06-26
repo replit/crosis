@@ -36,6 +36,8 @@ test('client connect', (done) => {
 test('channel open and close', (done) => {
   const client = new Client();
 
+  const channelClose = jest.fn();
+
   client.connect(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
@@ -46,6 +48,8 @@ test('channel open and close', (done) => {
       expect(error).toEqual(null);
 
       return () => {
+        expect(channelClose).toHaveBeenCalled();
+
         done();
       };
     },
@@ -58,6 +62,7 @@ test('channel open and close', (done) => {
     close();
 
     return () => {
+      channelClose();
       client.close();
     };
   });
