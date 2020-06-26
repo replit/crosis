@@ -99,7 +99,12 @@ export class Channel extends EventEmitter {
       },
     });
 
-    this.send(cmd);
+    if (!this.sendToClient) {
+      throw new Error('Expected sendToClient');
+    }
+
+    // Send close command to chan0
+    this.sendToClient(cmd);
 
     this.handleCommand = () => undefined;
     this.send = () => undefined;

@@ -632,11 +632,10 @@ export class Client extends EventEmitter {
 
         const channelRequest = this.channelRequests.find((cr) => cr.currentChannel === channel);
 
-        if (!channelRequest) {
-          throw new Error('Expected channelRequest for channel');
+        if (channelRequest) {
+          // If the user didn't close the channel directly we still need to remove the channelRequest
+          this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
         }
-
-        this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
 
         break;
       } default:
