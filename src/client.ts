@@ -753,10 +753,13 @@ export class Client extends EventEmitter {
     }
 
     const chan0 = this.getChannel(0);
-    chan0.handleError(error);
+
+    if (!chan0.closed) {
+      chan0.handleError(error);
+    }
 
     this.channelRequests.forEach(({ currentChannel, openChannelCb }) => {
-      if (currentChannel) {
+      if (currentChannel && !currentChannel.closed) {
         currentChannel.handleError(error);
       } else {
         // Channel was never opened

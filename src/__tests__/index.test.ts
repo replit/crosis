@@ -241,7 +241,7 @@ test('closing before ever connecting', () => {
   client.close();
 
   expect(open).not.toHaveBeenCalled();
-  expect(openError).toHaveBeenCalled();
+  expect(openError).toHaveBeenCalledTimes(1);
   expect(close).not.toHaveBeenCalled();
 });
 
