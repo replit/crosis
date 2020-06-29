@@ -248,10 +248,8 @@ export class Client extends EventEmitter {
        */
       let onFailed: (err: Error) => void;
 
-      // eslint-disable-next-line
-      // @ts-ignore
-      ws.onerror = ({ error }: { error: Error }) => {
-        onFailed(error);
+      ws.onerror = () => {
+        onFailed(new Error('WebSocket errored'));
       };
 
       /**
