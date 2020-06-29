@@ -199,6 +199,11 @@ export class Channel extends EventEmitter {
     if (this.openChannelCbClose) {
       this.openChannelCbClose(reason);
       this.openChannelCbClose = null;
+    } else {
+      this.openChannelCb({
+        error: new Error('Client closed before opening'),
+        channel: null,
+      });
     }
 
     this.removeAllListeners();

@@ -193,17 +193,19 @@ test('client is closed while reconnecting', (done) => {
     fetchToken,
     WebSocketClass: WebSocket,
     reconnect: true,
-  }, () => {
-    // called once after initial connect
-    open();
+  }, ({ channel }) => {
+    if (channel) {
+      // called once after initial connect
+      open();
 
-    didOpen = true;
+      didOpen = true;
 
-    setTimeout(() => {
-      // eslint-disable-next-line
-      // @ts-ignore: trigger unintentional disconnect
-      client.ws?.onclose();
-    });
+      setTimeout(() => {
+        // eslint-disable-next-line
+        // @ts-ignore: trigger unintentional disconnect
+        client.ws?.onclose();
+      });
+    }
 
     return () => {
       // called once after dissconnect
@@ -216,14 +218,20 @@ test('closing before ever connecting', () => {
   const client = new Client();
 
   const open = jest.fn();
+  const openError = jest.fn();
   const close = jest.fn();
 
   client.connect({
     fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
     reconnect: true,
-  }, () => {
-    open();
+  }, ({ error }) => {
+    if (error) {
+      openError();
+    } else {
+      open();
+    }
+
     return () => {
       close();
     };
@@ -233,6 +241,7 @@ test('closing before ever connecting', () => {
   client.close();
 
   expect(open).not.toHaveBeenCalled();
+  expect(openError).toHaveBeenCalled();
   expect(close).not.toHaveBeenCalled();
 });
 
