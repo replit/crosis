@@ -200,7 +200,7 @@ export class Client extends EventEmitter {
     const connectOptions = {
       polling: false,
       timeout: 10000,
-      reconnect: false,
+      reconnect: true,
       maxConnectRetries: 2,
       urlOptions: {
         secure: false,

@@ -123,7 +123,6 @@ test('client reconnect', (done) => {
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
         WebSocketClass: WebSocket,
-      reconnect: true,
     },
     ({ channel, error }) => {
       expect(channel?.closed).toEqual(false);
@@ -192,7 +191,6 @@ test('client is closed while reconnecting', (done) => {
   client.connect({
     fetchToken,
     WebSocketClass: WebSocket,
-    reconnect: true,
   }, ({ channel }) => {
     if (channel) {
       // called once after initial connect
@@ -224,7 +222,6 @@ test('closing before ever connecting', () => {
   client.connect({
     fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
-    reconnect: true,
   }, ({ error }) => {
     if (error) {
       openError();
