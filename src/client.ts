@@ -780,6 +780,14 @@ export class Client extends EventEmitter {
 
     this.ws = null;
 
+    ws.onmessage = null;
+    ws.onclose = null;
+
+    // Replace exististing error handler so an error doesn't get thrown.
+    // We got here after either `handleConnectError` or `handleClose`
+    // so it is safe to ignore any potential remaining errors
+    ws.onerror = () => {};
+
     if (ws.readyState === 0 || ws.readyState === 1) {
       this.debug({
         type: 'breadcrumb',
@@ -788,9 +796,5 @@ export class Client extends EventEmitter {
 
       ws.close();
     }
-
-    ws.onmessage = null;
-    ws.onclose = null;
-    ws.onerror = null;
   };
 }
