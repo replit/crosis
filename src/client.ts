@@ -54,7 +54,7 @@ interface ConnectOptions {
   timeout: number | null;
   reconnect: boolean;
   WebSocketClass?: typeof WebSocket;
-  maxConnectRetries?: number;
+  maxConnectRetries: number;
 }
 
 interface ChannelRequest {
@@ -63,6 +63,9 @@ interface ChannelRequest {
   openChannelCb: OpenChannelCb;
 }
 
+/**
+ * The only required option is `fetchToken`, all others are optional and will use defaults
+ */
 interface ConnectArgs extends Partial<Omit<ConnectOptions, 'fetchToken'>> {
   fetchToken: () => Promise<string>;
 }
@@ -75,7 +78,7 @@ const maxBackoff = 15000;
  */
 const getNextRetryDelay = (retryNumber: number) => {
   const randomMs = Math.floor(Math.random() * 500);
-  const backoff = (backoffFactor ** retryNumber) * 1000;
+  const backoff = backoffFactor ** retryNumber * 1000;
 
   return Math.min(backoff, maxBackoff) + randomMs;
 };
@@ -125,7 +128,7 @@ export class Client extends EventEmitter {
 
   private ws: WebSocket | null;
 
-  private connectOptions: ConnectOptions | null;
+  private connectOptions: ConnectOptions;
 
   private chan0Cb: OpenChannelCb | null;
 
@@ -149,12 +152,30 @@ export class Client extends EventEmitter {
     return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
   }
 
-  constructor(debug: DebugFunc = () => {}) {
+  constructor(options: ConnectArgs, debug: DebugFunc = () => {}) {
     super();
+
+    if (!options.fetchToken || typeof options.fetchToken !== 'function') {
+      const error = new Error('You must provide a fetchToken function');
+
+      debug({ type: 'breadcrumb', message: 'error', data: error.message });
+      throw error;
+    }
 
     this.ws = null;
     this.channels = {};
-    this.connectOptions = null;
+    this.connectOptions = {
+      polling: false,
+      timeout: 10000,
+      reconnect: true,
+      maxConnectRetries: 2,
+      urlOptions: {
+        secure: false,
+        host: 'eval.repl.it',
+        port: '80',
+      },
+      ...options,
+    };
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
@@ -172,19 +193,16 @@ export class Client extends EventEmitter {
    * Every client automatically "has" channel 0 and can use it to open more channels.
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public open = (options: ConnectArgs, cb: OpenChannelCb) => {
+  public open = (cb: OpenChannelCb) => {
     this.connectTries += 1;
-    this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
+    this.debug({
+      type: 'breadcrumb',
+      message: 'open',
+      data: { polling: this.connectOptions.polling },
+    });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       const error = new Error('Client must be disconnected to connect');
-
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-      throw error;
-    }
-
-    if (!options.fetchToken) {
-      const error = new Error('You must provide a fetchToken function');
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
       throw error;
@@ -197,186 +215,9 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    const connectOptions = {
-      polling: false,
-      timeout: 10000,
-      reconnect: true,
-      maxConnectRetries: 2,
-      urlOptions: {
-        secure: false,
-        host: 'eval.repl.it',
-        port: '80',
-      },
-      ...options,
-    };
-
-    this.connectOptions = connectOptions;
     this.chan0Cb = cb;
 
-    this.connectionState = ConnectionState.CONNECTING;
-
-    this.channels = {};
-    this.channelRequests.forEach((cr) => {
-      cr.currentChannel = null;
-    });
-
-    const chan0 = new Channel({ openChannelCb: cb });
-    this.channels[0] = chan0;
-
-    const WebSocketClass = connectOptions.polling ? EIOCompat : getWebSocketClass(connectOptions);
-
-    connectOptions.fetchToken().then((token) => {
-      if (this.connectionState !== ConnectionState.CONNECTING) {
-        this.handleConnectError(new Error('Client was closed before connecting'));
-
-        return;
-      }
-
-      const connStr = Client.getConnectionStr(token, connectOptions.urlOptions);
-      const ws = new WebSocketClass(connStr);
-
-      ws.binaryType = 'arraybuffer';
-      ws.onmessage = this.onSocketMessage;
-      this.ws = ws;
-
-      /**
-       * Failure can happen due to a number of reasons
-       * 1- Abrupt socket closure
-       * 2- Timedout connection request
-       * 3- ContainerState.SLEEP command
-       * 4- User calling `close` before we connect
-       */
-      let onFailed: (err: Error) => void;
-
-      ws.onerror = () => {
-        onFailed(new Error('WebSocket errored'));
-      };
-
-      /**
-       * Abrupt socket closures should report failed
-       */
-      ws.onclose = () => {
-        onFailed(new Error('WebSocket closed before we got READY'));
-      };
-
-      /**
-       * If the user specifies a timeout we will short circuit
-       * the connection if we don't get READY from the container
-       * within the specified timeout.
-       *
-       * Every time we get a message we reset the connection timeout
-       * this is because it signifies that the connection will eventually work.
-       */
-      let resetTimeout = () => {};
-      let cancelTimeout = () => {};
-      if (options.timeout) {
-        const { timeout } = options;
-        let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
-
-        cancelTimeout = () => clearTimeout(timeoutId);
-
-        resetTimeout = () => {
-          cancelTimeout();
-
-          timeoutId = setTimeout(() => {
-            this.debug({ type: 'breadcrumb', message: 'connect timeout' });
-
-            onFailed(new Error('timeout'));
-          }, timeout);
-        };
-      }
-
-      /** Listen to incoming commands
-       * Every time we get a message we reset the connection timeout (if it exists)
-       * this is because it signifies that the connection will eventually work.
-       *
-       * If we ever get a ContainterState READY we can officially
-       * say that the connection is successful and we open chan0 and other `chanReq`s
-       *
-       * If we ever get ContainterState SLEEP it means that something went wrong
-       * and connection should be dropped
-       */
-      const dispose = chan0.onCommand((cmd: api.Command) => {
-        // Everytime we get a message on channel0
-        // we will reset the timeout
-        resetTimeout();
-
-        if (cmd.containerState == null) {
-          return;
-        }
-
-        if (cmd.containerState.state == null) {
-          onFailed(new Error('Got containterState but state was not defined'));
-
-          return;
-        }
-
-        const { state } = cmd.containerState;
-
-        this.debug({
-          type: 'breadcrumb',
-          message: 'containerState',
-          data: state,
-        });
-
-        const StateEnum = api.ContainerState.State;
-
-        switch (state) {
-          case StateEnum.READY: {
-            // Once we're READY we can stop listening to incoming commands
-            dispose();
-
-            if (this.retryTimer) {
-              clearTimeout(this.retryTimer);
-            }
-            cancelTimeout();
-
-            const originalClose = this.close;
-            this.close = () => {
-              throw new Error('Cannot call close inside connect callback');
-            };
-
-            chan0.handleOpen({
-              id: 0,
-              state: api.OpenChannelRes.State.CREATED,
-              send: this.send,
-            });
-
-            this.close = originalClose;
-
-            this.connectToken = token;
-
-            this.handleConnect();
-
-            break;
-          }
-          case StateEnum.SLEEP:
-            onFailed(new Error('Got SLEEP as container state'));
-
-            break;
-
-          default:
-        }
-      });
-
-      onFailed = (error: Error) => {
-        // TODO: Details
-        // Should this also handle a fall back to polling?
-        if (this.connectTries <= connectOptions.maxConnectRetries) {
-          this.retryTimer = setTimeout(() => {
-            this.connectionState = ConnectionState.DISCONNECTED;
-            this.open(connectOptions, cb);
-          }, getNextRetryDelay(this.connectTries));
-
-          return;
-        }
-
-        cancelTimeout();
-        dispose();
-
-        this.handleConnectError(error);
-      };
-    });
+    this.connect();
   };
 
   /**
@@ -502,7 +343,7 @@ export class Client extends EventEmitter {
   public close = () => {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
-    if (!this.connectOptions) {
+    if (!this.chan0Cb) {
       throw new Error('Must call client.connect before closing');
     }
 
@@ -577,8 +418,177 @@ export class Client extends EventEmitter {
   };
 
   private connect = () => {
+    this.connectionState = ConnectionState.CONNECTING;
 
-  }
+    this.channels = {};
+    this.channelRequests.forEach((cr) => {
+      cr.currentChannel = null;
+    });
+
+    if (!this.chan0Cb) {
+      throw new Error('Expected chan0Cb');
+    }
+
+    const chan0 = new Channel({ openChannelCb: this.chan0Cb });
+    this.channels[0] = chan0;
+
+    const WebSocketClass = this.connectOptions.polling
+      ? EIOCompat
+      : getWebSocketClass(this.connectOptions);
+
+    this.connectOptions.fetchToken().then((token) => {
+      if (this.connectionState !== ConnectionState.CONNECTING) {
+        this.handleConnectError(new Error('Client was closed before connecting'));
+
+        return;
+      }
+
+      const connStr = Client.getConnectionStr(token, this.connectOptions.urlOptions);
+      const ws = new WebSocketClass(connStr);
+
+      ws.binaryType = 'arraybuffer';
+      ws.onmessage = this.onSocketMessage;
+      this.ws = ws;
+
+      /**
+       * Failure can happen due to a number of reasons
+       * 1- Abrupt socket closure
+       * 2- Timedout connection request
+       * 3- ContainerState.SLEEP command
+       * 4- User calling `close` before we connect
+       */
+      let onFailed: (err: Error) => void;
+
+      ws.onerror = () => {
+        onFailed(new Error('WebSocket errored'));
+      };
+
+      /**
+       * Abrupt socket closures should report failed
+       */
+      ws.onclose = () => {
+        onFailed(new Error('WebSocket closed before we got READY'));
+      };
+
+      /**
+       * If the user specifies a timeout we will short circuit
+       * the connection if we don't get READY from the container
+       * within the specified timeout.
+       *
+       * Every time we get a message we reset the connection timeout
+       * this is because it signifies that the connection will eventually work.
+       */
+      let resetTimeout = () => {};
+      let cancelTimeout = () => {};
+      const { timeout } = this.connectOptions;
+      if (timeout !== null) {
+        let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
+
+        cancelTimeout = () => clearTimeout(timeoutId);
+
+        resetTimeout = () => {
+          cancelTimeout();
+
+          timeoutId = setTimeout(() => {
+            this.debug({ type: 'breadcrumb', message: 'connect timeout' });
+
+            onFailed(new Error('timeout'));
+          }, timeout);
+        };
+      }
+
+      /** Listen to incoming commands
+       * Every time we get a message we reset the connection timeout (if it exists)
+       * this is because it signifies that the connection will eventually work.
+       *
+       * If we ever get a ContainterState READY we can officially
+       * say that the connection is successful and we open chan0 and other `chanReq`s
+       *
+       * If we ever get ContainterState SLEEP it means that something went wrong
+       * and connection should be dropped
+       */
+      const dispose = chan0.onCommand((cmd: api.Command) => {
+        // Everytime we get a message on channel0
+        // we will reset the timeout
+        resetTimeout();
+
+        if (cmd.containerState == null) {
+          return;
+        }
+
+        if (cmd.containerState.state == null) {
+          onFailed(new Error('Got containterState but state was not defined'));
+
+          return;
+        }
+
+        const { state } = cmd.containerState;
+
+        this.debug({
+          type: 'breadcrumb',
+          message: 'containerState',
+          data: state,
+        });
+
+        const StateEnum = api.ContainerState.State;
+
+        switch (state) {
+          case StateEnum.READY: {
+            // Once we're READY we can stop listening to incoming commands
+            dispose();
+
+            if (this.retryTimer) {
+              clearTimeout(this.retryTimer);
+            }
+            cancelTimeout();
+
+            const originalClose = this.close;
+            this.close = () => {
+              throw new Error('Cannot call close inside connect callback');
+            };
+
+            chan0.handleOpen({
+              id: 0,
+              state: api.OpenChannelRes.State.CREATED,
+              send: this.send,
+            });
+
+            this.close = originalClose;
+
+            this.connectToken = token;
+
+            this.handleConnect();
+
+            break;
+          }
+          case StateEnum.SLEEP:
+            onFailed(new Error('Got SLEEP as container state'));
+
+            break;
+
+          default:
+        }
+      });
+
+      onFailed = (error: Error) => {
+        // TODO: Details
+        // Should this also handle a fall back to polling?
+        if (this.connectTries <= this.connectOptions.maxConnectRetries) {
+          this.retryTimer = setTimeout(() => {
+            this.connectionState = ConnectionState.DISCONNECTED;
+            this.connect();
+          }, getNextRetryDelay(this.connectTries));
+
+          return;
+        }
+
+        cancelTimeout();
+        dispose();
+
+        this.handleConnectError(error);
+      };
+    });
+  };
 
   private send = (cmd: api.Command) => {
     this.debug({ type: 'log', log: { direction: 'out', cmd } });
@@ -640,7 +650,8 @@ export class Client extends EventEmitter {
         }
 
         break;
-      } default:
+      }
+      default:
     }
   };
 
@@ -699,16 +710,20 @@ export class Client extends EventEmitter {
       clearTimeout(this.retryTimer);
     }
 
-    const willReconnect = closeResult.closeReason === ClientCloseReason.Disconnected &&
-      Boolean(this.connectOptions?.reconnect);
+    const willReconnect =
+      closeResult.closeReason === ClientCloseReason.Disconnected &&
+      Boolean(this.connectOptions.reconnect);
 
-    const closeReason: ChannelCloseReason = closeResult.closeReason === ClientCloseReason.Intentional ? {
-      initiator: 'client',
-      willReconnect: false,
-    } : {
-      initiator: 'client',
-      willReconnect,
-    };
+    const closeReason: ChannelCloseReason =
+      closeResult.closeReason === ClientCloseReason.Intentional
+        ? {
+            initiator: 'client',
+            willReconnect: false,
+          }
+        : {
+            initiator: 'client',
+            willReconnect,
+          };
 
     Object.values(this.channels).forEach((channel) => {
       if (channel.closed) {
@@ -728,21 +743,13 @@ export class Client extends EventEmitter {
       return;
     }
 
-    if (!this.connectOptions) {
-      throw new Error('Expected connectOptions');
-    }
-
-    if (!this.chan0Cb) {
-      throw new Error('Expected chan0Cb');
-    }
-
     if (this.connectOptions.reconnect) {
       this.debug({
         type: 'breadcrumb',
         message: 'reconnecting',
       });
 
-      this.open(this.connectOptions, this.chan0Cb);
+      this.connect();
     }
   };
 
