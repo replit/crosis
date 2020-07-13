@@ -5,7 +5,7 @@ import { Client } from '../client';
 // eslint-disable-next-line
 const WebSocket = require('ws');
 
-const { REPL_TOKEN } = process.env;
+const REPL_TOKEN = process.env.REPL_TOKEN as string;
 
 if (!REPL_TOKEN) {
   throw new Error('REPL_TOKEN is required');
@@ -14,10 +14,10 @@ if (!REPL_TOKEN) {
 test('client connect', (done) => {
   const client = new Client();
 
-  client.connect(
+  client.open(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
-        WebSocketClass: WebSocket,
+      WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
       expect(channel?.closed).toBe(false);
@@ -32,16 +32,15 @@ test('client connect', (done) => {
   );
 });
 
-
 test('channel open and close', (done) => {
   const client = new Client();
 
   const channelClose = jest.fn();
 
-  client.connect(
+  client.open(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
-        WebSocketClass: WebSocket,
+      WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
       expect(channel?.closed).toBe(false);
@@ -86,19 +85,22 @@ test('client errors opening', (done) => {
     }
   };
 
-  client.connect({
-    maxConnectRetries: 0,
-    fetchToken: () => Promise.resolve('test - no good'),
+  client.open(
+    {
+      maxConnectRetries: 0,
+      fetchToken: () => Promise.resolve('test - no good'),
       WebSocketClass: WebSocket,
-  }, ({ channel, error }) => {
-    expect(error).toBeTruthy();
-    expect(channel).toEqual(null);
-    errorCount += 1;
+    },
+    ({ channel, error }) => {
+      expect(error).toBeTruthy();
+      expect(channel).toEqual(null);
+      errorCount += 1;
 
-    setTimeout(maybeDone);
+      setTimeout(maybeDone);
 
-    return clientClose;
-  });
+      return clientClose;
+    },
+  );
 
   client.openChannel({ service: 'shell' }, ({ channel, error }) => {
     expect(error).toBeTruthy();
@@ -119,14 +121,14 @@ test('client reconnect', (done) => {
   let timesClosedUnintentionally = 0;
   let timesClosedIntentionally = 0;
 
-  client.connect(
+  client.open(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
-        WebSocketClass: WebSocket,
+      WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
-      expect(channel?.closed).toEqual(false);
       expect(error).toEqual(null);
+      expect(channel?.closed).toEqual(false);
 
       timesConnected += 1;
 
@@ -164,13 +166,12 @@ test('client reconnect', (done) => {
 });
 
 test('client is closed while reconnecting', (done) => {
-  const client = new Client();
-
   let didOpen = false;
 
   const open = jest.fn();
   const close = jest.fn();
 
+  const client = new Client();
   const fetchToken = () => {
     if (didOpen) {
       // We're reconnecting
@@ -188,28 +189,32 @@ test('client is closed while reconnecting', (done) => {
     return Promise.resolve(REPL_TOKEN);
   };
 
-  client.connect({
-    fetchToken,
-    WebSocketClass: WebSocket,
-  }, ({ channel }) => {
-    if (channel) {
-      // called once after initial connect
-      open();
+  client.open(
+    {
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      fetchToken,
+      WebSocketClass: WebSocket,
+    },
+    ({ channel }) => {
+      if (channel) {
+        // called once after initial connect
+        open();
 
-      didOpen = true;
+        didOpen = true;
 
-      setTimeout(() => {
-        // eslint-disable-next-line
-        // @ts-ignore: trigger unintentional disconnect
-        client.ws?.onclose();
-      });
-    }
+        setTimeout(() => {
+          // eslint-disable-next-line
+          // @ts-ignore: trigger unintentional disconnect
+          client.ws?.onclose();
+        });
+      }
 
-    return () => {
-      // called once after dissconnect
-      close();
-    };
-  });
+      return () => {
+        // called once after dissconnect
+        close();
+      };
+    },
+  );
 });
 
 test('closing before ever connecting', () => {
@@ -219,20 +224,23 @@ test('closing before ever connecting', () => {
   const openError = jest.fn();
   const close = jest.fn();
 
-  client.connect({
-    fetchToken: () => Promise.resolve(REPL_TOKEN),
+  client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
-  }, ({ error }) => {
-    if (error) {
-      openError();
-    } else {
-      open();
-    }
+    },
+    ({ error }) => {
+      if (error) {
+        openError();
+      } else {
+        open();
+      }
 
-    return () => {
-      close();
-    };
-  });
+      return () => {
+        close();
+      };
+    },
+  );
 
   // `close` called before connecting
   client.close();
@@ -245,14 +253,17 @@ test('closing before ever connecting', () => {
 test('closing client while opening', (done) => {
   const client = new Client();
 
-  client.connect({
-    fetchToken: () => Promise.resolve(REPL_TOKEN),
+  client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
-  }, () => {
-    try {
-      client.close();
-    } catch {
-      done();
-    }
-  });
+    },
+    () => {
+      try {
+        client.close();
+      } catch {
+        done();
+      }
+    },
+  );
 });

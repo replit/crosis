@@ -54,7 +54,7 @@ interface ConnectOptions {
   timeout: number | null;
   reconnect: boolean;
   WebSocketClass?: typeof WebSocket;
-  maxConnectRetries?: number;
+  maxConnectRetries: number;
 }
 
 interface ChannelRequest {
@@ -63,6 +63,9 @@ interface ChannelRequest {
   openChannelCb: OpenChannelCb;
 }
 
+/**
+ * The only required option is `fetchToken`, all others are optional and will use defaults
+ */
 interface ConnectArgs extends Partial<Omit<ConnectOptions, 'fetchToken'>> {
   fetchToken: () => Promise<string>;
 }
@@ -75,7 +78,7 @@ const maxBackoff = 15000;
  */
 const getNextRetryDelay = (retryNumber: number) => {
   const randomMs = Math.floor(Math.random() * 500);
-  const backoff = (backoffFactor ** retryNumber) * 1000;
+  const backoff = backoffFactor ** retryNumber * 1000;
 
   return Math.min(backoff, maxBackoff) + randomMs;
 };
@@ -125,7 +128,7 @@ export class Client extends EventEmitter {
 
   private ws: WebSocket | null;
 
-  private connectOptions: ConnectOptions | null;
+  private connectOptions: ConnectOptions;
 
   private chan0Cb: OpenChannelCb | null;
 
@@ -154,7 +157,18 @@ export class Client extends EventEmitter {
 
     this.ws = null;
     this.channels = {};
-    this.connectOptions = null;
+    this.connectOptions = {
+      polling: false,
+      timeout: 10000,
+      reconnect: true,
+      maxConnectRetries: 2,
+      urlOptions: {
+        secure: false,
+        host: 'eval.repl.it',
+        port: '80',
+      },
+      fetchToken: () => Promise.reject(new Error('You must provide a fetchToken function')),
+    };
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
@@ -167,24 +181,234 @@ export class Client extends EventEmitter {
   }
 
   /**
-   * Connects to the server and and opens channel 0
+   * Starts connecting to the server and and opens channel 0
    *
    * Every client automatically "has" channel 0 and can use it to open more channels.
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public connect = (options: ConnectArgs, cb: OpenChannelCb) => {
-    this.connectTries += 1;
-    this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
+  public open = (options: ConnectArgs, cb: OpenChannelCb) => {
+    if (this.chan0Cb) {
+      throw new Error('You must call `close` before opening the client again');
+    }
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      const error = new Error('Client must be disconnected to connect');
+    if (!options.fetchToken || typeof options.fetchToken !== 'function') {
+      const error = new Error('You must provide a fetchToken function');
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
       throw error;
     }
 
-    if (!options.fetchToken) {
-      const error = new Error('You must provide a fetchToken function');
+    this.connectOptions = {
+      ...this.connectOptions,
+      ...options,
+    };
+
+    this.debug({
+      type: 'breadcrumb',
+      message: 'open',
+      data: { polling: this.connectOptions.polling },
+    });
+
+    this.chan0Cb = cb;
+    this.connect();
+  };
+
+  /**
+   * Opens a service channel.
+   * If action is specified the action will be sent with the request
+   * If action is not specfied it will:
+   *    1- if name is specified, it will send a request with [[api.OpenChannel.Action.ATTACH_OR_CREATE]]
+   *    2- if name is not specified, it will send a request with [[api.OpenChannel.Action.CREATE]]
+   *
+   * http://protodoc.turbio.repl.co/protov2#opening-channels
+   */
+  public openChannel = (options: ChannelOptions, cb: OpenChannelCb) => {
+    const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };
+    this.channelRequests.push(channelRequest);
+
+    if (this.connectionState === ConnectionState.CONNECTED) {
+      // We're connected, open channel
+      this.handleOpenChannel(channelRequest);
+    }
+
+    return () => {
+      if (channelRequest.currentChannel !== null) {
+        channelRequest.currentChannel.close();
+      }
+
+      this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
+    };
+  };
+
+  private handleOpenChannel = (channelRequest: ChannelRequest) => {
+    const { options, openChannelCb } = channelRequest;
+
+    let { action } = options;
+    if (!action) {
+      action =
+        options.name == null
+          ? api.OpenChannel.Action.CREATE
+          : api.OpenChannel.Action.ATTACH_OR_CREATE;
+    }
+
+    if (channelRequest.currentChannel) {
+      throw new Error('Unexpected currentChannel');
+    }
+
+    const channel = new Channel({ openChannelCb });
+    channelRequest.currentChannel = channel;
+
+    this.debug({
+      type: 'breadcrumb',
+      message: 'handleOpenChannel',
+      data: {
+        name: options.name,
+        service: options.service,
+        action,
+      },
+    });
+
+    const chan0 = this.getChannel(0);
+
+    // Random base36 int
+    const ref = Number(Math.random().toString().split('.')[1]).toString(36);
+
+    // avoid warnings on listener count
+    chan0.setMaxListeners(chan0.getMaxListeners() + 1);
+    // Not using Channel.request here because we want to
+    // resolve the response synchronously. We can receive
+    // openChanRes and a command on the requested channel
+    // in a single tick, using promises here would causes us to
+    // handle the incoming command before openChanRes, leading to errors
+
+    chan0.send({
+      ref,
+      openChan: {
+        name: options.name,
+        service: options.service,
+        action,
+      },
+    });
+
+    const dispose = chan0.onCommand((cmd: api.Command) => {
+      if (ref !== cmd.ref) {
+        return;
+      }
+
+      dispose();
+
+      if (cmd.openChanRes == null) {
+        throw new Error('Expected openChanRes on command');
+      }
+
+      const { id, state, error } = cmd.openChanRes;
+
+      this.debug({ type: 'breadcrumb', message: 'openChanres' });
+
+      if (state === api.OpenChannelRes.State.ERROR) {
+        this.debug({ type: 'breadcrumb', message: 'error', data: error });
+        channel.handleError(new Error(error || 'Something went wrong'));
+
+        return;
+      }
+
+      if (typeof id !== 'number' || typeof state !== 'number') {
+        throw new Error('Expected state and channel id');
+      }
+
+      this.channels[id] = channel;
+      channelRequest.currentChannel = channel;
+
+      channel.handleOpen({ id, state, send: this.send });
+    });
+  };
+
+  /**
+   * Closes the connection.
+   * - If `open` was called but we didn't connect yet treat it as a connection error
+   * - If there's an open WebSocket connection it will be closed
+   * - Any open channels or channel requests are closed
+   */
+  public close = () => {
+    this.debug({ type: 'breadcrumb', message: 'user close' });
+
+    if (!this.chan0Cb) {
+      throw new Error('Must call client.connect before closing');
+    }
+
+    // TODO: wrap in `setTimeout` to make async? Would need to do this
+    // to support calling `close` synchronously in `connect` callback
+    // This is only an issue with channel 0 since it never closes. Other
+    // channels close asynchronously so calling close inside `openChannel`
+    // is fine sice the callback function exits.
+    this.handleClose({ closeReason: ClientCloseReason.Intentional });
+  };
+
+  /** Gets a channel by Id */
+  public getChannel(id: number): Channel {
+    const chan = this.channels[id];
+
+    this.debug({
+      type: 'breadcrumb',
+      message: 'getChannel',
+      data: {
+        id,
+      },
+    });
+
+    if (!chan) {
+      const error = new Error(`No channel with number ${id}`);
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+
+      throw error;
+    }
+
+    return chan;
+  }
+
+  /** Gets the token that was used to connect */
+  public getToken(): string | null {
+    return this.connectToken;
+  }
+
+  /** Sets a logging/debugging function */
+  public setDebugFunc(debugFunc: DebugFunc): void {
+    this.debug = debugFunc;
+  }
+
+  /** Start a ping<>pong for debugging and latency stats */
+  public startPing = () => {
+    const chan0 = this.getChannel(0);
+    let pingTime = Date.now();
+
+    const ping = () => {
+      if (chan0.closed) {
+        return;
+      }
+
+      pingTime = Date.now();
+      chan0.send({ ping: {} });
+    };
+
+    chan0.on('command', (cmd) => {
+      if (cmd.body === 'pong') {
+        const pongTime = Date.now();
+        const latency = pongTime - pingTime;
+
+        this.debug({ type: 'ping', latency });
+
+        // Start next ping
+        setTimeout(ping, 10 * 1000);
+      }
+    });
+
+    // Kick off
+    ping();
+  };
+
+  private connect = () => {
+    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+      const error = new Error('Client must be disconnected to connect');
 
       this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
       throw error;
@@ -197,22 +421,7 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    const connectOptions = {
-      polling: false,
-      timeout: 10000,
-      reconnect: true,
-      maxConnectRetries: 2,
-      urlOptions: {
-        secure: false,
-        host: 'eval.repl.it',
-        port: '80',
-      },
-      ...options,
-    };
-
-    this.connectOptions = connectOptions;
-    this.chan0Cb = cb;
-
+    this.connectTries += 1;
     this.connectionState = ConnectionState.CONNECTING;
 
     this.channels = {};
@@ -220,19 +429,25 @@ export class Client extends EventEmitter {
       cr.currentChannel = null;
     });
 
-    const chan0 = new Channel({ openChannelCb: cb });
+    if (!this.chan0Cb) {
+      throw new Error('Expected chan0Cb');
+    }
+
+    const chan0 = new Channel({ openChannelCb: this.chan0Cb });
     this.channels[0] = chan0;
 
-    const WebSocketClass = connectOptions.polling ? EIOCompat : getWebSocketClass(connectOptions);
+    const WebSocketClass = this.connectOptions.polling
+      ? EIOCompat
+      : getWebSocketClass(this.connectOptions);
 
-    connectOptions.fetchToken().then((token) => {
+    this.connectOptions.fetchToken().then((token) => {
       if (this.connectionState !== ConnectionState.CONNECTING) {
         this.handleConnectError(new Error('Client was closed before connecting'));
 
         return;
       }
 
-      const connStr = Client.getConnectionStr(token, connectOptions.urlOptions);
+      const connStr = Client.getConnectionStr(token, this.connectOptions.urlOptions);
       const ws = new WebSocketClass(connStr);
 
       ws.binaryType = 'arraybuffer';
@@ -269,8 +484,8 @@ export class Client extends EventEmitter {
        */
       let resetTimeout = () => {};
       let cancelTimeout = () => {};
-      if (options.timeout) {
-        const { timeout } = options;
+      const { timeout } = this.connectOptions;
+      if (timeout !== null) {
         let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
 
         cancelTimeout = () => clearTimeout(timeoutId);
@@ -362,10 +577,10 @@ export class Client extends EventEmitter {
       onFailed = (error: Error) => {
         // TODO: Details
         // Should this also handle a fall back to polling?
-        if (this.connectTries <= connectOptions.maxConnectRetries) {
+        if (this.connectTries <= this.connectOptions.maxConnectRetries) {
           this.retryTimer = setTimeout(() => {
             this.connectionState = ConnectionState.DISCONNECTED;
-            this.connect(connectOptions, cb);
+            this.connect();
           }, getNextRetryDelay(this.connectTries));
 
           return;
@@ -377,203 +592,6 @@ export class Client extends EventEmitter {
         this.handleConnectError(error);
       };
     });
-  };
-
-  /**
-   * Opens a service channel.
-   * If action is specified the action will be sent with the request
-   * If action is not specfied it will:
-   *    1- if name is specified, it will send a request with [[api.OpenChannel.Action.ATTACH_OR_CREATE]]
-   *    2- if name is not specified, it will send a request with [[api.OpenChannel.Action.CREATE]]
-   *
-   * http://protodoc.turbio.repl.co/protov2#opening-channels
-   */
-  public openChannel = (options: ChannelOptions, cb: OpenChannelCb) => {
-    const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };
-    this.channelRequests.push(channelRequest);
-
-    if (this.connectionState === ConnectionState.CONNECTED) {
-      // We're connected, open channel
-      this.handleOpenChannel(channelRequest);
-    }
-
-    return () => {
-      if (channelRequest.currentChannel !== null) {
-        channelRequest.currentChannel.close();
-      }
-
-      this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
-    };
-  };
-
-  private handleOpenChannel = (channelRequest: ChannelRequest) => {
-    const { options, openChannelCb } = channelRequest;
-
-    let { action } = options;
-    if (!action) {
-      action =
-        options.name == null
-          ? api.OpenChannel.Action.CREATE
-          : api.OpenChannel.Action.ATTACH_OR_CREATE;
-    }
-
-    if (channelRequest.currentChannel) {
-      throw new Error('Unexpected currentChannel');
-    }
-
-    const channel = new Channel({ openChannelCb });
-    channelRequest.currentChannel = channel;
-
-    this.debug({
-      type: 'breadcrumb',
-      message: 'handleOpenChannel',
-      data: {
-        name: options.name,
-        service: options.service,
-        action,
-      },
-    });
-
-    const chan0 = this.getChannel(0);
-
-    // Random base36 int
-    const ref = Number(
-      Math.random()
-        .toString()
-        .split('.')[1],
-    ).toString(36);
-
-    // avoid warnings on listener count
-    chan0.setMaxListeners(chan0.getMaxListeners() + 1);
-    // Not using Channel.request here because we want to
-    // resolve the response synchronously. We can receive
-    // openChanRes and a command on the requested channel
-    // in a single tick, using promises here would causes us to
-    // handle the incoming command before openChanRes, leading to errors
-
-    chan0.send({
-      ref,
-      openChan: {
-        name: options.name,
-        service: options.service,
-        action,
-      },
-    });
-
-    const dispose = chan0.onCommand((cmd: api.Command) => {
-      if (ref !== cmd.ref) {
-        return;
-      }
-
-      dispose();
-
-      if (cmd.openChanRes == null) {
-        throw new Error('Expected openChanRes on command');
-      }
-
-      const { id, state, error } = cmd.openChanRes;
-
-      this.debug({ type: 'breadcrumb', message: 'openChanres' });
-
-      if (state === api.OpenChannelRes.State.ERROR) {
-        this.debug({ type: 'breadcrumb', message: 'error', data: error });
-        channel.handleError(new Error(error || 'Something went wrong'));
-
-        return;
-      }
-
-      if (typeof id !== 'number' || typeof state !== 'number') {
-        throw new Error('Expected state and channel id');
-      }
-
-      this.channels[id] = channel;
-      channelRequest.currentChannel = channel;
-
-      channel.handleOpen({ id, state, send: this.send });
-    });
-  };
-
-  /**
-   * Closes the connection.
-   * - If `connect` was called but we didn't connect yet treat it as a connection error
-   * - If there's an open WebSocket connection it will be closed
-   * - Any open channels or channel requests are closed
-   */
-  public close = () => {
-    this.debug({ type: 'breadcrumb', message: 'user close' });
-
-    if (!this.connectOptions) {
-      throw new Error('Must call client.connect before closing');
-    }
-
-    // TODO: wrap in `setTimeout` to make async? Would need to do this
-    // to support calling `close` synchronously in `connect` callback
-    // This is only an issue with channel 0 since it never closes. Other
-    // channels close asynchronously so calling close inside `openChannel`
-    // is fine sice the callback function exits.
-    this.handleClose({ closeReason: ClientCloseReason.Intentional });
-  };
-
-  /** Gets a channel by Id */
-  public getChannel(id: number): Channel {
-    const chan = this.channels[id];
-
-    this.debug({
-      type: 'breadcrumb',
-      message: 'getChannel',
-      data: {
-        id,
-      },
-    });
-
-    if (!chan) {
-      const error = new Error(`No channel with number ${id}`);
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-
-      throw error;
-    }
-
-    return chan;
-  }
-
-  /** Gets the token that was used to connect */
-  public getToken(): string | null {
-    return this.connectToken;
-  }
-
-  /** Sets a logging/debugging function */
-  public setDebugFunc(debugFunc: DebugFunc): void {
-    this.debug = debugFunc;
-  }
-
-  /** Start a ping<>pong for debugging and latency stats */
-  public startPing = () => {
-    const chan0 = this.getChannel(0);
-    let pingTime = Date.now();
-
-    const ping = () => {
-      if (chan0.closed) {
-        return;
-      }
-
-      pingTime = Date.now();
-      chan0.send({ ping: {} });
-    };
-
-    chan0.on('command', (cmd) => {
-      if (cmd.body === 'pong') {
-        const pongTime = Date.now();
-        const latency = pongTime - pingTime;
-
-        this.debug({ type: 'ping', latency });
-
-        // Start next ping
-        setTimeout(ping, 10 * 1000);
-      }
-    });
-
-    // Kick off
-    ping();
   };
 
   private send = (cmd: api.Command) => {
@@ -636,7 +654,8 @@ export class Client extends EventEmitter {
         }
 
         break;
-      } default:
+      }
+      default:
     }
   };
 
@@ -695,16 +714,20 @@ export class Client extends EventEmitter {
       clearTimeout(this.retryTimer);
     }
 
-    const willReconnect = closeResult.closeReason === ClientCloseReason.Disconnected &&
-      Boolean(this.connectOptions?.reconnect);
+    const willReconnect =
+      closeResult.closeReason === ClientCloseReason.Disconnected &&
+      Boolean(this.connectOptions.reconnect);
 
-    const closeReason: ChannelCloseReason = closeResult.closeReason === ClientCloseReason.Intentional ? {
-      initiator: 'client',
-      willReconnect: false,
-    } : {
-      initiator: 'client',
-      willReconnect,
-    };
+    const closeReason: ChannelCloseReason =
+      closeResult.closeReason === ClientCloseReason.Intentional
+        ? {
+            initiator: 'client',
+            willReconnect: false,
+          }
+        : {
+            initiator: 'client',
+            willReconnect,
+          };
 
     Object.values(this.channels).forEach((channel) => {
       if (channel.closed) {
@@ -718,28 +741,22 @@ export class Client extends EventEmitter {
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
-    if (closeResult.closeReason === ClientCloseReason.Intentional) {
+    if (
+      closeResult.closeReason === ClientCloseReason.Intentional ||
+      !this.connectOptions.reconnect
+    ) {
       // Client is done being used
       this.removeAllListeners();
+      this.chan0Cb = null;
       return;
     }
 
-    if (!this.connectOptions) {
-      throw new Error('Expected connectOptions');
-    }
+    this.debug({
+      type: 'breadcrumb',
+      message: 'reconnecting',
+    });
 
-    if (!this.chan0Cb) {
-      throw new Error('Expected chan0Cb');
-    }
-
-    if (this.connectOptions.reconnect) {
-      this.debug({
-        type: 'breadcrumb',
-        message: 'reconnecting',
-      });
-
-      this.connect(this.connectOptions, this.chan0Cb);
-    }
+    this.connect();
   };
 
   private handleConnectError = (error: Error) => {
