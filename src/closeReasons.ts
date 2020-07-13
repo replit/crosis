@@ -1,5 +1,3 @@
-import { api } from '@replit/protocol';
-
 // In a separate file to circular dependencies in client and channel
 
 export enum ClientCloseReason {
@@ -18,9 +16,9 @@ export enum ClientCloseReason {
 export type ChannelCloseReason =
   | {
       initiator: 'client';
-      clientCloseReason: ClientCloseReason;
+      willReconnect: boolean;
     }
   | {
       initiator: 'channel';
-      closeStatus: api.CloseChannelRes.Status;
+      willReconnect: false;
     };

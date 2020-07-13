@@ -1,2 +1,3 @@
 export { Client } from './client';
-export { Channel } from './channel';
+export { Channel, ChannelOptions, OpenChannelCb } from './channel';
+export { ChannelCloseReason } from './closeReasons';

@@ -2,8 +2,48 @@ import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { ChannelCloseReason } from './closeReasons';
 
-interface RequestResult extends api.Command {
+export interface RequestResult extends api.Command {
   channelClosed?: ChannelCloseReason;
+}
+
+type OnCloseFn = (reason: ChannelCloseReason) => void;
+
+export type OpenChannelRes = { error: null; channel: Channel } | { error: Error; channel: null };
+
+/**
+ * This function gets called when a channel opens or there is an error opening.
+ * It can return a function that can be used to cleanup an logic when the channle closes.
+ * If there is an error opening the channel the cleanup function is not called. You can
+ * think of it as a stream of values that terminates if/when there is an error.
+ *
+ * Example:
+ *
+ * const closeChannel = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
+ *   if (error) {
+ *     // Bail, channel had an error connecting or reconnecting
+ *     // Tihs callback will no longer be called
+ *     return
+ *   }
+ *
+ *   // Channel is open, setup `channel` logic
+ *   // This could be the result of initial connection or a subsequent reconnect
+ *
+ *   return (reason) => {
+ *     // Channel closed, cleanup relevant logic
+ *     // We might reconnect after this
+ *   }
+ * })
+ *
+ * // Eventually when done using the channel you can close it
+ * closeChannel() // Will call potential returned cleanup function
+ *
+ */
+export type OpenChannelCb = (res: OpenChannelRes) => void | OnCloseFn;
+
+export interface ChannelOptions {
+  name?: string;
+  service: string;
+  action?: api.OpenChannel.Action;
 }
 
 export class Channel extends EventEmitter {
@@ -12,28 +52,64 @@ export class Channel extends EventEmitter {
 
   public id: number | null;
 
-  public isOpen: boolean;
-
   public closed: boolean;
 
-  // private
-  private sendQueue: Array<api.ICommand>;
-
-  private sendToClient: (cmd: api.Command) => void;
+  private sendToClient: ((cmd: api.Command) => void) | null;
 
   private requestMap: { [ref: string]: (res: RequestResult) => void };
 
-  constructor() {
+  private openChannelCb: OpenChannelCb;
+
+  private openChannelCbClose: ReturnType<OpenChannelCb> | null;
+
+  constructor(config: { openChannelCb: OpenChannelCb }) {
     super();
 
-    this.state = null;
     this.id = null;
-    this.isOpen = false;
+    this.sendToClient = null;
+    this.state = null;
     this.closed = false;
-    this.sendQueue = [];
-    this.sendToClient = this.enqueueSend;
     this.requestMap = {};
+    this.openChannelCb = config.openChannelCb;
+    this.openChannelCbClose = null;
   }
+
+  public onCommand = (listener: (cmd: api.Command) => void) => {
+    this.on('command', listener);
+
+    return () => this.removeListener('command', listener);
+  };
+
+  /**
+   * Closes the channel
+   *
+   * see http://protodoc.turbio.repl.co/protov2#closing-channels
+   * @param action [[api.OpenChannel.Action]] specifies how you want to close the channel
+   */
+  public close = (action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE) => {
+    if (this.closed === true) {
+      throw new Error('Channel already closed');
+    }
+
+    const cmd = api.Command.create({
+      channel: 0,
+      closeChan: {
+        action,
+        id: this.id,
+      },
+    });
+
+    if (!this.sendToClient) {
+      throw new Error('Expected sendToClient');
+    }
+
+    // Send close command to chan0
+    this.sendToClient(cmd);
+
+    this.handleCommand = () => undefined;
+    this.send = () => undefined;
+    this.closed = true;
+  };
 
   /**
    * Receives a command and sends it over the wire
@@ -41,6 +117,10 @@ export class Channel extends EventEmitter {
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
   public send = (cmdJson: api.ICommand) => {
+    if (!this.sendToClient) {
+      throw new Error('Sending on a closed channel');
+    }
+
     cmdJson.channel = this.id;
     this.sendToClient(api.Command.create(cmdJson));
   };
@@ -67,71 +147,24 @@ export class Channel extends EventEmitter {
   };
 
   /**
-   * Closes the channel
-   *
-   * see http://protodoc.turbio.repl.co/protov2#closing-channels
-   * @param action [[api.OpenChannel.Action]] specifies how you want to close the channel
-   */
-  public close = async (
-    action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE,
-  ): Promise<ChannelCloseReason> => {
-    if (this.closed === true) {
-      throw new Error('Channel already closed');
-    }
-
-    const cmd = api.Command.create({
-      channel: 0,
-      closeChan: {
-        action,
-        id: this.id,
-      },
-    });
-    this.sendToClient(cmd);
-
-    this.onCommand = () => undefined;
-    this.send = () => undefined;
-    this.closed = true;
-
-    return new Promise((resolve) => {
-      this.once('close', (reason) => {
-        resolve(reason);
-      });
-    });
-  };
-
-  /**
    * @hidden should only be called by [[Client]]
    *
-   * Called when the openChanRes is received
+   * Called when the channel opens
    */
-  public onOpen = (
-    id: number,
-    state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED,
-    send: (cmd: api.Command) => void,
-  ) => {
+  public handleOpen = ({
+    id,
+    state,
+    send,
+  }: {
+    id: number;
+    state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED;
+    send: (cmd: api.Command) => void;
+  }) => {
     this.id = id;
     this.sendToClient = send;
     this.state = state;
-    this.isOpen = true;
 
-    let cmd = this.sendQueue.shift();
-    while (cmd) {
-      // It will set the right channel id and send it
-      this.send(cmd);
-
-      cmd = this.sendQueue.shift();
-    }
-
-    this.emit('open');
-  };
-
-  /**
-   * @hidden should only be called by [[Client]]
-   *
-   * Called when the openChanRes is received with error
-   */
-  public onOpenError = ({ error: err }: api.IOpenChannelRes) => {
-    this.emit('error', { message: err || '' });
+    this.openChannelCbClose = this.openChannelCb({ channel: this, error: null });
   };
 
   /**
@@ -139,7 +172,7 @@ export class Channel extends EventEmitter {
    *
    * Called when the channel recieves a message
    */
-  public onCommand = (cmd: api.Command) => {
+  public handleCommand = (cmd: api.Command) => {
     this.emit('command', cmd);
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
@@ -153,7 +186,7 @@ export class Channel extends EventEmitter {
    *
    * Called when the channel or client is closed
    */
-  public onClose = (reason: ChannelCloseReason) => {
+  public handleClose = (reason: ChannelCloseReason) => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;
@@ -161,83 +194,29 @@ export class Channel extends EventEmitter {
       delete this.requestMap[ref];
     });
 
-    this.isOpen = false;
     this.closed = true;
-    this.emit('close', reason);
+
+    if (this.openChannelCbClose) {
+      this.openChannelCbClose(reason);
+      this.openChannelCbClose = null;
+    } else {
+      this.openChannelCb({
+        error: new Error('Client closed before opening'),
+        channel: null,
+      });
+    }
+
     this.removeAllListeners();
   };
 
-  private enqueueSend = (cmd: api.ICommand) => this.sendQueue.push(cmd);
-}
-
-/**
- * Emitted whenever this channel recieves a command
- * @asMemberOf Channel
- * @event
- */
-declare function command(cmd: api.Command): void;
-
-/**
- * Emitted when there's an error while the channel is opening, close is emitted right after
- * @asMemberOf Channel
- * @event
- */
-declare function error({ message }: { message: string }): void;
-
-/**
- * Emitted when a channel is successfully opened (i.e. recieved openChanRes on chan0)
- * @asMemberOf Channel
- * @event
- */
-declare function open(): void;
-
-/**
- * Emitted when a channel is closed
- * @asMemberOf Channel
- * @event
- */
-declare function close(chanCloseReason: ChannelCloseReason): void;
-
-export declare interface Channel extends EventEmitter {
-  on(event: 'command', listener: typeof command): this;
-  on(event: 'error', listener: typeof error): this;
-  on(event: 'close', listener: typeof close): this;
-  on(event: 'open', listener: typeof open): this;
-  addListener(event: 'command', listener: typeof command): this;
-  addListener(event: 'error', listener: typeof error): this;
-  addListener(event: 'close', listener: typeof close): this;
-  addListener(event: 'open', listener: typeof open): this;
-
-  once(event: 'command', listener: typeof command): this;
-  once(event: 'error', listener: typeof error): this;
-  once(event: 'close', listener: typeof close): this;
-  once(event: 'open', listener: typeof open): this;
-
-  prependListener(event: 'command', listener: typeof command): this;
-  prependListener(event: 'error', listener: typeof error): this;
-  prependListener(event: 'close', listener: typeof close): this;
-  prependListener(event: 'open', listener: typeof open): this;
-
-  prependOnceListener(event: 'command', listener: typeof command): this;
-  prependOnceListener(event: 'error', listener: typeof error): this;
-  prependOnceListener(event: 'close', listener: typeof close): this;
-  prependOnceListener(event: 'open', listener: typeof open): this;
-
-  off(event: 'command', listener: typeof command): this;
-  off(event: 'error', listener: typeof error): this;
-  off(event: 'close', listener: typeof close): this;
-  off(event: 'open', listener: typeof open): this;
-  removeListener(event: 'command', listener: typeof command): this;
-  removeListener(event: 'error', listener: typeof error): this;
-  removeListener(event: 'close', listener: typeof close): this;
-  removeListener(event: 'open', listener: typeof open): this;
-
-  emit(event: 'command', ...args: Parameters<typeof command>): boolean;
-  emit(event: 'error', ...args: Parameters<typeof error>): boolean;
-  emit(event: 'close', ...args: Parameters<typeof close>): boolean;
-  emit(event: 'open', ...args: Parameters<typeof open>): boolean;
-
-  removeAllListeners(event?: 'command' | 'error' | 'close' | 'open'): this;
-
-  eventNames(): Array<'command' | 'error' | 'close' | 'open'>;
+  /**
+   * @hidden should only be called by [[Client]]
+   *
+   * Called when the channel has an error opening
+   */
+  public handleError = (error: Error) => {
+    this.openChannelCb({ error, channel: null });
+    this.openChannelCbClose = null;
+    this.removeAllListeners();
+  };
 }
