@@ -152,15 +152,8 @@ export class Client extends EventEmitter {
     return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
   }
 
-  constructor(options: ConnectArgs, debug: DebugFunc = () => {}) {
+  constructor(debug: DebugFunc = () => {}) {
     super();
-
-    if (!options.fetchToken || typeof options.fetchToken !== 'function') {
-      const error = new Error('You must provide a fetchToken function');
-
-      debug({ type: 'breadcrumb', message: 'error', data: error.message });
-      throw error;
-    }
 
     this.ws = null;
     this.channels = {};
@@ -174,7 +167,7 @@ export class Client extends EventEmitter {
         host: 'eval.repl.it',
         port: '80',
       },
-      ...options,
+      fetchToken: () => Promise.reject(new Error('You must provide a fetchToken function')),
     };
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
@@ -193,30 +186,30 @@ export class Client extends EventEmitter {
    * Every client automatically "has" channel 0 and can use it to open more channels.
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public open = (cb: OpenChannelCb) => {
-    this.connectTries += 1;
+  public open = (options: ConnectArgs, cb: OpenChannelCb) => {
+    if (this.chan0Cb) {
+      throw new Error('You must call `close` before opening the client again');
+    }
+
+    if (!options.fetchToken || typeof options.fetchToken !== 'function') {
+      const error = new Error('You must provide a fetchToken function');
+
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+      throw error;
+    }
+
+    this.connectOptions = {
+      ...this.connectOptions,
+      ...options,
+    };
+
     this.debug({
       type: 'breadcrumb',
       message: 'open',
       data: { polling: this.connectOptions.polling },
     });
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      const error = new Error('Client must be disconnected to connect');
-
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-      throw error;
-    }
-
-    if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
-      const error = new Error('Client already connected to an active websocket connection');
-
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-      throw error;
-    }
-
     this.chan0Cb = cb;
-
     this.connect();
   };
 
@@ -278,11 +271,7 @@ export class Client extends EventEmitter {
     const chan0 = this.getChannel(0);
 
     // Random base36 int
-    const ref = Number(
-      Math.random()
-        .toString()
-        .split('.')[1],
-    ).toString(36);
+    const ref = Number(Math.random().toString().split('.')[1]).toString(36);
 
     // avoid warnings on listener count
     chan0.setMaxListeners(chan0.getMaxListeners() + 1);
@@ -336,7 +325,7 @@ export class Client extends EventEmitter {
 
   /**
    * Closes the connection.
-   * - If `connect` was called but we didn't connect yet treat it as a connection error
+   * - If `open` was called but we didn't connect yet treat it as a connection error
    * - If there's an open WebSocket connection it will be closed
    * - Any open channels or channel requests are closed
    */
@@ -418,6 +407,21 @@ export class Client extends EventEmitter {
   };
 
   private connect = () => {
+    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+      const error = new Error('Client must be disconnected to connect');
+
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+      throw error;
+    }
+
+    if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
+      const error = new Error('Client already connected to an active websocket connection');
+
+      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+      throw error;
+    }
+
+    this.connectTries += 1;
     this.connectionState = ConnectionState.CONNECTING;
 
     this.channels = {};
@@ -737,20 +741,22 @@ export class Client extends EventEmitter {
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
-    if (closeResult.closeReason === ClientCloseReason.Intentional) {
+    if (
+      closeResult.closeReason === ClientCloseReason.Intentional ||
+      !this.connectOptions.reconnect
+    ) {
       // Client is done being used
       this.removeAllListeners();
+      this.chan0Cb = null;
       return;
     }
 
-    if (this.connectOptions.reconnect) {
-      this.debug({
-        type: 'breadcrumb',
-        message: 'reconnecting',
-      });
+    this.debug({
+      type: 'breadcrumb',
+      message: 'reconnecting',
+    });
 
-      this.connect();
-    }
+    this.connect();
   };
 
   private handleConnectError = (error: Error) => {

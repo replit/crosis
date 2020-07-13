@@ -12,12 +12,13 @@ if (!REPL_TOKEN) {
 }
 
 test('client connect', (done) => {
-  const client = new Client({
-    fetchToken: () => Promise.resolve(REPL_TOKEN),
-    WebSocketClass: WebSocket,
-  });
+  const client = new Client();
 
   client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    },
     ({ channel, error }) => {
       expect(channel?.closed).toBe(false);
       expect(error).toEqual(null);
@@ -31,18 +32,16 @@ test('client connect', (done) => {
   );
 });
 
-
 test('channel open and close', (done) => {
-  const client = new Client(
-  {
-    fetchToken: () => Promise.resolve(REPL_TOKEN),
-      WebSocketClass: WebSocket,
-  },
-);
+  const client = new Client();
 
   const channelClose = jest.fn();
 
   client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    },
     ({ channel, error }) => {
       expect(channel?.closed).toBe(false);
       expect(error).toEqual(null);
@@ -69,11 +68,7 @@ test('channel open and close', (done) => {
 });
 
 test('client errors opening', (done) => {
-  const client = new Client({
-    maxConnectRetries: 0,
-    fetchToken: () => Promise.resolve('test - no good'),
-      WebSocketClass: WebSocket,
-  });
+  const client = new Client();
   let errorCount = 0;
 
   const clientClose = jest.fn();
@@ -90,15 +85,22 @@ test('client errors opening', (done) => {
     }
   };
 
-  client.open(({ channel, error }) => {
-    expect(error).toBeTruthy();
-    expect(channel).toEqual(null);
-    errorCount += 1;
+  client.open(
+    {
+      maxConnectRetries: 0,
+      fetchToken: () => Promise.resolve('test - no good'),
+      WebSocketClass: WebSocket,
+    },
+    ({ channel, error }) => {
+      expect(error).toBeTruthy();
+      expect(channel).toEqual(null);
+      errorCount += 1;
 
-    setTimeout(maybeDone);
+      setTimeout(maybeDone);
 
-    return clientClose;
-  });
+      return clientClose;
+    },
+  );
 
   client.openChannel({ service: 'shell' }, ({ channel, error }) => {
     expect(error).toBeTruthy();
@@ -112,11 +114,7 @@ test('client errors opening', (done) => {
 });
 
 test('client reconnect', (done) => {
-  const client = new Client({
-    fetchToken: () => Promise.resolve(REPL_TOKEN),
-      WebSocketClass: WebSocket,
-
-  });
+  const client = new Client();
 
   let disconnectTriggered = false;
   let timesConnected = 0;
@@ -124,9 +122,13 @@ test('client reconnect', (done) => {
   let timesClosedIntentionally = 0;
 
   client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    },
     ({ channel, error }) => {
-      expect(channel?.closed).toEqual(false);
       expect(error).toEqual(null);
+      expect(channel?.closed).toEqual(false);
 
       timesConnected += 1;
 
@@ -169,70 +171,76 @@ test('client is closed while reconnecting', (done) => {
   const open = jest.fn();
   const close = jest.fn();
 
-  const client = new Client({
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
-    fetchToken: () => {
-      if (didOpen) {
-        // We're reconnecting
-        setTimeout(() => {
-          // Close client while reconnecting
-          client.close();
-
-          expect(open).toHaveBeenCalledTimes(1);
-          expect(close).toHaveBeenCalledTimes(1);
-
-          done();
-        });
-      }
-
-      return Promise.resolve(REPL_TOKEN);
-    },
-    WebSocketClass: WebSocket,
-  });
-
-
-  client.open(({ channel }) => {
-    if (channel) {
-      // called once after initial connect
-      open();
-
-      didOpen = true;
-
+  const client = new Client();
+  const fetchToken = () => {
+    if (didOpen) {
+      // We're reconnecting
       setTimeout(() => {
-        // eslint-disable-next-line
-        // @ts-ignore: trigger unintentional disconnect
-        client.ws?.onclose();
+        // Close client while reconnecting
+        client.close();
+
+        expect(open).toHaveBeenCalledTimes(1);
+        expect(close).toHaveBeenCalledTimes(1);
+
+        done();
       });
     }
 
-    return () => {
-      // called once after dissconnect
-      close();
-    };
-  });
+    return Promise.resolve(REPL_TOKEN);
+  };
+
+  client.open(
+    {
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      fetchToken,
+      WebSocketClass: WebSocket,
+    },
+    ({ channel }) => {
+      if (channel) {
+        // called once after initial connect
+        open();
+
+        didOpen = true;
+
+        setTimeout(() => {
+          // eslint-disable-next-line
+          // @ts-ignore: trigger unintentional disconnect
+          client.ws?.onclose();
+        });
+      }
+
+      return () => {
+        // called once after dissconnect
+        close();
+      };
+    },
+  );
 });
 
 test('closing before ever connecting', () => {
-  const client = new Client({
-    fetchToken: () => Promise.resolve(REPL_TOKEN),
-      WebSocketClass: WebSocket,
-  });
+  const client = new Client();
 
   const open = jest.fn();
   const openError = jest.fn();
   const close = jest.fn();
 
-  client.open(({ error }) => {
-    if (error) {
-      openError();
-    } else {
-      open();
-    }
+  client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    },
+    ({ error }) => {
+      if (error) {
+        openError();
+      } else {
+        open();
+      }
 
-    return () => {
-      close();
-    };
-  });
+      return () => {
+        close();
+      };
+    },
+  );
 
   // `close` called before connecting
   client.close();
@@ -243,16 +251,19 @@ test('closing before ever connecting', () => {
 });
 
 test('closing client while opening', (done) => {
-  const client = new Client({
-    fetchToken: () => Promise.resolve(REPL_TOKEN),
-      WebSocketClass: WebSocket,
-  });
+  const client = new Client();
 
-  client.open(() => {
-    try {
-      client.close();
-    } catch {
-      done();
-    }
-  });
+  client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    },
+    () => {
+      try {
+        client.close();
+      } catch {
+        done();
+      }
+    },
+  );
 });
