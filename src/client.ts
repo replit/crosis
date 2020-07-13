@@ -167,12 +167,12 @@ export class Client extends EventEmitter {
   }
 
   /**
-   * Connects to the server and and opens channel 0
+   * Starts connecting to the server and and opens channel 0
    *
    * Every client automatically "has" channel 0 and can use it to open more channels.
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public connect = (options: ConnectArgs, cb: OpenChannelCb) => {
+  public open = (options: ConnectArgs, cb: OpenChannelCb) => {
     this.connectTries += 1;
     this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
 
@@ -365,7 +365,7 @@ export class Client extends EventEmitter {
         if (this.connectTries <= connectOptions.maxConnectRetries) {
           this.retryTimer = setTimeout(() => {
             this.connectionState = ConnectionState.DISCONNECTED;
-            this.connect(connectOptions, cb);
+            this.open(connectOptions, cb);
           }, getNextRetryDelay(this.connectTries));
 
           return;
@@ -576,6 +576,10 @@ export class Client extends EventEmitter {
     ping();
   };
 
+  private connect = () => {
+
+  }
+
   private send = (cmd: api.Command) => {
     this.debug({ type: 'log', log: { direction: 'out', cmd } });
 
@@ -738,7 +742,7 @@ export class Client extends EventEmitter {
         message: 'reconnecting',
       });
 
-      this.connect(this.connectOptions, this.chan0Cb);
+      this.open(this.connectOptions, this.chan0Cb);
     }
   };
 

@@ -14,7 +14,7 @@ if (!REPL_TOKEN) {
 test('client connect', (done) => {
   const client = new Client();
 
-  client.connect(
+  client.open(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
         WebSocketClass: WebSocket,
@@ -38,7 +38,7 @@ test('channel open and close', (done) => {
 
   const channelClose = jest.fn();
 
-  client.connect(
+  client.open(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
         WebSocketClass: WebSocket,
@@ -86,7 +86,7 @@ test('client errors opening', (done) => {
     }
   };
 
-  client.connect({
+  client.open({
     maxConnectRetries: 0,
     fetchToken: () => Promise.resolve('test - no good'),
       WebSocketClass: WebSocket,
@@ -119,7 +119,7 @@ test('client reconnect', (done) => {
   let timesClosedUnintentionally = 0;
   let timesClosedIntentionally = 0;
 
-  client.connect(
+  client.open(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
         WebSocketClass: WebSocket,
@@ -188,7 +188,7 @@ test('client is closed while reconnecting', (done) => {
     return Promise.resolve(REPL_TOKEN);
   };
 
-  client.connect({
+  client.open({
     fetchToken,
     WebSocketClass: WebSocket,
   }, ({ channel }) => {
@@ -219,7 +219,7 @@ test('closing before ever connecting', () => {
   const openError = jest.fn();
   const close = jest.fn();
 
-  client.connect({
+  client.open({
     fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
   }, ({ error }) => {
@@ -245,7 +245,7 @@ test('closing before ever connecting', () => {
 test('closing client while opening', (done) => {
   const client = new Client();
 
-  client.connect({
+  client.open({
     fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
   }, () => {
