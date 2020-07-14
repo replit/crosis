@@ -579,6 +579,16 @@ export class Client extends EventEmitter {
         // Should this also handle a fall back to polling?
         if (this.connectTries <= this.connectOptions.maxConnectRetries) {
           this.retryTimer = setTimeout(() => {
+            this.debug({
+              type: 'breadcrumb',
+              message: 'retrying',
+              data: {
+                connectionState: this.connectionState,
+                connectTries: this.connectTries,
+                error,
+                wsReadyState: this.ws ? this.ws.readyState : undefined,
+              },
+            });
             this.connectionState = ConnectionState.DISCONNECTED;
             this.connect();
           }, getNextRetryDelay(this.connectTries));
