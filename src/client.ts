@@ -546,8 +546,17 @@ export class Client extends EventEmitter {
             }
             cancelTimeout();
 
+            let closedDuringConnect = false;
             const originalClose = this.close;
+
             this.close = () => {
+              closedDuringConnect = true;
+
+              // Cleanup in case user calls close inside open callback
+              this.cleanupSocket();
+              cancelTimeout();
+              dispose();
+
               throw new Error('Cannot call close inside connect callback');
             };
 
@@ -557,11 +566,14 @@ export class Client extends EventEmitter {
               send: this.send,
             });
 
-            this.close = originalClose;
+            // If user called close inside open callback (throws a error) we should not continue connecting
+            if (!closedDuringConnect) {
+              this.close = originalClose;
 
-            this.connectToken = token;
+              this.connectToken = token;
 
-            this.handleConnect();
+              this.handleConnect();
+            }
 
             break;
           }
@@ -575,6 +587,12 @@ export class Client extends EventEmitter {
       });
 
       onFailed = (error: Error) => {
+        // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
+        // will be used in additon to new `cancelTimeout` and `dispose` functions.
+        this.cleanupSocket();
+        cancelTimeout();
+        dispose();
+
         // TODO: Details
         // Should this also handle a fall back to polling?
         if (this.connectTries <= this.connectOptions.maxConnectRetries) {
@@ -595,9 +613,6 @@ export class Client extends EventEmitter {
 
           return;
         }
-
-        cancelTimeout();
-        dispose();
 
         this.handleConnectError(error);
       };
