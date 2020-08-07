@@ -32,6 +32,63 @@ test('client connect', (done) => {
   );
 });
 
+test('channel closing itself when client willReconnect', (done) => {
+  let disconnectTriggered = false;
+  let clientOpenCount = 0;
+  let channelOpenCount = 0;
+
+  const client = new Client();
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    },
+    ({ channel, error }) => {
+      clientOpenCount += 1;
+      expect(channel?.closed).toBe(false);
+      expect(error).toEqual(null);
+
+      if (!disconnectTriggered) {
+        setTimeout(() => {
+          // eslint-disable-next-line
+          // @ts-ignore: trigger unintentional disconnect
+          client.ws?.onclose();
+          disconnectTriggered = true;
+        }, 1000);
+      } else {
+        setTimeout(() => client.close());
+      }
+
+      return ({ willReconnect }) => {
+        if (willReconnect) {
+          return;
+        }
+
+        expect(clientOpenCount).toEqual(2);
+        expect(channelOpenCount).toEqual(1);
+
+        done();
+      };
+    },
+  );
+
+  const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
+    channelOpenCount += 1;
+    expect(channel?.closed).toBe(false);
+    expect(error).toBe(null);
+
+    return () => {
+      // This cleanup function gets called because we triggered an unintentional
+      // disconnect above (`client.ws.onclose()`). Since this is unintentional
+      // the client will reconnect itself. But this outer `openChannel`callback will NOT
+      // get called a second time when the cleint re-connects since we are deliberately
+      // closing it on the next line.
+      close();
+    };
+  });
+});
+
 test('channel open and close', (done) => {
   const client = new Client();
 

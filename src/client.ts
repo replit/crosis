@@ -233,7 +233,7 @@ export class Client extends EventEmitter {
     }
 
     return () => {
-      if (channelRequest.currentChannel !== null) {
+      if (channelRequest.currentChannel !== null && !channelRequest.currentChannel.closed) {
         channelRequest.currentChannel.close();
       }
 
