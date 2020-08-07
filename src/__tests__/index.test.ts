@@ -67,6 +67,60 @@ test('channel open and close', (done) => {
   });
 });
 
+test('channel skip open', (done) => {
+  let disconnectTriggered = false;
+  let clientOpenCount = 0;
+  let channelOpenCount = 0;
+
+  const client = new Client();
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    },
+    ({ channel, error }) => {
+      clientOpenCount += 1;
+      expect(channel?.closed).toBe(false);
+      expect(error).toEqual(null);
+
+      if (!disconnectTriggered) {
+        setTimeout(() => {
+          // eslint-disable-next-line
+          // @ts-ignore: trigger unintentional disconnect
+          client.ws?.onclose();
+          disconnectTriggered = true;
+        }, 1000);
+      } else {
+        setTimeout(() => client.close());
+      }
+
+      return ({ willReconnect }) => {
+        if (willReconnect) {
+          return;
+        }
+
+        expect(clientOpenCount).toEqual(2);
+        expect(channelOpenCount).toEqual(1);
+
+        done();
+      };
+    },
+  );
+
+  client.openChannel(
+    {
+      skip: () => clientOpenCount > 0,
+      service: 'shell',
+    },
+    ({ channel, error }) => {
+      channelOpenCount += 1;
+      expect(channel?.closed).toBe(false);
+      expect(error).toBe(null);
+    },
+  );
+});
+
 test('client errors opening', (done) => {
   const client = new Client();
   let errorCount = 0;

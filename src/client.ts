@@ -61,6 +61,7 @@ interface ChannelRequest {
   options: ChannelOptions;
   currentChannel: Channel | null;
   openChannelCb: OpenChannelCb;
+  skip?: () => boolean;
 }
 
 /**
@@ -241,7 +242,11 @@ export class Client extends EventEmitter {
   };
 
   private handleOpenChannel = (channelRequest: ChannelRequest) => {
-    const { options, openChannelCb } = channelRequest;
+    const { options, openChannelCb, skip } = channelRequest;
+
+    if (skip && skip()) {
+      return;
+    }
 
     let { action } = options;
     if (!action) {
