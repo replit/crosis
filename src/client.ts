@@ -227,9 +227,7 @@ export class Client extends EventEmitter {
     const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };
     this.channelRequests.push(channelRequest);
 
-    const skip = !!channelRequest.skip && channelRequest.skip();
-
-    if (!skip && this.connectionState === ConnectionState.CONNECTED) {
+    if (this.connectionState === ConnectionState.CONNECTED) {
       // We're connected, open channel
       this.handleOpenChannel(channelRequest);
     }
