@@ -61,6 +61,7 @@ interface ChannelRequest {
   options: ChannelOptions;
   currentChannel: Channel | null;
   openChannelCb: OpenChannelCb;
+  skip?: () => boolean;
 }
 
 /**
@@ -226,7 +227,9 @@ export class Client extends EventEmitter {
     const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };
     this.channelRequests.push(channelRequest);
 
-    if (this.connectionState === ConnectionState.CONNECTED) {
+    const skip = !!channelRequest.skip && channelRequest.skip();
+
+    if (!skip && this.connectionState === ConnectionState.CONNECTED) {
       // We're connected, open channel
       this.handleOpenChannel(channelRequest);
     }
@@ -241,7 +244,11 @@ export class Client extends EventEmitter {
   };
 
   private handleOpenChannel = (channelRequest: ChannelRequest) => {
-    const { options, openChannelCb } = channelRequest;
+    const { options, openChannelCb, skip } = channelRequest;
+
+    if (skip && skip()) {
+      return;
+    }
 
     let { action } = options;
     if (!action) {

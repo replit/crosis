@@ -14,11 +14,15 @@ export type OpenChannelRes = { error: null; channel: Channel } | { error: Error;
  * This function gets called when a channel opens or there is an error opening.
  * It can return a function that can be used to cleanup an logic when the channle closes.
  * If there is an error opening the channel the cleanup function is not called. You can
- * think of it as a stream of values that terminates if/when there is an error.
+ * think of it as a stream of values that terminates if/when there is an error. A `skip`
+ * function may be provided to skip opening the channel conditionally on every reconnection.
  *
  * Example:
  *
- * const closeChannel = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
+ * const closeChannel = client.openChannel({
+ *   service: 'shell',
+ *   skip: () => !something.supportsShell(),
+ * }, ({ channel, error }) => {
  *   if (error) {
  *     // Bail, channel had an error connecting or reconnecting
  *     // Tihs callback will no longer be called
@@ -44,6 +48,7 @@ export interface ChannelOptions {
   name?: string;
   service: string;
   action?: api.OpenChannel.Action;
+  skip?: () => boolean;
 }
 
 export class Channel extends EventEmitter {
@@ -132,11 +137,7 @@ export class Channel extends EventEmitter {
    */
   public request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
     // Random base36 int
-    const ref = Number(
-      Math.random()
-        .toString()
-        .split('.')[1],
-    ).toString(36);
+    const ref = Number(Math.random().toString().split('.')[1]).toString(36);
     cmdJson.ref = ref;
 
     return new Promise((resolve) => {
@@ -199,7 +200,7 @@ export class Channel extends EventEmitter {
     if (this.openChannelCbClose) {
       this.openChannelCbClose(reason);
       this.openChannelCbClose = null;
-    } else {
+    } else if (!reason.willReconnect) {
       this.openChannelCb({
         error: new Error('Client closed before opening'),
         channel: null,
