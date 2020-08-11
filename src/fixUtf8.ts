@@ -26,10 +26,10 @@ function getDecoder() {
   if (typeof TextDecoder === 'undefined') {
     // Use eval to force bundlers to ignore require
     const util = eval('require("util")');
-    return new util.TextDecoder();
+    return new util.TextDecoder('utf8', { fatal: true, ignoreBOM: true });
   }
 
-  return new TextDecoder();
+  return new TextDecoder('utf8', { fatal: true, ignoreBOM: true });
 }
 
 const decoder = getDecoder();
