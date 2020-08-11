@@ -124,12 +124,46 @@ test('channel open and close', (done) => {
   });
 });
 
-test('channel skip open', (done) => {
+test('channel skips opening', (done) => {
+  const client = new Client();
+  const service = 'shell';
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+    },
+    ({ error }) => {
+      expect(error).toBeNull();
+
+      setTimeout(() => client.close());
+
+      return () => {
+        // eslint-disable-next-line
+        // @ts-ignore
+        const request = client.channelRequests.find((cr) => cr.options.service === service);
+
+        if (!request) {
+          throw new Error('Expected request');
+        }
+
+        // If currentChannel is null we didn't try to open a the channel
+        expect(request.currentChannel).toBeNull();
+        done();
+      };
+    },
+  );
+
+  client.openChannel({ service, skip: () => true }, () => {});
+});
+
+test('channel skips opening conditionally', (done) => {
   let disconnectTriggered = false;
   let clientOpenCount = 0;
   let channelOpenCount = 0;
 
   const client = new Client();
+  const service = 'shell';
 
   client.open(
     {
@@ -141,14 +175,7 @@ test('channel skip open', (done) => {
       expect(channel?.closed).toBe(false);
       expect(error).toEqual(null);
 
-      if (!disconnectTriggered) {
-        setTimeout(() => {
-          // eslint-disable-next-line
-          // @ts-ignore: trigger unintentional disconnect
-          client.ws?.onclose();
-          disconnectTriggered = true;
-        }, 1000);
-      } else {
+      if (disconnectTriggered) {
         setTimeout(() => client.close());
       }
 
@@ -167,10 +194,19 @@ test('channel skip open', (done) => {
 
   client.openChannel(
     {
-      skip: () => clientOpenCount > 0,
-      service: 'shell',
+      skip: () => channelOpenCount > 0,
+      service,
     },
     ({ channel, error }) => {
+      if (!disconnectTriggered) {
+        setTimeout(() => {
+          // eslint-disable-next-line
+          // @ts-ignore: trigger unintentional disconnect
+          client.ws?.onclose();
+          disconnectTriggered = true;
+        }, 1000);
+      }
+
       channelOpenCount += 1;
       expect(channel?.closed).toBe(false);
       expect(error).toBe(null);
