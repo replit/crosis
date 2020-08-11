@@ -11,7 +11,7 @@ import * as utf8 from '@protobufjs/utf8';
 
 function getEncoder() {
   // If there's no window, we'll assume we're in NodeJS and use util.TextEncoder
-  if (typeof window === 'undefined') {
+  if (typeof TextEncoder === 'undefined') {
     // Use eval to force bundlers to ignore require
     // eslint-disable-next-line no-eval
     const util = eval('require("util")');
@@ -23,7 +23,7 @@ function getEncoder() {
 
 function getDecoder() {
   // If there's no window, we'll assume we're in NodeJS and use util.TextEncoder
-  if (typeof window === 'undefined') {
+  if (typeof TextDecoder === 'undefined') {
     // Use eval to force bundlers to ignore require
     const util = eval('require("util")');
     return new util.TextDecoder();
