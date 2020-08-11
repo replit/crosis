@@ -10,7 +10,7 @@ utf8.ready/write functions and force it to use WHATWG TextDecoder/Encoder
 import * as utf8 from '@protobufjs/utf8';
 
 function getEncoder() {
-  // If there's no window, we'll assume we're in NodeJS and use util.TextEncoder
+  // If there's no TextEncoder, we'll assume we're in NodeJS and use util.TextEncoder
   if (typeof TextEncoder === 'undefined') {
     // Use eval to force bundlers to ignore require
     // eslint-disable-next-line no-eval
@@ -22,7 +22,7 @@ function getEncoder() {
 }
 
 function getDecoder() {
-  // If there's no window, we'll assume we're in NodeJS and use util.TextEncoder
+  // If there's no TextDecoder, we'll assume we're in NodeJS and use util.TextEncoder
   if (typeof TextDecoder === 'undefined') {
     // Use eval to force bundlers to ignore require
     const util = eval('require("util")');
