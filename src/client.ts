@@ -97,6 +97,8 @@ export class Client extends EventEmitter {
     [id: number]: Channel;
   };
 
+  private inflightChannels: Set<Channel>;
+
   private debug: DebugFunc;
 
   private didConnect: boolean;
@@ -114,6 +116,7 @@ export class Client extends EventEmitter {
     this.channels = {
       0: new Channel(),
     };
+    this.inflightChannels = new Set();
     this.token = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
@@ -232,11 +235,7 @@ export class Client extends EventEmitter {
     const channel = new Channel();
 
     // Random base36 int
-    const ref = Number(
-      Math.random()
-        .toString()
-        .split('.')[1],
-    ).toString(36);
+    const ref = Number(Math.random().toString().split('.')[1]).toString(36);
 
     const chan0 = this.getChannel(0);
     // avoid warnings on listener count
@@ -255,6 +254,8 @@ export class Client extends EventEmitter {
       },
     });
 
+    this.inflightChannels.add(channel);
+
     const onResponse = (cmd: api.Command) => {
       if (ref !== cmd.ref) {
         return;
@@ -264,6 +265,7 @@ export class Client extends EventEmitter {
         throw new Error('Expected openChanRes on command');
       }
 
+      this.inflightChannels.delete(channel);
       this.handleOpenChanRes(channel, cmd.openChanRes);
 
       chan0.setMaxListeners(chan0.getMaxListeners() - 1);
@@ -436,6 +438,16 @@ export class Client extends EventEmitter {
         initiator: 'client',
         clientCloseReason: closeResult.closeReason,
       });
+    });
+
+    // These are channels that never opened, but we should emit the
+    // close event on them anyway to do proper cleanup
+    this.inflightChannels.forEach((chan) => {
+      chan.onClose({
+        initiator: 'client',
+        clientCloseReason: closeResult.closeReason,
+      });
+      this.inflightChannels.delete(chan);
     });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
