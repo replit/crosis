@@ -47,7 +47,7 @@ type DebugLog =
     };
 type DebugFunc = (log: DebugLog) => void;
 
-interface ConnectOptions {
+interface ConnectOptions<D = any> {
   fetchToken: () => Promise<string>;
   urlOptions: UrlOptions;
   polling: boolean;
@@ -55,6 +55,7 @@ interface ConnectOptions {
   reconnect: boolean;
   WebSocketClass?: typeof WebSocket;
   maxConnectRetries: number;
+  context?: D;
 }
 
 interface ChannelRequest {
@@ -244,7 +245,7 @@ export class Client extends EventEmitter {
     const { options, openChannelCb } = channelRequest;
 
     const { skip } = options;
-    if (skip && skip()) {
+    if (skip && skip(this.connectOptions.context)) {
       return;
     }
 
@@ -324,7 +325,7 @@ export class Client extends EventEmitter {
       this.channels[id] = channel;
       channelRequest.currentChannel = channel;
 
-      channel.handleOpen({ id, state, send: this.send });
+      channel.handleOpen({ id, state, send: this.send, context: this.connectOptions.context });
     });
   };
 
@@ -569,6 +570,7 @@ export class Client extends EventEmitter {
               id: 0,
               state: api.OpenChannelRes.State.CREATED,
               send: this.send,
+              context: this.connectOptions.context,
             });
 
             // If user called close inside open callback (throws a error) we should not continue connecting
@@ -669,10 +671,13 @@ export class Client extends EventEmitter {
 
         const channel = this.channels[cmd.closeChanRes.id];
 
-        channel.handleClose({
-          initiator: 'channel',
-          willReconnect: false,
-        });
+        channel.handleClose(
+          {
+            initiator: 'channel',
+            willReconnect: false,
+          },
+          this.connectOptions.context,
+        );
 
         delete this.channels[cmd.closeChanRes.id];
 
@@ -766,7 +771,7 @@ export class Client extends EventEmitter {
         return;
       }
 
-      channel.handleClose(closeReason);
+      channel.handleClose(closeReason, this.connectOptions.context);
     });
 
     this.connectionState = ConnectionState.DISCONNECTED;

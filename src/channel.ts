@@ -8,7 +8,9 @@ export interface RequestResult extends api.Command {
 
 type OnCloseFn = (reason: ChannelCloseReason) => void;
 
-export type OpenChannelRes = { error: null; channel: Channel } | { error: Error; channel: null };
+export type OpenChannelRes<D = any> =
+  | { error: null; channel: Channel; context?: D }
+  | { error: Error; channel: null; context?: D };
 
 /**
  * This function gets called when a channel opens or there is an error opening.
@@ -44,11 +46,11 @@ export type OpenChannelRes = { error: null; channel: Channel } | { error: Error;
  */
 export type OpenChannelCb = (res: OpenChannelRes) => void | OnCloseFn;
 
-export interface ChannelOptions {
+export interface ChannelOptions<D = any> {
   name?: string;
   service: string;
   action?: api.OpenChannel.Action;
-  skip?: () => boolean;
+  skip?: (context: D) => boolean;
 }
 
 export class Channel extends EventEmitter {
@@ -156,16 +158,18 @@ export class Channel extends EventEmitter {
     id,
     state,
     send,
+    context,
   }: {
     id: number;
     state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED;
     send: (cmd: api.Command) => void;
+    context?: any;
   }) => {
     this.id = id;
     this.sendToClient = send;
     this.state = state;
 
-    this.openChannelCbClose = this.openChannelCb({ channel: this, error: null });
+    this.openChannelCbClose = this.openChannelCb({ channel: this, error: null, context });
   };
 
   /**
@@ -187,7 +191,7 @@ export class Channel extends EventEmitter {
    *
    * Called when the channel or client is closed
    */
-  public handleClose = (reason: ChannelCloseReason) => {
+  public handleClose = (reason: ChannelCloseReason, context?: any) => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;
@@ -202,8 +206,9 @@ export class Channel extends EventEmitter {
       this.openChannelCbClose = null;
     } else if (!reason.willReconnect) {
       this.openChannelCb({
-        error: new Error('Client closed before opening'),
+        error: new Error('Channel closed'),
         channel: null,
+        context,
       });
     }
 
