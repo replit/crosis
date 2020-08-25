@@ -414,3 +414,39 @@ test('closing client while opening', (done) => {
     },
   );
 });
+
+test('connecting with a context object', (done) => {
+  const client = new Client();
+  const user = 'abc';
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      WebSocketClass: WebSocket,
+      context: { user },
+    },
+    () => {},
+  );
+
+  client.openChannel(
+    {
+      service: 'shell',
+      skip: (context) => {
+        expect(context).toEqual({ user });
+
+        return false;
+      },
+    },
+    ({ error, context }) => {
+      expect(context).toEqual({ user });
+
+      if (error) {
+        // Client closed so test is done.
+        done();
+        return;
+      }
+
+      client.close();
+    },
+  );
+});
