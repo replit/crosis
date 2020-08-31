@@ -9,8 +9,8 @@ export interface RequestResult extends api.Command {
 type OnCloseFn = (reason: ChannelCloseReason) => void;
 
 export type OpenChannelRes<D = any> =
-  | { error: null; channel: Channel; context?: D }
-  | { error: Error; channel: null; context?: D };
+  | { error: null; channel: Channel; context: D }
+  | { error: Error; channel: null; context: D };
 
 /**
  * This function gets called when a channel opens or there is an error opening.
@@ -44,7 +44,7 @@ export type OpenChannelRes<D = any> =
  * closeChannel() // Will call potential returned cleanup function
  *
  */
-export type OpenChannelCb = (res: OpenChannelRes) => void | OnCloseFn;
+export type OpenChannelCb<D = any> = (res: OpenChannelRes<D>) => void | OnCloseFn;
 
 export interface ChannelOptions<D = any> {
   name?: string;
@@ -163,7 +163,7 @@ export class Channel extends EventEmitter {
     id: number;
     state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED;
     send: (cmd: api.Command) => void;
-    context?: any;
+    context: any;
   }) => {
     this.id = id;
     this.sendToClient = send;
@@ -191,7 +191,7 @@ export class Channel extends EventEmitter {
    *
    * Called when the channel or client is closed
    */
-  public handleClose = (reason: ChannelCloseReason, context?: any) => {
+  public handleClose = (reason: ChannelCloseReason, context: any) => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;
@@ -220,8 +220,8 @@ export class Channel extends EventEmitter {
    *
    * Called when the channel has an error opening
    */
-  public handleError = (error: Error) => {
-    this.openChannelCb({ error, channel: null });
+  public handleError = (error: Error, context: any) => {
+    this.openChannelCb({ error, channel: null, context });
     this.openChannelCbClose = null;
     this.removeAllListeners();
   };

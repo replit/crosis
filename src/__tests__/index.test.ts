@@ -419,16 +419,18 @@ test('connecting with a context object', (done) => {
   const client = new Client();
   const user = 'abc';
 
-  client.open(
+  client.open<{ user: string }>(
     {
       fetchToken: () => Promise.resolve(REPL_TOKEN),
       WebSocketClass: WebSocket,
       context: { user },
     },
-    () => {},
+    ({ context }) => {
+      expect(context).toEqual({ user });
+    },
   );
 
-  client.openChannel(
+  client.openChannel<{ user: string }>(
     {
       service: 'shell',
       skip: (context) => {

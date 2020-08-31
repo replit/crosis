@@ -55,7 +55,7 @@ interface ConnectOptions<D = any> {
   reconnect: boolean;
   WebSocketClass?: typeof WebSocket;
   maxConnectRetries: number;
-  context?: D;
+  context: D;
 }
 
 interface ChannelRequest {
@@ -67,7 +67,7 @@ interface ChannelRequest {
 /**
  * The only required option is `fetchToken`, all others are optional and will use defaults
  */
-interface ConnectArgs extends Partial<Omit<ConnectOptions, 'fetchToken'>> {
+interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
   fetchToken: () => Promise<string>;
 }
 
@@ -169,6 +169,7 @@ export class Client extends EventEmitter {
         port: '80',
       },
       fetchToken: () => Promise.reject(new Error('You must provide a fetchToken function')),
+      context: null,
     };
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
@@ -187,7 +188,7 @@ export class Client extends EventEmitter {
    * Every client automatically "has" channel 0 and can use it to open more channels.
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public open = (options: ConnectArgs, cb: OpenChannelCb) => {
+  public open = <D = any>(options: ConnectArgs<D>, cb: OpenChannelCb<D>) => {
     if (this.chan0Cb) {
       throw new Error('You must call `close` before opening the client again');
     }
@@ -223,7 +224,7 @@ export class Client extends EventEmitter {
    *
    * http://protodoc.turbio.repl.co/protov2#opening-channels
    */
-  public openChannel = (options: ChannelOptions, cb: OpenChannelCb) => {
+  public openChannel = <D = any>(options: ChannelOptions, cb: OpenChannelCb<D>) => {
     const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };
     this.channelRequests.push(channelRequest);
 
@@ -313,7 +314,10 @@ export class Client extends EventEmitter {
 
       if (state === api.OpenChannelRes.State.ERROR) {
         this.debug({ type: 'breadcrumb', message: 'error', data: error });
-        channel.handleError(new Error(error || 'Something went wrong'));
+        channel.handleError(
+          new Error(error || 'Something went wrong'),
+          this.connectOptions.context,
+        );
 
         return;
       }
@@ -803,17 +807,18 @@ export class Client extends EventEmitter {
     }
 
     const chan0 = this.getChannel(0);
+    const { context } = this.connectOptions;
 
     if (!chan0.closed) {
-      chan0.handleError(error);
+      chan0.handleError(error, context);
     }
 
     this.channelRequests.forEach(({ currentChannel, openChannelCb }) => {
       if (currentChannel && !currentChannel.closed) {
-        currentChannel.handleError(error);
+        currentChannel.handleError(error, context);
       } else {
         // Channel was never opened
-        openChannelCb({ error, channel: null });
+        openChannelCb({ error, channel: null, context });
       }
     });
 
