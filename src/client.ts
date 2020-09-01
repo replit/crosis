@@ -1,6 +1,5 @@
 /* global WebSocket */
 
-import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { Channel, ChannelOptions, OpenChannelCb } from './channel';
 import { EIOCompat } from './EIOCompat';
@@ -122,7 +121,7 @@ const getWebSocketClass = (options: ConnectOptions) => {
   throw new Error('Please pass in a WebSocket class, add it to global, or use the polling option');
 };
 
-export class Client extends EventEmitter {
+export class Client {
   public static ClientCloseReason = ClientCloseReason;
 
   public connectionState: ConnectionState;
@@ -154,8 +153,6 @@ export class Client extends EventEmitter {
   }
 
   constructor(debug: DebugFunc = () => {}) {
-    super();
-
     this.ws = null;
     this.channels = {};
     this.connectOptions = {
@@ -400,7 +397,7 @@ export class Client extends EventEmitter {
       chan0.send({ ping: {} });
     };
 
-    chan0.on('command', (cmd) => {
+    chan0.onCommand((cmd) => {
       if (cmd.body === 'pong') {
         const pongTime = Date.now();
         const latency = pongTime - pingTime;
@@ -785,7 +782,6 @@ export class Client extends EventEmitter {
       !this.connectOptions.reconnect
     ) {
       // Client is done being used
-      this.removeAllListeners();
       this.chan0Cb = null;
       return;
     }

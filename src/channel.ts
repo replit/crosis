@@ -53,7 +53,7 @@ export interface ChannelOptions<D = any> {
   skip?: (context: D) => boolean;
 }
 
-export class Channel extends EventEmitter {
+export class Channel {
   // public
   public state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED | null;
 
@@ -67,11 +67,11 @@ export class Channel extends EventEmitter {
 
   private openChannelCb: OpenChannelCb;
 
+  private emitter: EventEmitter;
+
   private openChannelCbClose: ReturnType<OpenChannelCb> | null;
 
   constructor(config: { openChannelCb: OpenChannelCb }) {
-    super();
-
     this.id = null;
     this.sendToClient = null;
     this.state = null;
@@ -79,12 +79,13 @@ export class Channel extends EventEmitter {
     this.requestMap = {};
     this.openChannelCb = config.openChannelCb;
     this.openChannelCbClose = null;
+    this.emitter = new EventEmitter();
   }
 
   public onCommand = (listener: (cmd: api.Command) => void) => {
-    this.on('command', listener);
+    this.emitter.on('command', listener);
 
-    return () => this.removeListener('command', listener);
+    return () => this.emitter.removeListener('command', listener);
   };
 
   /**
@@ -178,7 +179,7 @@ export class Channel extends EventEmitter {
    * Called when the channel recieves a message
    */
   public handleCommand = (cmd: api.Command) => {
-    this.emit('command', cmd);
+    this.emitter.emit('command', cmd);
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
       this.requestMap[cmd.ref](cmd);
@@ -212,7 +213,7 @@ export class Channel extends EventEmitter {
       });
     }
 
-    this.removeAllListeners();
+    this.emitter.removeAllListeners();
   };
 
   /**
@@ -223,6 +224,26 @@ export class Channel extends EventEmitter {
   public handleError = (error: Error, context: any) => {
     this.openChannelCb({ error, channel: null, context });
     this.openChannelCbClose = null;
-    this.removeAllListeners();
+    this.emitter.removeAllListeners();
   };
+
+  /**
+   * @hidden should only be called by [[Client]]
+   *
+   * Used to avoid warnings on listener count
+   */
+
+  setMaxListeners(count: number) {
+    this.emitter.setMaxListeners(count);
+  }
+
+  /**
+   * @hidden should only be called by [[Client]]
+   *
+   * Used to avoid warnings on listener count
+   */
+
+  getMaxListeners() {
+    return this.emitter.getMaxListeners();
+  }
 }
