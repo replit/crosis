@@ -827,6 +827,16 @@ export class Client {
   private cleanupSocket = () => {
     const { ws } = this;
 
+    this.debug({
+      type: 'breadcrumb',
+      message: 'cleanupSocket',
+      data: {
+        hasWs: Boolean(ws),
+        readyState: ws ? ws.readyState : null,
+        connectionState: this.connectionState,
+      },
+    });
+
     if (!ws) {
       return;
     }
