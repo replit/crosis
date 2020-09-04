@@ -8,6 +8,9 @@ utf8.read function to our own fixed version.
 import * as utf8 from '@protobufjs/utf8';
 
 function utf8ReadFixed(buffer: Uint8Array, start: number, end: number) {
+  // this function is really a utf8 -> utf16 encoder (decoder???). Ideally we'd
+  // be using the environment's built in TextDecoder but this has unreliable
+  // behavior around BOM chars in some environments.
   if (end - start < 1) {
     return '';
   }
@@ -15,21 +18,44 @@ function utf8ReadFixed(buffer: Uint8Array, start: number, end: number) {
   let str = '';
   for (let i = start; i < end;) {
     const t = buffer[i++];
-    if (t < 128) {
+    if (t <= 0x7F) {
+      // regular ol ascii, easy peasy
+      // 0aaaaaaa
       str += String.fromCharCode(t);
-    } else if (t > 191 && t < 224) {
-      str += String.fromCharCode(((t & 31) << 6) | (buffer[i++] & 63));
-    } else if (t > 239 && t < 365) {
+    } else if (t >= 0xC0 && t < 0xE0) {
+      // the only time utf16 is actually a  bro. A two byte utf8 code point can
+      // be concated right into a utf16 code point.
+      //
+      // 110aaaaa 10bbbbbb
+      // -> 00000aaaaabbbbbb
+      str += String.fromCharCode(((t & 0x1F) << 6) | (buffer[i++] & 0x3F));
+    } else if (t >= 0xE0 && t < 0xF0) {
+      // also pretty straight forward. Worth noting this won't collide with
+      // surrogate pairs as that section has been reserved.
+      //
+      // 1110aaaa 10bbbbbb 10cccccc
+      // -> aaaabbbbbbcccccc
+      str += String.fromCharCode(
+        ((t & 0xF) << 12) |
+        ((buffer[i++] & 0x3F) << 6) |
+        (buffer[i++] & 0x3F
+      ));
+    } else if (t >= 0xF0) {
+      // here's where things really get nasty. These code points end up as
+      // utf16 surrogate pairs. It looks something like:
+      //
+      // 11110aaa 10bbbbbb 10cccccc 10dddddd
+      // concat the code units aaabbbbbbccccccdddddd
+      // subtract 0x10000
+      // -> 110110aabbbbbbcc 110111ccccdddddd
       const t2 =
         (((t & 7) << 18) |
-          ((buffer[i++] & 63) << 12) |
-          ((buffer[i++] & 63) << 6) |
-          (buffer[i++] & 63)) -
+          ((buffer[i++] & 0x3F) << 12) |
+          ((buffer[i++] & 0x3F) << 6) |
+          (buffer[i++] & 0x3F)) -
         0x10000;
-      str += String.fromCharCode(0xd800 + (t2 >> 10));
-      str += String.fromCharCode(0xdc00 + (t2 & 1023));
-    } else {
-      str += String.fromCharCode(((t & 15) << 12) | ((buffer[i++] & 63) << 6) | (buffer[i++] & 63));
+      str += String.fromCharCode(0xD800 + (t2 >> 10));
+      str += String.fromCharCode(0xDC00 + (t2 & 0x3FF));
     }
   }
 
