@@ -52,11 +52,7 @@ export class Channel extends EventEmitter {
    */
   public request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
     // Random base36 int
-    const ref = Number(
-      Math.random()
-        .toString()
-        .split('.')[1],
-    ).toString(36);
+    const ref = Number(Math.random().toString().split('.')[1]).toString(36);
     cmdJson.ref = ref;
 
     return new Promise((resolve) => {
