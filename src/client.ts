@@ -789,6 +789,12 @@ export class Client {
     this.debug({
       type: 'breadcrumb',
       message: 'reconnecting',
+      data: {
+        ...this.connectOptions,
+        ...closeReason,
+        connectTries: this.connectTries,
+        chan0Cb: this.chan0Cb,
+      },
     });
 
     this.connect();
