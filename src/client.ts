@@ -30,6 +30,7 @@ interface TxRx {
   direction: 'in' | 'out';
   cmd: api.Command;
 }
+
 type DebugLog =
   | {
       type: 'breadcrumb';
@@ -44,6 +45,7 @@ type DebugLog =
       type: 'ping';
       latency: number;
     };
+
 type DebugFunc = (log: DebugLog) => void;
 
 interface ConnectOptions<D = any> {
@@ -102,6 +104,10 @@ const isWebSocket = (w: unknown): w is WebSocket => {
  * @hidden
  */
 const getWebSocketClass = (options: ConnectOptions) => {
+  if (options.polling) {
+    return EIOCompat;
+  }
+
   if (options.WebSocketClass) {
     if (!isWebSocket(options.WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');
@@ -443,9 +449,7 @@ export class Client {
     const chan0 = new Channel({ openChannelCb: this.chan0Cb });
     this.channels[0] = chan0;
 
-    const WebSocketClass = this.connectOptions.polling
-      ? EIOCompat
-      : getWebSocketClass(this.connectOptions);
+    const WebSocketClass = getWebSocketClass(this.connectOptions);
 
     this.connectOptions.fetchToken().then((token) => {
       if (this.connectionState !== ConnectionState.CONNECTING) {
