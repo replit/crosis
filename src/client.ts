@@ -140,7 +140,7 @@ export class Client {
 
   private debug: DebugFunc;
 
-  private retryTimer: ReturnType<typeof setTimeout> | null;
+  private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
   private connectTries: number;
 
@@ -173,7 +173,7 @@ export class Client {
     this.debug = debug;
     this.channelRequests = [];
     this.connectTries = 0;
-    this.retryTimer = null;
+    this.retryTimeoutId = null;
     this.connectToken = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
@@ -548,8 +548,8 @@ export class Client {
             // Once we're READY we can stop listening to incoming commands
             dispose();
 
-            if (this.retryTimer) {
-              clearTimeout(this.retryTimer);
+            if (this.retryTimeoutId) {
+              clearTimeout(this.retryTimeoutId);
             }
             cancelTimeout();
 
@@ -604,7 +604,7 @@ export class Client {
         // TODO: Details
         // Should this also handle a fall back to polling?
         if (this.connectTries <= this.connectOptions.maxConnectRetries) {
-          this.retryTimer = setTimeout(() => {
+          this.retryTimeoutId = setTimeout(() => {
             this.debug({
               type: 'breadcrumb',
               message: 'retrying',
@@ -745,9 +745,9 @@ export class Client {
 
     this.connectToken = null;
 
-    if (this.retryTimer) {
+    if (this.retryTimeoutId) {
       // Client was closed while reconnecting
-      clearTimeout(this.retryTimer);
+      clearTimeout(this.retryTimeoutId);
     }
 
     const willReconnect =
@@ -797,9 +797,9 @@ export class Client {
   private handleConnectError = (error: Error) => {
     this.connectToken = null;
 
-    if (this.retryTimer) {
+    if (this.retryTimeoutId) {
       // Client was closed while reconnecting
-      clearTimeout(this.retryTimer);
+      clearTimeout(this.retryTimeoutId);
     }
 
     const chan0 = this.getChannel(0);
