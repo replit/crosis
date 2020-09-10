@@ -72,17 +72,17 @@ interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> 
   fetchToken: () => Promise<string>;
 }
 
-const backoffFactor = 1.7;
-const maxBackoff = 15000;
+const BACKOFF_FACTOR = 1.7;
+const MAX_BACKOFF = 15000;
 
 /**
  * @hidden
  */
 const getNextRetryDelay = (retryNumber: number) => {
   const randomMs = Math.floor(Math.random() * 500);
-  const backoff = backoffFactor ** retryNumber * 1000;
+  const backoff = BACKOFF_FACTOR ** retryNumber * 1000;
 
-  return Math.min(backoff, maxBackoff) + randomMs;
+  return Math.min(backoff, MAX_BACKOFF) + randomMs;
 };
 
 /**
