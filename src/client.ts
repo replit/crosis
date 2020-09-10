@@ -86,7 +86,7 @@ const getNextRetryDelay = (retryNumber: number) => {
 /**
  * @hidden
  */
-const isWebSocket = (w: typeof WebSocket | unknown) => {
+const isWebSocket = (w: unknown): w is WebSocket => {
   if (typeof w !== 'object' && typeof w !== 'function') {
     return false;
   }
