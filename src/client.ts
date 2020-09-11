@@ -609,8 +609,6 @@ export class Client {
         cancelTimeout();
         dispose();
 
-        // TODO: Details
-        // Should this also handle a fall back to polling?
         if (this.connectTries <= this.connectOptions.maxConnectRetries) {
           this.retryTimeoutId = setTimeout(() => {
             this.debug({
@@ -624,6 +622,34 @@ export class Client {
               },
             });
             this.connectionState = ConnectionState.DISCONNECTED;
+            this.connect();
+          }, getNextRetryDelay(this.connectTries));
+
+          return;
+        }
+
+        // Fall back to polling
+        if (
+          this.connectTries === this.connectOptions.maxConnectRetries + 1 &&
+          !this.connectOptions.polling
+        ) {
+          this.retryTimeoutId = setTimeout(() => {
+            this.connectionState = ConnectionState.DISCONNECTED;
+
+            this.connectOptions.urlOptions.host = 'gp-v2.herokuapp.com';
+            this.connectOptions.polling = true;
+
+            this.debug({
+              type: 'breadcrumb',
+              message: 'falling back to polling',
+              data: {
+                connectionState: this.connectionState,
+                connectTries: this.connectTries,
+                error,
+                wsReadyState: this.ws ? this.ws.readyState : undefined,
+              },
+            });
+
             this.connect();
           }, getNextRetryDelay(this.connectTries));
 
