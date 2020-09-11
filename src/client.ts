@@ -30,6 +30,7 @@ interface TxRx {
   direction: 'in' | 'out';
   cmd: api.Command;
 }
+
 type DebugLog =
   | {
       type: 'breadcrumb';
@@ -44,6 +45,7 @@ type DebugLog =
       type: 'ping';
       latency: number;
     };
+
 type DebugFunc = (log: DebugLog) => void;
 
 interface ConnectOptions<D = any> {
@@ -70,23 +72,23 @@ interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> 
   fetchToken: () => Promise<string>;
 }
 
-const backoffFactor = 1.7;
-const maxBackoff = 15000;
+const BACKOFF_FACTOR = 1.7;
+const MAX_BACKOFF = 15000;
 
 /**
  * @hidden
  */
 const getNextRetryDelay = (retryNumber: number) => {
   const randomMs = Math.floor(Math.random() * 500);
-  const backoff = backoffFactor ** retryNumber * 1000;
+  const backoff = BACKOFF_FACTOR ** retryNumber * 1000;
 
-  return Math.min(backoff, maxBackoff) + randomMs;
+  return Math.min(backoff, MAX_BACKOFF) + randomMs;
 };
 
 /**
  * @hidden
  */
-const isWebSocket = (w: typeof WebSocket | unknown) => {
+const isWebSocket = (w: unknown): w is WebSocket => {
   if (typeof w !== 'object' && typeof w !== 'function') {
     return false;
   }
@@ -102,6 +104,10 @@ const isWebSocket = (w: typeof WebSocket | unknown) => {
  * @hidden
  */
 const getWebSocketClass = (options: ConnectOptions) => {
+  if (options.polling) {
+    return EIOCompat;
+  }
+
   if (options.WebSocketClass) {
     if (!isWebSocket(options.WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');
@@ -140,7 +146,7 @@ export class Client {
 
   private debug: DebugFunc;
 
-  private retryTimer: ReturnType<typeof setTimeout> | null;
+  private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
   private connectTries: number;
 
@@ -173,7 +179,7 @@ export class Client {
     this.debug = debug;
     this.channelRequests = [];
     this.connectTries = 0;
-    this.retryTimer = null;
+    this.retryTimeoutId = null;
     this.connectToken = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
@@ -443,9 +449,7 @@ export class Client {
     const chan0 = new Channel({ openChannelCb: this.chan0Cb });
     this.channels[0] = chan0;
 
-    const WebSocketClass = this.connectOptions.polling
-      ? EIOCompat
-      : getWebSocketClass(this.connectOptions);
+    const WebSocketClass = getWebSocketClass(this.connectOptions);
 
     this.connectOptions.fetchToken().then((token) => {
       if (this.connectionState !== ConnectionState.CONNECTING) {
@@ -548,8 +552,8 @@ export class Client {
             // Once we're READY we can stop listening to incoming commands
             dispose();
 
-            if (this.retryTimer) {
-              clearTimeout(this.retryTimer);
+            if (this.retryTimeoutId) {
+              clearTimeout(this.retryTimeoutId);
             }
             cancelTimeout();
 
@@ -595,8 +599,8 @@ export class Client {
       });
 
       onFailed = (error: Error) => {
-        if (this.retryTimer) {
-          clearTimeout(this.retryTimer);
+        if (this.retryTimeoutId) {
+          clearTimeout(this.retryTimeoutId);
         }
 
         // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
@@ -608,7 +612,7 @@ export class Client {
         // TODO: Details
         // Should this also handle a fall back to polling?
         if (this.connectTries <= this.connectOptions.maxConnectRetries) {
-          this.retryTimer = setTimeout(() => {
+          this.retryTimeoutId = setTimeout(() => {
             this.debug({
               type: 'breadcrumb',
               message: 'retrying',
@@ -749,9 +753,9 @@ export class Client {
 
     this.connectToken = null;
 
-    if (this.retryTimer) {
+    if (this.retryTimeoutId) {
       // Client was closed while reconnecting
-      clearTimeout(this.retryTimer);
+      clearTimeout(this.retryTimeoutId);
     }
 
     const willReconnect =
@@ -801,9 +805,9 @@ export class Client {
   private handleConnectError = (error: Error) => {
     this.connectToken = null;
 
-    if (this.retryTimer) {
+    if (this.retryTimeoutId) {
       // Client was closed while reconnecting
-      clearTimeout(this.retryTimer);
+      clearTimeout(this.retryTimeoutId);
     }
 
     const chan0 = this.getChannel(0);
