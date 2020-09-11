@@ -599,8 +599,8 @@ export class Client {
       });
 
       onFailed = (error: Error) => {
-        if (this.retryTimer) {
-          clearTimeout(this.retryTimer);
+        if (this.retryTimeoutId) {
+          clearTimeout(this.retryTimeoutId);
         }
 
         // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
