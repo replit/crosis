@@ -11,6 +11,8 @@ if (!REPL_TOKEN) {
   throw new Error('REPL_TOKEN is required');
 }
 
+jest.setTimeout(10 * 1000);
+
 test('client connect', (done) => {
   const client = new Client();
 
@@ -450,5 +452,44 @@ test('connecting with a context object', (done) => {
 
       client.close();
     },
+  );
+});
+
+test('falling back to polling', (done) => {
+  const client = new Client();
+
+  const maxConnectRetries = 1;
+  const open = jest.fn();
+
+  client.setDebugFunc((log) => {
+    if (log.type === 'breadcrumb' && log.message === 'falling back to polling') {
+      // eslint-disable-next-line
+      const data = log.data as any;
+
+      expect(data.connectTries).toEqual(maxConnectRetries + 1);
+      expect(data.error).toBeDefined();
+      expect(data.wsReadyState).toBeUndefined();
+
+      // eslint-disable-next-line
+      // @ts-ignore need to reach in and grab some private fields real quick...
+      const { urlOptions, polling } = client.connectOptions;
+
+      expect(urlOptions.host).toEqual('gp-v2.herokuapp.com');
+      expect(polling).toBe(true);
+
+      expect(open).not.toHaveBeenCalled();
+      done();
+    }
+  });
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve('bad token'),
+      WebSocketClass: WebSocket,
+      maxConnectRetries,
+      timeout: 0,
+      polling: false,
+    },
+    open,
   );
 });
