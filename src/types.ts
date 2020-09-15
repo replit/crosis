@@ -1,6 +1,4 @@
-/**
- * This file contains types shared between the Channel and Client.
- */
+/* global WebSocket */
 
 import { api } from '@replit/protocol';
 
@@ -32,4 +30,28 @@ export interface ChannelOptions<D = any> {
   service: string;
   action?: api.OpenChannel.Action;
   skip?: (context: D) => boolean;
+}
+
+export interface UrlOptions {
+  secure: boolean;
+  host: string;
+  port: string;
+}
+
+export interface ConnectOptions<D = any> {
+  fetchToken: () => Promise<string>;
+  urlOptions: UrlOptions;
+  polling: boolean;
+  timeout: number | null;
+  reconnect: boolean;
+  WebSocketClass?: typeof WebSocket;
+  maxConnectRetries: number;
+  context: D;
+}
+
+/**
+ * The only required option is `fetchToken`, all others are optional and will use defaults
+ */
+export interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
+  fetchToken: () => Promise<string>;
 }
