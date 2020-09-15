@@ -8,44 +8,10 @@ import {
   UrlOptions,
   ConnectOptions,
   ConnectArgs,
+  CloseResult,
+  ConnectionState,
+  DebugFunc,
 } from './types';
-
-type CloseResult =
-  | {
-      closeReason: ClientCloseReason.Intentional;
-    }
-  | {
-      closeReason: ClientCloseReason.Disconnected;
-      wsEvent: CloseEvent | ErrorEvent;
-    };
-
-enum ConnectionState {
-  CONNECTING = 0,
-  CONNECTED = 1,
-  DISCONNECTED = 2,
-}
-
-interface TxRx {
-  direction: 'in' | 'out';
-  cmd: api.Command;
-}
-
-type DebugLog =
-  | {
-      type: 'breadcrumb';
-      message: string;
-      data?: unknown;
-    }
-  | {
-      type: 'log';
-      log: TxRx;
-    }
-  | {
-      type: 'ping';
-      latency: number;
-    };
-
-type DebugFunc = (log: DebugLog) => void;
 
 interface ChannelRequest {
   options: ChannelOptions;

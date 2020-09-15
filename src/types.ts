@@ -55,3 +55,41 @@ export interface ConnectOptions<D = any> {
 export interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
   fetchToken: () => Promise<string>;
 }
+
+export type CloseResult =
+  | {
+      closeReason: ClientCloseReason.Intentional;
+    }
+  | {
+      closeReason: ClientCloseReason.Disconnected;
+      wsEvent: CloseEvent | ErrorEvent;
+    };
+
+export enum ConnectionState {
+  CONNECTING = 0,
+  CONNECTED = 1,
+  DISCONNECTED = 2,
+}
+
+interface TxRx {
+  direction: 'in' | 'out';
+  cmd: api.Command;
+}
+
+type DebugLog =
+  | {
+      type: 'breadcrumb';
+      message: string;
+      data?: unknown;
+    }
+  | {
+      type: 'log';
+      log: TxRx;
+    }
+  | {
+      type: 'ping';
+      latency: number;
+    };
+
+export type DebugFunc = (log: DebugLog) => void;
+
