@@ -1,16 +1,10 @@
 import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
-import { ChannelCloseReason } from './closeReasons';
+import { ChannelCloseReason } from './types';
 
 export interface RequestResult extends api.Command {
   channelClosed?: ChannelCloseReason;
 }
-
-type OnCloseFn = (reason: ChannelCloseReason) => void;
-
-export type OpenChannelRes<D = any> =
-  | { error: null; channel: Channel; context: D }
-  | { error: Error; channel: null; context: D };
 
 /**
  * This function gets called when a channel opens or there is an error opening.
@@ -46,12 +40,11 @@ export type OpenChannelRes<D = any> =
  */
 export type OpenChannelCb<D = any> = (res: OpenChannelRes<D>) => void | OnCloseFn;
 
-export interface ChannelOptions<D = any> {
-  name?: string;
-  service: string;
-  action?: api.OpenChannel.Action;
-  skip?: (context: D) => boolean;
-}
+type OnCloseFn = (reason: ChannelCloseReason) => void;
+
+export type OpenChannelRes<D = any> =
+  | { error: null; channel: Channel; context: D }
+  | { error: Error; channel: null; context: D };
 
 export class Channel {
   // public

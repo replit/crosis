@@ -1,9 +1,9 @@
 /* global WebSocket */
 
 import { api } from '@replit/protocol';
-import { Channel, ChannelOptions, OpenChannelCb } from './channel';
-import { EIOCompat } from './EIOCompat';
-import { ClientCloseReason, ChannelCloseReason } from './closeReasons';
+import { EIOCompat } from './util/EIOCompat';
+import { Channel, OpenChannelCb } from './channel';
+import { ClientCloseReason, ChannelCloseReason, ChannelOptions } from './types';
 
 type CloseResult =
   | {
@@ -103,7 +103,7 @@ const isWebSocket = (w: unknown): w is WebSocket => {
 /**
  * @hidden
  */
-const getWebSocketClass = (options: ConnectOptions) => {
+export const getWebSocketClass = (options: ConnectOptions) => {
   if (options.polling) {
     return EIOCompat;
   }

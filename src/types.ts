@@ -1,4 +1,8 @@
-// In a separate file to circular dependencies in client and channel
+/**
+ * This file contains types shared between the Channel and Client.
+ */
+
+import { api } from '@replit/protocol';
 
 export enum ClientCloseReason {
   /**
@@ -22,3 +26,10 @@ export type ChannelCloseReason =
       initiator: 'channel';
       willReconnect: false;
     };
+
+export interface ChannelOptions<D = any> {
+  name?: string;
+  service: string;
+  action?: api.OpenChannel.Action;
+  skip?: (context: D) => boolean;
+}
