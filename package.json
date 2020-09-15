@@ -14,7 +14,7 @@
     "dev": "yarn build && (yarn build -- -w & parcel src.browser/index.html)",
     "prepublishOnly": "yarn clean && yarn build",
     "clean": "rm -rf dist dist.browser",
-    "docs": "typedoc --out docs --name crosis --includeDeclarations --excludeExternals src/channel.ts src/client.ts src/closeReasons.ts node_modules/@replit/protocol/index.d.ts",
+    "docs": "typedoc --out docs --name crosis --includeDeclarations --excludeExternals src/channel.ts src/client.ts src/types.ts node_modules/@replit/protocol/index.d.ts",
     "test": "scripts/test.sh"
   },
   "author": "faris@repl.it",
