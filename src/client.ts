@@ -2,16 +2,56 @@ import { api } from '@replit/protocol';
 import { Channel, OpenChannelCb } from './channel';
 import { getWebSocketClass, getNextRetryDelay } from './util/helpers';
 import {
+  ConnectOptions,
   ClientCloseReason,
   ChannelCloseReason,
   ChannelOptions,
   UrlOptions,
-  ConnectOptions,
-  ConnectArgs,
-  CloseResult,
-  ConnectionState,
-  DebugFunc,
 } from './types';
+
+/**
+ * The only required option is `fetchToken`, all others are optional and will use defaults
+ */
+interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
+  fetchToken: () => Promise<string>;
+}
+
+type CloseResult =
+  | {
+      closeReason: ClientCloseReason.Intentional;
+    }
+  | {
+      closeReason: ClientCloseReason.Disconnected;
+      wsEvent: CloseEvent | ErrorEvent;
+    };
+
+enum ConnectionState {
+  CONNECTING = 0,
+  CONNECTED = 1,
+  DISCONNECTED = 2,
+}
+
+interface TxRx {
+  direction: 'in' | 'out';
+  cmd: api.Command;
+}
+
+type DebugLog =
+  | {
+      type: 'breadcrumb';
+      message: string;
+      data?: unknown;
+    }
+  | {
+      type: 'log';
+      log: TxRx;
+    }
+  | {
+      type: 'ping';
+      latency: number;
+    };
+
+type DebugFunc = (log: DebugLog) => void;
 
 interface ChannelRequest {
   options: ChannelOptions;
