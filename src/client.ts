@@ -78,8 +78,6 @@ export class Client {
 
   private debug: DebugFunc;
 
-  private fatal: (e: Error) => void;
-
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
   private connectTries: number;
@@ -92,7 +90,7 @@ export class Client {
     return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
   }
 
-  constructor({ fatal }: { fatal: (e: Error) => void; }) {
+  constructor(debug: DebugFunc = () => {}) {
     this.ws = null;
     this.channels = {};
     this.connectOptions = {
@@ -110,8 +108,7 @@ export class Client {
     };
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
-    this.debug = () => {};
-    this.fatal = fatal;
+    this.debug = debug;
     this.channelRequests = [];
     this.connectTries = 0;
     this.retryTimeoutId = null;
@@ -167,7 +164,7 @@ export class Client {
     this.channelRequests.push(channelRequest);
 
     if (this.connectionState === ConnectionState.CONNECTED) {
-      // We're connected, open channel. Otherwise we'll open the channel once we connect
+      // We're connected, open channel
       this.handleOpenChannel(channelRequest);
     }
 
@@ -197,9 +194,7 @@ export class Client {
     }
 
     if (channelRequest.currentChannel) {
-      this.fatal(new Error('Unexpected currentChannel'));
-
-      return;
+      throw new Error('Unexpected currentChannel');
     }
 
     const channel = new Channel({ openChannelCb });
@@ -245,9 +240,7 @@ export class Client {
       dispose();
 
       if (cmd.openChanRes == null) {
-        this.fatal(new Error('Expected openChanRes on command'));
-
-        return;
+        throw new Error('Expected openChanRes on command');
       }
 
       const { id, state, error } = cmd.openChanRes;
@@ -265,9 +258,7 @@ export class Client {
       }
 
       if (typeof id !== 'number' || typeof state !== 'number') {
-        this.fatal(new Error('Expected state and channel id'));
-
-        return;
+        throw new Error('Expected state and channel id');
       }
 
       this.channels[id] = channel;
@@ -395,9 +386,7 @@ export class Client {
     });
 
     if (!this.chan0Cb) {
-      this.fatal(new Error('Expected chan0Cb'));
-
-      return;
+      throw new Error('Expected chan0Cb');
     }
 
     const chan0 = new Channel({ openChannelCb: this.chan0Cb });
@@ -409,13 +398,13 @@ export class Client {
     try {
       token = await this.connectOptions.fetchToken();
     } catch (e) {
-      this.fatal(e);
+      this.handleConnectError(e);
 
       return;
     }
 
     if (this.connectionState !== ConnectionState.CONNECTING) {
-      this.fatal(new Error('Client was closed before connecting'));
+      this.handleConnectError(new Error('Client was closed before connecting'));
 
       return;
     }
@@ -494,7 +483,7 @@ export class Client {
       }
 
       if (cmd.containerState.state == null) {
-        this.fatal(new Error('Got containterState but state was not defined'));
+        onFailed(new Error('Got containterState but state was not defined'));
 
         return;
       }
@@ -647,19 +636,13 @@ export class Client {
     switch (cmd.body) {
       case 'closeChanRes': {
         if (cmd.closeChanRes == null) {
-          this.fatal(new Error('Expected closeChanRes'));
-
-          return;
+          throw new Error('Expected closeChanRes');
         }
 
         if (cmd.closeChanRes.id == null || cmd.closeChanRes.status == null) {
-          this.fatal(
-            new Error(
-              `Expected id and status in closeChanRes, got ${cmd.closeChanRes.id} and ${cmd.closeChanRes.status}`,
-            ),
+          throw new Error(
+            `Expected id and status in closeChanRes, got ${cmd.closeChanRes.id} and ${cmd.closeChanRes.status}`,
           );
-
-          return;
         }
 
         this.debug({
@@ -710,9 +693,7 @@ export class Client {
     this.debug({ type: 'breadcrumb', message: 'connected!' });
 
     if (!this.ws) {
-      this.fatal(new Error('Expected Websocket instance'));
-
-      return;
+      throw new Error('Expected Websocket instance');
     }
 
     // Update socket closure to do something else
@@ -797,11 +778,6 @@ export class Client {
     this.connect();
   };
 
-  /**
-   * Called after the websocket connection fails to establish
-   * the protocol handshake (get container state ready) and we run
-   * out of retries
-   */
   private handleConnectError = (error: Error) => {
     this.connectToken = null;
 
