@@ -13,7 +13,7 @@ import {
  * The only required option is `fetchToken`, all others are optional and will use defaults
  */
 interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
-  fetchToken: () => Promise<string>;
+  fetchToken: ConnectOptions<D>['fetchToken'];
 }
 
 type CloseResult =
@@ -86,6 +86,14 @@ export class Client {
 
   private connectToken: string | null;
 
+  /**
+   * Abort controller is used so that when the user calls
+   * client.close while we're fetching a token, we can be sure
+   * that we don't have a `connect` call lingering around waiting
+   * for a token and eventually continue on as if we still want to connect
+   */
+  private fetchTokenAbortController: AbortController | null;
+
   static getConnectionStr(token: string, urlOptions: UrlOptions) {
     const { secure, host, port } = urlOptions;
 
@@ -116,6 +124,7 @@ export class Client {
     this.connectTries = 0;
     this.retryTimeoutId = null;
     this.connectToken = null;
+    this.fetchTokenAbortController = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -290,6 +299,7 @@ export class Client {
       throw new Error('Must call client.connect before closing');
     }
 
+
     // TODO: wrap in `setTimeout` to make async? Would need to do this
     // to support calling `close` synchronously in `connect` callback
     // This is only an issue with channel 0 since it never closes. Other
@@ -405,11 +415,61 @@ export class Client {
 
     const WebSocketClass = getWebSocketClass(this.connectOptions);
 
-    let token: string;
+    if (this.fetchTokenAbortController) {
+      this.fatal(new Error('Expected fetchTokenAbortController to be null'));
+
+      return;
+    }
+
+    const abortController = new AbortController();
+    this.fetchTokenAbortController = abortController;
+
+    let tokenFetchResult;
     try {
-      token = await this.connectOptions.fetchToken();
+      tokenFetchResult = await this.connectOptions.fetchToken(
+        abortController.signal,
+      );
     } catch (e) {
       this.fatal(e);
+
+      return;
+    }
+
+    const { token, aborted } = tokenFetchResult;
+
+    if (abortController.signal.aborted !== aborted) {
+        // the aborted return value and the abort signal should be equivalent
+      if (abortController.signal.aborted) {
+        // In cases where our abort signal has been called means `client.close` was called
+        // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
+        this.fatal(new Error('Expected abort returned from fetchToken to be truthy when the controller aborts'));
+
+        return;
+      }
+
+      // the user shouldn't return abort without the abort signal being called, if aborting is desired
+      // client.close should be called
+      this.fatal(new Error('Abort should only be truthy returned when the abort signal is triggered'));
+
+      return;
+    }
+
+    this.fetchTokenAbortController = null;
+
+
+    if (token && aborted) {
+      this.fatal(new Error('Expected either aborted or a token'));
+    }
+
+    if (aborted) {
+      this.handleConnectError(new Error('Called client.close during while connecting'));
+
+      return;
+    }
+
+
+    if (!token) {
+      this.fatal(new Error('Expected token to be a string or request to be aborted'));
 
       return;
     }
@@ -744,7 +804,16 @@ export class Client {
   };
 
   private handleClose = (closeResult: CloseResult) => {
+    if (this.ws && this.fetchTokenAbortController) {
+      // Fetching a token is required prior to initializing a websocket, we can't
+      // have both at the same time as the abort controller is unset after we fetch the token
+      this.fatal(new Error('fetchTokenAbortController and websocket exist simultaneously'));
+
+      // Fallthrough to try to clean up
+    }
+
     this.cleanupSocket();
+
 
     this.connectToken = null;
 
@@ -757,16 +826,10 @@ export class Client {
       closeResult.closeReason === ClientCloseReason.Disconnected &&
       Boolean(this.connectOptions.reconnect);
 
-    const closeReason: ChannelCloseReason =
-      closeResult.closeReason === ClientCloseReason.Intentional
-        ? {
-            initiator: 'client',
-            willReconnect: false,
-          }
-        : {
-            initiator: 'client',
-            willReconnect,
-          };
+    const closeReason: ChannelCloseReason = {
+      initiator: 'client',
+      willReconnect,
+    };
 
     Object.values(this.channels).forEach((channel) => {
       if (channel.closed) {
@@ -780,10 +843,7 @@ export class Client {
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
-    if (
-      closeResult.closeReason === ClientCloseReason.Intentional ||
-      !this.connectOptions.reconnect
-    ) {
+    if (!willReconnect) {
       // Client is done being used
       this.chan0Cb = null;
       return;

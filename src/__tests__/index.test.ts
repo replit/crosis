@@ -1,6 +1,6 @@
 /* eslint-env jest */
 
-import { Client } from '../client';
+import { Client } from '..';
 
 // eslint-disable-next-line
 const WebSocket = require('ws');
@@ -19,7 +19,7 @@ test('client connect', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -46,7 +46,7 @@ test('channel closing itself when client willReconnect', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -103,7 +103,7 @@ test('channel open and close', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -139,7 +139,7 @@ test('channel skips opening', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
     },
     ({ error }) => {
@@ -179,7 +179,7 @@ test('channel skips opening conditionally', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -250,8 +250,8 @@ test.skip('client errors opening', (done) => {
 
   client.open(
     {
-      maxConnectRetries: 1,
-      fetchToken: () => Promise.resolve('test - no good'),
+      maxConnectRetries: 0,
+      fetchToken: () => Promise.resolve({ token: 'test - no good', aborted: false }),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -287,7 +287,7 @@ test('client reconnect', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
     },
     ({ channel, error }) => {
@@ -353,7 +353,7 @@ test('client is closed while reconnecting', (done) => {
       });
     }
 
-    return Promise.resolve(REPL_TOKEN);
+    return Promise.resolve({ token: REPL_TOKEN, aborted: false });
   };
 
   client.open(
@@ -394,7 +394,7 @@ test('closing before ever connecting', () => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
     },
     ({ error }) => {
@@ -424,7 +424,7 @@ test('closing client while opening', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
     },
     () => {
@@ -445,7 +445,7 @@ test('connecting with a context object', (done) => {
 
   client.open<{ user: string }>(
     {
-      fetchToken: () => Promise.resolve(REPL_TOKEN),
+      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
       WebSocketClass: WebSocket,
       context: { user },
     },
@@ -511,7 +511,7 @@ test('falling back to polling', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve('bad token'),
+      fetchToken: () => Promise.resolve({ token: 'bad token', aborted: false }),
       WebSocketClass: WebSocket,
       maxConnectRetries,
       timeout: 0,
@@ -540,5 +540,46 @@ test('fetch token fail', (done) => {
       WebSocketClass: WebSocket,
     },
     chan0Cb,
+  );
+});
+
+test('fetch abort signal works as expected', (done) => {
+  const client = new Client({
+    fatal: () => {
+      done(new Error('did not expect fatal to be called'));
+    },
+  });
+
+  const onAbort = jest.fn();
+
+  client.open(
+    {
+      fetchToken: (abortSignal) => new Promise((r) => {
+          // Listen to abort signal
+          abortSignal.onabort = () => {
+            onAbort();
+            r({
+              aborted: true,
+              token: null,
+            });
+          };
+
+          // closing client should trigger the abort signal
+          setTimeout(() => {
+            client.close();
+          }, 0);
+        }),
+      WebSocketClass: WebSocket,
+    },
+    ({ channel, error }) => {
+      expect(channel).toBe(null);
+      expect(error).toBeTruthy();
+      expect(error?.message).toBe('Channel closed');
+      expect(onAbort).toHaveBeenCalledTimes(1);
+
+      done();
+
+      return () => {};
+    },
   );
 });

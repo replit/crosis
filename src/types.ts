@@ -38,7 +38,7 @@ export interface UrlOptions {
 }
 
 export interface ConnectOptions<D = any> {
-  fetchToken: () => Promise<string>;
+  fetchToken: (abortSignal: AbortSignal) => Promise<{ token: string | null, aborted: boolean }>;
   urlOptions: UrlOptions;
   polling: boolean;
   timeout: number | null;
