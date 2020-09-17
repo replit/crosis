@@ -493,3 +493,26 @@ test('falling back to polling', (done) => {
     open,
   );
 });
+
+
+test('fetch token fail', (done) => {
+  const client = new Client();
+
+  client.open(
+    {
+      fetchToken: () => {
+        throw new Error('fail');
+      },
+      WebSocketClass: WebSocket,
+    },
+    ({ channel, error }) => {
+      expect(channel).toBe(null);
+      expect(error).toBeTruthy();
+      expect(error?.message).toBe('fail');
+
+      done();
+
+      return () => {};
+    },
+  );
+});
