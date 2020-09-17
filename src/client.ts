@@ -92,7 +92,7 @@ export class Client {
     return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
   }
 
-  constructor({ fatal, debug = () => {} }: { fatal: (e: Error) => void; debug: DebugFunc }) {
+  constructor({ fatal }: { fatal: (e: Error) => void; }) {
     this.ws = null;
     this.channels = {};
     this.connectOptions = {
@@ -110,7 +110,7 @@ export class Client {
     };
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
-    this.debug = debug;
+    this.debug = () => {};
     this.fatal = fatal;
     this.channelRequests = [];
     this.connectTries = 0;
