@@ -227,8 +227,7 @@ test('channel skips opening conditionally', (done) => {
   );
 });
 
-// Test is broken right now because we fatal on token closures
-// also seems like the fallback code made it fail before
+// Test is broken right now due to polling fallback
 test.skip('client errors opening', (done) => {
   const fatal = jest.fn<void, [Error]>();
   const client = new Client({ fatal });
