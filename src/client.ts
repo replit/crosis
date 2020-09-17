@@ -1,9 +1,20 @@
-/* global WebSocket */
-
 import { api } from '@replit/protocol';
-import { Channel, ChannelOptions, OpenChannelCb } from './channel';
-import { EIOCompat } from './EIOCompat';
-import { ClientCloseReason, ChannelCloseReason } from './closeReasons';
+import { Channel, OpenChannelCb } from './channel';
+import { getWebSocketClass, getNextRetryDelay } from './util/helpers';
+import {
+  ConnectOptions,
+  ClientCloseReason,
+  ChannelCloseReason,
+  ChannelOptions,
+  UrlOptions,
+} from './types';
+
+/**
+ * The only required option is `fetchToken`, all others are optional and will use defaults
+ */
+interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
+  fetchToken: () => Promise<string>;
+}
 
 type CloseResult =
   | {
@@ -18,12 +29,6 @@ enum ConnectionState {
   CONNECTING = 0,
   CONNECTED = 1,
   DISCONNECTED = 2,
-}
-
-interface UrlOptions {
-  secure: boolean;
-  host: string;
-  port: string;
 }
 
 interface TxRx {
@@ -48,84 +53,11 @@ type DebugLog =
 
 type DebugFunc = (log: DebugLog) => void;
 
-interface ConnectOptions<D = any> {
-  fetchToken: () => Promise<string>;
-  urlOptions: UrlOptions;
-  polling: boolean;
-  timeout: number | null;
-  reconnect: boolean;
-  WebSocketClass?: typeof WebSocket;
-  maxConnectRetries: number;
-  context: D;
-}
-
 interface ChannelRequest {
   options: ChannelOptions;
   currentChannel: Channel | null;
   openChannelCb: OpenChannelCb;
 }
-
-/**
- * The only required option is `fetchToken`, all others are optional and will use defaults
- */
-interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
-  fetchToken: () => Promise<string>;
-}
-
-const BACKOFF_FACTOR = 1.7;
-const MAX_BACKOFF = 15000;
-
-/**
- * @hidden
- */
-const getNextRetryDelay = (retryNumber: number) => {
-  const randomMs = Math.floor(Math.random() * 500);
-  const backoff = BACKOFF_FACTOR ** retryNumber * 1000;
-
-  return Math.min(backoff, MAX_BACKOFF) + randomMs;
-};
-
-/**
- * @hidden
- */
-const isWebSocket = (w: unknown): w is WebSocket => {
-  if (typeof w !== 'object' && typeof w !== 'function') {
-    return false;
-  }
-
-  if (!w) {
-    return false;
-  }
-
-  return 'OPEN' in w && (w as WebSocket).OPEN === 1;
-};
-
-/**
- * @hidden
- */
-const getWebSocketClass = (options: ConnectOptions) => {
-  if (options.polling) {
-    return EIOCompat;
-  }
-
-  if (options.WebSocketClass) {
-    if (!isWebSocket(options.WebSocketClass)) {
-      throw new Error('Passed in WebSocket does not look like a standard WebSocket');
-    }
-
-    return options.WebSocketClass;
-  }
-
-  if (typeof WebSocket !== 'undefined') {
-    if (!isWebSocket(WebSocket)) {
-      throw new Error('Global WebSocket does not look like a standard WebSocket');
-    }
-
-    return WebSocket;
-  }
-
-  throw new Error('Please pass in a WebSocket class, add it to global, or use the polling option');
-};
 
 export class Client {
   public static ClientCloseReason = ClientCloseReason;

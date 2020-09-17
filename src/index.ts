@@ -1,5 +1,5 @@
-import './utf8_spooky_monkeypatch'; // pbjs's utf8 decoder is borked
+import './util/utf8ReadMonkeypatch'; // pbjs's utf8 decoder is borked
 
 export { Client } from './client';
-export { Channel, ChannelOptions, OpenChannelCb } from './channel';
-export { ChannelCloseReason } from './closeReasons';
+export { Channel, OpenChannelCb } from './channel';
+export { ChannelCloseReason, ChannelOptions } from './types';
