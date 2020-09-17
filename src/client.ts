@@ -352,6 +352,17 @@ export class Client {
   };
 
   private connect = async () => {
+    this.debug({
+      type: 'breadcrumb',
+      message: 'connecting',
+      data: {
+        connectionState: this.connectionState,
+        connectTries: this.connectTries,
+        readyState: this.ws ? this.ws.readyState : undefined,
+        chan0CbExists: Boolean(this.chan0Cb),
+      },
+    });
+
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       const error = new Error('Client must be disconnected to connect');
 
