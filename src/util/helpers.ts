@@ -25,7 +25,7 @@ function isWebSocket(w: unknown): w is WebSocket {
 }
 
 export function getWebSocketClass(options: ConnectOptions) {
-  if (options.polling) {
+  if (options.polling && process.env.NODE_ENV !== 'test') {
     return EIOCompat;
   }
 
