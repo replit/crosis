@@ -78,7 +78,7 @@ export class Client {
 
   private debug: DebugFunc;
 
-  private fatal: (e: Error) => void;
+  private onUnrecoverableError: (e: Error) => void;
 
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
@@ -100,7 +100,7 @@ export class Client {
     return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
   }
 
-  constructor({ fatal }: { fatal: (e: Error) => void; }) {
+  constructor() {
     this.ws = null;
     this.channels = {};
     this.connectOptions = {
@@ -119,7 +119,14 @@ export class Client {
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = () => {};
-    this.fatal = fatal;
+    this.onUnrecoverableError = (e) => {
+      this.close();
+
+      // eslint-disable-next-line no-console
+      console.error('Please supply your own unrecoverable error handling function');
+
+      throw e;
+    };
     this.channelRequests = [];
     this.connectTries = 0;
     this.retryTimeoutId = null;
@@ -206,7 +213,7 @@ export class Client {
     }
 
     if (channelRequest.currentChannel) {
-      this.fatal(new Error('Unexpected currentChannel'));
+      this.onUnrecoverableError(new Error('Unexpected currentChannel'));
 
       return;
     }
@@ -254,7 +261,7 @@ export class Client {
       dispose();
 
       if (cmd.openChanRes == null) {
-        this.fatal(new Error('Expected openChanRes on command'));
+        this.onUnrecoverableError(new Error('Expected openChanRes on command'));
 
         return;
       }
@@ -274,7 +281,7 @@ export class Client {
       }
 
       if (typeof id !== 'number' || typeof state !== 'number') {
-        this.fatal(new Error('Expected state and channel id'));
+        this.onUnrecoverableError(new Error('Expected state and channel id'));
 
         return;
       }
@@ -338,6 +345,11 @@ export class Client {
   /** Sets a logging/debugging function */
   public setDebugFunc(debugFunc: DebugFunc): void {
     this.debug = debugFunc;
+  }
+
+  /** Sets an unrecoverable error handling function */
+  public setUnrecoverErrorHandler(onUnrecoverableError: (e: Error) => void): void {
+    this.onUnrecoverableError = onUnrecoverableError;
   }
 
   /** Start a ping<>pong for debugging and latency stats */
@@ -405,7 +417,7 @@ export class Client {
     });
 
     if (!this.chan0Cb) {
-      this.fatal(new Error('Expected chan0Cb'));
+      this.onUnrecoverableError(new Error('Expected chan0Cb'));
 
       return;
     }
@@ -416,7 +428,7 @@ export class Client {
     const WebSocketClass = getWebSocketClass(this.connectOptions);
 
     if (this.fetchTokenAbortController) {
-      this.fatal(new Error('Expected fetchTokenAbortController to be null'));
+      this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
 
       return;
     }
@@ -430,7 +442,7 @@ export class Client {
         abortController.signal,
       );
     } catch (e) {
-      this.fatal(e);
+      this.onUnrecoverableError(e);
 
       return;
     }
@@ -442,14 +454,14 @@ export class Client {
       if (abortController.signal.aborted) {
         // In cases where our abort signal has been called means `client.close` was called
         // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
-        this.fatal(new Error('Expected abort returned from fetchToken to be truthy when the controller aborts'));
+        this.onUnrecoverableError(new Error('Expected abort returned from fetchToken to be truthy when the controller aborts'));
 
         return;
       }
 
       // the user shouldn't return abort without the abort signal being called, if aborting is desired
       // client.close should be called
-      this.fatal(new Error('Abort should only be truthy returned when the abort signal is triggered'));
+      this.onUnrecoverableError(new Error('Abort should only be truthy returned when the abort signal is triggered'));
 
       return;
     }
@@ -458,7 +470,7 @@ export class Client {
 
 
     if (token && aborted) {
-      this.fatal(new Error('Expected either aborted or a token'));
+      this.onUnrecoverableError(new Error('Expected either aborted or a token'));
     }
 
     if (aborted) {
@@ -469,13 +481,13 @@ export class Client {
 
 
     if (!token) {
-      this.fatal(new Error('Expected token to be a string or request to be aborted'));
+      this.onUnrecoverableError(new Error('Expected token to be a string or request to be aborted'));
 
       return;
     }
 
     if (this.connectionState !== ConnectionState.CONNECTING) {
-      this.fatal(new Error('Client was closed before connecting'));
+      this.onUnrecoverableError(new Error('Client was closed before connecting'));
 
       return;
     }
@@ -554,7 +566,7 @@ export class Client {
       }
 
       if (cmd.containerState.state == null) {
-        this.fatal(new Error('Got containterState but state was not defined'));
+        this.onUnrecoverableError(new Error('Got containterState but state was not defined'));
 
         return;
       }
@@ -707,13 +719,13 @@ export class Client {
     switch (cmd.body) {
       case 'closeChanRes': {
         if (cmd.closeChanRes == null) {
-          this.fatal(new Error('Expected closeChanRes'));
+          this.onUnrecoverableError(new Error('Expected closeChanRes'));
 
           return;
         }
 
         if (cmd.closeChanRes.id == null || cmd.closeChanRes.status == null) {
-          this.fatal(
+          this.onUnrecoverableError(
             new Error(
               `Expected id and status in closeChanRes, got ${cmd.closeChanRes.id} and ${cmd.closeChanRes.status}`,
             ),
@@ -770,7 +782,7 @@ export class Client {
     this.debug({ type: 'breadcrumb', message: 'connected!' });
 
     if (!this.ws) {
-      this.fatal(new Error('Expected Websocket instance'));
+      this.onUnrecoverableError(new Error('Expected Websocket instance'));
 
       return;
     }
@@ -807,7 +819,7 @@ export class Client {
     if (this.ws && this.fetchTokenAbortController) {
       // Fetching a token is required prior to initializing a websocket, we can't
       // have both at the same time as the abort controller is unset after we fetch the token
-      this.fatal(new Error('fetchTokenAbortController and websocket exist simultaneously'));
+      this.onUnrecoverableError(new Error('fetchTokenAbortController and websocket exist simultaneously'));
 
       // Fallthrough to try to clean up
     }
