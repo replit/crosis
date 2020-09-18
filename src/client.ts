@@ -471,6 +471,8 @@ export class Client {
 
     if (token && aborted) {
       this.onUnrecoverableError(new Error('Expected either aborted or a token'));
+
+      return;
     }
 
     if (aborted) {
