@@ -104,10 +104,7 @@ export class Client {
     this.ws = null;
     this.channels = {};
     this.connectOptions = {
-      polling: false,
       timeout: 10000,
-      reconnect: true,
-      maxConnectRetries: 2,
       urlOptions: {
         secure: false,
         host: 'eval.repl.it',
@@ -120,7 +117,10 @@ export class Client {
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = () => {};
     this.onUnrecoverableError = (e) => {
-      this.close();
+      this.handleClose({
+        closeReason: ClientCloseReason.Error,
+        error: e,
+      });
 
       // eslint-disable-next-line no-console
       console.error('Please supply your own unrecoverable error handling function');
@@ -162,7 +162,7 @@ export class Client {
     this.debug({
       type: 'breadcrumb',
       message: 'open',
-      data: { polling: this.connectOptions.polling },
+      data: { polling: false },
     });
 
     this.chan0Cb = cb;
@@ -348,8 +348,19 @@ export class Client {
     this.debug = debugFunc;
   }
 
+  /** Set a function to handle unrecoverable error
+   * Unrecoverable errors are internal errors or invariance errors
+   * caused by the user mis-using the client.
+   */
   public setUnrecoverErrorHandler(onUnrecoverableError: (e: Error) => void) {
-    this.onUnrecoverableError = onUnrecoverableError;
+    this.onUnrecoverableError = (e: Error) => {
+      this.handleClose({
+        closeReason: ClientCloseReason.Error,
+        error: e,
+      });
+
+      onUnrecoverableError(e);
+    };
   }
 
   /** Start a ping<>pong for debugging and latency stats */
@@ -438,35 +449,39 @@ export class Client {
 
     let tokenFetchResult;
     try {
-      tokenFetchResult = await this.connectOptions.fetchToken(
-        abortController.signal,
-      );
+      tokenFetchResult = await this.connectOptions.fetchToken(abortController.signal);
     } catch (e) {
       this.onUnrecoverableError(e);
 
       return;
     }
 
+    this.fetchTokenAbortController = null;
+
     const { token, aborted } = tokenFetchResult;
 
     if (abortController.signal.aborted !== aborted) {
-        // the aborted return value and the abort signal should be equivalent
+      // the aborted return value and the abort signal should be equivalent
       if (abortController.signal.aborted) {
         // In cases where our abort signal has been called means `client.close` was called
         // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
-        this.onUnrecoverableError(new Error('Expected abort returned from fetchToken to be truthy when the controller aborts'));
+        this.onUnrecoverableError(
+          new Error(
+            'Expected abort returned from fetchToken to be truthy when the controller aborts',
+          ),
+        );
 
         return;
       }
 
       // the user shouldn't return abort without the abort signal being called, if aborting is desired
       // client.close should be called
-      this.onUnrecoverableError(new Error('Abort should only be truthy returned when the abort signal is triggered'));
+      this.onUnrecoverableError(
+        new Error('Abort should only be truthy returned when the abort signal is triggered'),
+      );
 
       return;
     }
-
-    this.fetchTokenAbortController = null;
 
 
     if (token && aborted) {
@@ -476,14 +491,15 @@ export class Client {
     }
 
     if (aborted) {
-      this.handleConnectError(new Error('Called client.close during while connecting'));
-
+      // Just return. The user called `client.close leading to a token abort
+      // chan0Cb will be called with with an error Channel close, no need to do anything here.
       return;
     }
 
-
     if (!token) {
-      this.onUnrecoverableError(new Error('Expected token to be a string or request to be aborted'));
+      this.onUnrecoverableError(
+        new Error('Expected token to be a string or request to be aborted'),
+      );
 
       return;
     }
@@ -639,60 +655,33 @@ export class Client {
         clearTimeout(this.retryTimeoutId);
       }
 
+      if (!this.chan0Cb) {
+        // User called close
+        // TODO (masad-frost) something more explicit here
+        // might be the way to go
+        return;
+      }
+
       // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
       // will be used in additon to new `cancelTimeout` and `dispose` functions.
       this.cleanupSocket();
       cancelTimeout();
       dispose();
 
-      if (this.connectTries <= this.connectOptions.maxConnectRetries) {
-        this.retryTimeoutId = setTimeout(() => {
-          this.debug({
-            type: 'breadcrumb',
-            message: 'retrying',
-            data: {
-              connectionState: this.connectionState,
-              connectTries: this.connectTries,
-              error,
-              wsReadyState: this.ws ? this.ws.readyState : undefined,
-            },
-          });
-          this.connectionState = ConnectionState.DISCONNECTED;
-          this.connect();
-        }, getNextRetryDelay(this.connectTries));
-
-        return;
-      }
-
-      // Fall back to polling
-      if (
-        this.connectTries === this.connectOptions.maxConnectRetries + 1 &&
-        !this.connectOptions.polling
-      ) {
-        this.retryTimeoutId = setTimeout(() => {
-          this.connectionState = ConnectionState.DISCONNECTED;
-
-          this.connectOptions.urlOptions.host = 'gp-v2.herokuapp.com';
-          this.connectOptions.polling = true;
-
-          this.debug({
-            type: 'breadcrumb',
-            message: 'falling back to polling',
-            data: {
-              connectionState: this.connectionState,
-              connectTries: this.connectTries,
-              error,
-              wsReadyState: this.ws ? this.ws.readyState : undefined,
-            },
-          });
-
-          this.connect();
-        }, getNextRetryDelay(this.connectTries));
-
-        return;
-      }
-
-      this.handleConnectError(error);
+      this.retryTimeoutId = setTimeout(() => {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'retrying',
+          data: {
+            connectionState: this.connectionState,
+            connectTries: this.connectTries,
+            error,
+            wsReadyState: this.ws ? this.ws.readyState : undefined,
+          },
+        });
+        this.connectionState = ConnectionState.DISCONNECTED;
+        this.connect();
+      }, getNextRetryDelay(this.connectTries));
     };
   };
 
@@ -821,13 +810,14 @@ export class Client {
     if (this.ws && this.fetchTokenAbortController) {
       // Fetching a token is required prior to initializing a websocket, we can't
       // have both at the same time as the abort controller is unset after we fetch the token
-      this.onUnrecoverableError(new Error('fetchTokenAbortController and websocket exist simultaneously'));
+      this.onUnrecoverableError(
+        new Error('fetchTokenAbortController and websocket exist simultaneously'),
+      );
 
       // Fallthrough to try to clean up
     }
 
     this.cleanupSocket();
-
 
     this.connectToken = null;
 
@@ -836,9 +826,7 @@ export class Client {
       clearTimeout(this.retryTimeoutId);
     }
 
-    const willReconnect =
-      closeResult.closeReason === ClientCloseReason.Disconnected &&
-      Boolean(this.connectOptions.reconnect);
+    const willReconnect = closeResult.closeReason === ClientCloseReason.Disconnected;
 
     const closeReason: ChannelCloseReason = {
       initiator: 'client',
@@ -871,41 +859,6 @@ export class Client {
     this.connect();
   };
 
-  /**
-   * Called after the websocket connection fails to establish
-   * the protocol handshake (get container state ready) and we run
-   * out of retries
-   */
-  private handleConnectError = (error: Error) => {
-    this.connectToken = null;
-
-    if (this.retryTimeoutId) {
-      // Client was closed while reconnecting
-      clearTimeout(this.retryTimeoutId);
-    }
-
-    const chan0 = this.getChannel(0);
-    const { context } = this.connectOptions;
-
-    if (!chan0.closed) {
-      chan0.handleError(error, context);
-    }
-
-    this.channelRequests.forEach(({ currentChannel, openChannelCb }) => {
-      if (currentChannel && !currentChannel.closed) {
-        currentChannel.handleError(error, context);
-      } else {
-        // Channel was never opened
-        openChannelCb({ error, channel: null, context });
-      }
-    });
-
-    this.connectionState = ConnectionState.DISCONNECTED;
-    this.cleanupSocket();
-
-    this.debug({ type: 'breadcrumb', message: 'connect failed', data: error.message });
-  };
-
   private cleanupSocket = () => {
     const { ws } = this;
 
@@ -929,8 +882,8 @@ export class Client {
     ws.onclose = null;
 
     // Replace exististing error handler so an error doesn't get thrown.
-    // We got here after either `handleConnectError` or `handleClose`
-    // so it is safe to ignore any potential remaining errors
+    // We got here after either `handleClose` so it is safe to ignore
+    //  any potential remaining errors
     ws.onerror = () => {};
 
     if (ws.readyState === 0 || ws.readyState === 1) {

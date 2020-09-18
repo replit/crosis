@@ -10,6 +10,10 @@ export enum ClientCloseReason {
    * The websocket connection died
    */
   Disconnected,
+  /**
+   * The client encountered an unrecoverable/invariant error
+   */
+  Error,
 }
 
 // Channel close can either be due to client closing
@@ -40,10 +44,7 @@ export interface UrlOptions {
 export interface ConnectOptions<D = any> {
   fetchToken: (abortSignal: AbortSignal) => Promise<{ token: string | null, aborted: boolean }>;
   urlOptions: UrlOptions;
-  polling: boolean;
   timeout: number | null;
-  reconnect: boolean;
   WebSocketClass?: typeof WebSocket;
-  maxConnectRetries: number;
   context: D;
 }
