@@ -23,6 +23,10 @@ type CloseResult =
   | {
       closeReason: ClientCloseReason.Disconnected;
       wsEvent: CloseEvent | ErrorEvent;
+    }
+  | {
+      closeReason: ClientCloseReason.Error;
+      error: Error;
     };
 
 enum ConnectionState {
