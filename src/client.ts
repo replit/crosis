@@ -227,7 +227,7 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const channel = new Channel<Ctx>({ openChannelCb });
+    const channel = new Channel<Ctx>({ openChannelCb }, this.onUnrecoverableError);
     channelRequest.currentChannel = channel;
 
     this.debug({
@@ -281,10 +281,8 @@ export class Client<Ctx extends unknown = null> {
 
       if (state === api.OpenChannelRes.State.ERROR) {
         this.debug({ type: 'breadcrumb', message: 'error', data: error });
-        channel.handleError(
-          new Error(error || 'Something went wrong'),
-          this.connectOptions.context,
-        );
+
+        this.onUnrecoverableError(new Error(`Channel open resulted with an error: ${error || 'with no message'}`));
 
         return;
       }
@@ -298,7 +296,7 @@ export class Client<Ctx extends unknown = null> {
       this.channels[id] = channel;
       channelRequest.currentChannel = channel;
 
-      channel.handleOpen({ id, state, send: this.send, context: this.connectOptions.context });
+      channel.handleOpenRes({ id, state, send: this.send, context: this.connectOptions.context });
     });
   };
 
@@ -442,7 +440,7 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const chan0 = new Channel({ openChannelCb: this.chan0Cb });
+    const chan0 = new Channel({ openChannelCb: this.chan0Cb }, this.onUnrecoverableError);
     this.channels[0] = chan0;
 
     const WebSocketClass = getWebSocketClass(this.connectOptions);
@@ -632,7 +630,7 @@ export class Client<Ctx extends unknown = null> {
             throw new Error('Cannot call close inside connect callback');
           };
 
-          chan0.handleOpen({
+          chan0.handleOpenRes({
             id: 0,
             state: api.OpenChannelRes.State.CREATED,
             send: this.send,
