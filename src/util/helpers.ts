@@ -1,6 +1,4 @@
-/* global WebSocket */
 import { ConnectOptions } from '../types';
-import { EIOCompat } from './EIOCompat';
 
 const BACKOFF_FACTOR = 1.7;
 const MAX_BACKOFF = 15000;
@@ -25,10 +23,6 @@ function isWebSocket(w: unknown): w is WebSocket {
 }
 
 export function getWebSocketClass(options: ConnectOptions) {
-  if (options.polling && process.env.NODE_ENV !== 'test') {
-    return EIOCompat;
-  }
-
   if (options.WebSocketClass) {
     if (!isWebSocket(options.WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');
@@ -45,5 +39,5 @@ export function getWebSocketClass(options: ConnectOptions) {
     return WebSocket;
   }
 
-  throw new Error('Please pass in a WebSocket class, add it to global, or use the polling option');
+  throw new Error('Please pass in a WebSocket class or add it to global');
 }
