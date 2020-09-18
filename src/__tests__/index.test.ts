@@ -14,8 +14,9 @@ if (!REPL_TOKEN) {
 jest.setTimeout(10 * 1000);
 
 test('client connect', (done) => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
 
   client.open(
     {
@@ -29,7 +30,7 @@ test('client connect', (done) => {
       setTimeout(() => client.close());
 
       return () => {
-        expect(fatal).toHaveBeenCalledTimes(0);
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       };
     },
@@ -41,8 +42,9 @@ test('channel closing itself when client willReconnect', (done) => {
   let clientOpenCount = 0;
   let channelOpenCount = 0;
 
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
 
   client.open(
     {
@@ -73,7 +75,7 @@ test('channel closing itself when client willReconnect', (done) => {
         expect(clientOpenCount).toEqual(2);
         expect(channelOpenCount).toEqual(1);
 
-        expect(fatal).toHaveBeenCalledTimes(0);
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       };
     },
@@ -96,8 +98,9 @@ test('channel closing itself when client willReconnect', (done) => {
 });
 
 test('channel open and close', (done) => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
 
   const channelClose = jest.fn();
 
@@ -113,7 +116,7 @@ test('channel open and close', (done) => {
       return () => {
         expect(channelClose).toHaveBeenCalled();
 
-        expect(fatal).toHaveBeenCalledTimes(0);
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       };
     },
@@ -133,8 +136,9 @@ test('channel open and close', (done) => {
 });
 
 test('channel skips opening', (done) => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
   const service = 'shell';
 
   client.open(
@@ -159,7 +163,7 @@ test('channel skips opening', (done) => {
         // If currentChannel is null we didn't try to open a the channel
         expect(request.currentChannel).toBeNull();
 
-        expect(fatal).toHaveBeenCalledTimes(0);
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       };
     },
@@ -173,8 +177,9 @@ test('channel skips opening conditionally', (done) => {
   let clientOpenCount = 0;
   let channelOpenCount = 0;
 
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
   const service = 'shell';
 
   client.open(
@@ -199,7 +204,7 @@ test('channel skips opening conditionally', (done) => {
         expect(clientOpenCount).toEqual(2);
         expect(channelOpenCount).toEqual(1);
 
-        expect(fatal).toHaveBeenCalledTimes(0);
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       };
     },
@@ -229,8 +234,9 @@ test('channel skips opening conditionally', (done) => {
 
 // Test is broken right now due to polling fallback
 test.skip('client errors opening', (done) => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
   let errorCount = 0;
 
   const clientClose = jest.fn();
@@ -243,7 +249,7 @@ test.skip('client errors opening', (done) => {
       expect(clientClose).not.toHaveBeenCalled();
       expect(channelClose).not.toHaveBeenCalled();
 
-      expect(fatal).toHaveBeenCalledTimes(0);
+      expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
       done();
     }
   };
@@ -277,8 +283,9 @@ test.skip('client errors opening', (done) => {
 });
 
 test('client reconnect', (done) => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
 
   let disconnectTriggered = false;
   let timesConnected = 0;
@@ -322,7 +329,7 @@ test('client reconnect', (done) => {
           expect(timesClosedUnintentionally).toEqual(1);
           expect(timesClosedIntentionally).toEqual(1);
 
-          expect(fatal).toHaveBeenCalledTimes(0);
+          expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
           done();
         }
       };
@@ -336,8 +343,9 @@ test('client is closed while reconnecting', (done) => {
   const open = jest.fn();
   const close = jest.fn();
 
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
   const fetchToken = () => {
     if (didOpen) {
       // We're reconnecting
@@ -348,7 +356,7 @@ test('client is closed while reconnecting', (done) => {
         expect(open).toHaveBeenCalledTimes(1);
         expect(close).toHaveBeenCalledTimes(1);
 
-        expect(fatal).toHaveBeenCalledTimes(0);
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       });
     }
@@ -385,8 +393,9 @@ test('client is closed while reconnecting', (done) => {
 });
 
 test('closing before ever connecting', () => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
 
   const open = jest.fn();
   const openError = jest.fn();
@@ -419,8 +428,9 @@ test('closing before ever connecting', () => {
 });
 
 test('closing client while opening', (done) => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
 
   client.open(
     {
@@ -431,7 +441,7 @@ test('closing client while opening', (done) => {
       try {
         client.close();
       } catch {
-        expect(fatal).toHaveBeenCalledTimes(0);
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       }
     },
@@ -439,8 +449,9 @@ test('closing client while opening', (done) => {
 });
 
 test('connecting with a context object', (done) => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
   const user = 'abc';
 
   client.open<{ user: string }>(
@@ -469,7 +480,7 @@ test('connecting with a context object', (done) => {
       if (error) {
         // Client closed so test is done.
 
-        expect(fatal).toHaveBeenCalledTimes(0);
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
         return;
       }
@@ -480,8 +491,9 @@ test('connecting with a context object', (done) => {
 });
 
 test('falling back to polling', (done) => {
-  const fatal = jest.fn<void, [Error]>();
-  const client = new Client({ fatal });
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverErrorHandler(onUnrecoverableError);
 
   const maxConnectRetries = 1;
   const open = jest.fn();
@@ -504,7 +516,7 @@ test('falling back to polling', (done) => {
 
       expect(open).not.toHaveBeenCalled();
 
-      expect(fatal).toHaveBeenCalledTimes(0);
+      expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
       done();
     }
   });
@@ -523,13 +535,13 @@ test('falling back to polling', (done) => {
 
 test('fetch token fail', (done) => {
   const chan0Cb = jest.fn();
-  const client = new Client({
-    fatal: (e) => {
-      expect(chan0Cb).toHaveBeenCalledTimes(0);
-      expect(e.message).toContain('fail');
+  const client = new Client();
 
-      done();
-    },
+  client.setUnrecoverErrorHandler((e) => {
+    expect(chan0Cb).toHaveBeenCalledTimes(0);
+    expect(e.message).toContain('fail');
+
+    done();
   });
 
   client.open(
@@ -544,10 +556,9 @@ test('fetch token fail', (done) => {
 });
 
 test('fetch abort signal works as expected', (done) => {
-  const client = new Client({
-    fatal: () => {
-      done(new Error('did not expect fatal to be called'));
-    },
+  const client = new Client();
+  client.setUnrecoverErrorHandler(() => {
+    done(new Error('did not expect fatal to be called'));
   });
 
   const onAbort = jest.fn();
