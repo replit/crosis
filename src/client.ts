@@ -82,7 +82,7 @@ export class Client<Ctx extends unknown = null> {
 
   private debug: DebugFunc;
 
-  private onUnrecoverableError: (e: Error) => void;
+  private userUnrecoverableErrorHandler: ((e: Error) => void) | null;
 
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
@@ -125,17 +125,7 @@ export class Client<Ctx extends unknown = null> {
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = () => {};
-    this.onUnrecoverableError = (e) => {
-      this.handleClose({
-        closeReason: ClientCloseReason.Error,
-        error: e,
-      });
-
-      // eslint-disable-next-line no-console
-      console.error('Please supply your own unrecoverable error handling function');
-
-      throw e;
-    };
+    this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
     this.connectTries = 0;
     this.retryTimeoutId = null;
@@ -188,7 +178,11 @@ export class Client<Ctx extends unknown = null> {
    * http://protodoc.turbio.repl.co/protov2#opening-channels
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>) => {
-    const channelRequest: ChannelRequest<Ctx> = { options, openChannelCb: cb, currentChannel: null };
+    const channelRequest: ChannelRequest<Ctx> = {
+      options,
+      openChannelCb: cb,
+      currentChannel: null,
+    };
     this.channelRequests.push(channelRequest);
 
     if (this.connectionState === ConnectionState.CONNECTED) {
@@ -282,7 +276,9 @@ export class Client<Ctx extends unknown = null> {
       if (state === api.OpenChannelRes.State.ERROR) {
         this.debug({ type: 'breadcrumb', message: 'error', data: error });
 
-        this.onUnrecoverableError(new Error(`Channel open resulted with an error: ${error || 'with no message'}`));
+        this.onUnrecoverableError(
+          new Error(`Channel open resulted with an error: ${error || 'with no message'}`),
+        );
 
         return;
       }
@@ -360,14 +356,7 @@ export class Client<Ctx extends unknown = null> {
    * caused by the user mis-using the client.
    */
   public setUnrecoverErrorHandler(onUnrecoverableError: (e: Error) => void) {
-    this.onUnrecoverableError = (e: Error) => {
-      this.handleClose({
-        closeReason: ClientCloseReason.Error,
-        error: e,
-      });
-
-      onUnrecoverableError(e);
-    };
+    this.userUnrecoverableErrorHandler = onUnrecoverableError;
   }
 
   /** Start a ping<>pong for debugging and latency stats */
@@ -489,7 +478,6 @@ export class Client<Ctx extends unknown = null> {
 
       return;
     }
-
 
     if (token && aborted) {
       this.onUnrecoverableError(new Error('Expected either aborted or a token'));
@@ -901,5 +889,23 @@ export class Client<Ctx extends unknown = null> {
 
       ws.close();
     }
+  };
+
+  private onUnrecoverableError = (e: Error) => {
+    this.handleClose({
+      closeReason: ClientCloseReason.Error,
+      error: e,
+    });
+
+    if (this.userUnrecoverableErrorHandler) {
+      this.userUnrecoverableErrorHandler(e);
+
+      return;
+    }
+
+    // eslint-disable-next-line no-console
+    console.error('Please supply your own unrecoverable error handling function');
+
+    throw e;
   };
 }
