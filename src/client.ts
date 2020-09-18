@@ -12,8 +12,8 @@ import {
 /**
  * The only required option is `fetchToken`, all others are optional and will use defaults
  */
-interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
-  fetchToken: ConnectOptions<D>['fetchToken'];
+interface ConnectArgs<Ctx> extends Partial<Omit<ConnectOptions<Ctx>, 'fetchToken'>> {
+  fetchToken: ConnectOptions<Ctx>['fetchToken'];
 }
 
 type CloseResult =
@@ -57,27 +57,27 @@ type DebugLog =
 
 type DebugFunc = (log: DebugLog) => void;
 
-interface ChannelRequest {
-  options: ChannelOptions;
-  currentChannel: Channel | null;
-  openChannelCb: OpenChannelCb;
+interface ChannelRequest<Ctx> {
+  options: ChannelOptions<Ctx>;
+  currentChannel: Channel<Ctx> | null;
+  openChannelCb: OpenChannelCb<Ctx>;
 }
 
-export class Client {
+export class Client<Ctx extends unknown = null> {
   public static ClientCloseReason = ClientCloseReason;
 
   public connectionState: ConnectionState;
 
   private ws: WebSocket | null;
 
-  private connectOptions: ConnectOptions;
+  private connectOptions: ConnectOptions<Ctx>;
 
-  private chan0Cb: OpenChannelCb | null;
+  private chan0Cb: OpenChannelCb<Ctx> | null;
 
-  private channelRequests: Array<ChannelRequest>;
+  private channelRequests: Array<ChannelRequest<Ctx>>;
 
   private channels: {
-    [id: number]: Channel;
+    [id: number]: Channel<Ctx>;
   };
 
   private debug: DebugFunc;
@@ -115,6 +115,11 @@ export class Client {
         port: '80',
       },
       fetchToken: () => Promise.reject(new Error('You must provide a fetchToken function')),
+      // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+      // @ts-ignore context is not relevant until we call the `open` function
+      // the user needs to pass it to the constructor for us to not ts-ignore
+      // this, however we don't want that because each `open` call can have a new
+      // ctx but the shape will be the same
       context: null,
     };
     this.chan0Cb = null;
@@ -146,7 +151,7 @@ export class Client {
    * Every client automatically "has" channel 0 and can use it to open more channels.
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public open = <D = any>(options: ConnectArgs<D>, cb: OpenChannelCb<D>) => {
+  public open = (options: ConnectArgs<Ctx>, cb: OpenChannelCb<Ctx>) => {
     if (this.chan0Cb) {
       throw new Error('You must call `close` before opening the client again');
     }
@@ -182,8 +187,8 @@ export class Client {
    *
    * http://protodoc.turbio.repl.co/protov2#opening-channels
    */
-  public openChannel = <D = any>(options: ChannelOptions, cb: OpenChannelCb<D>) => {
-    const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };
+  public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>) => {
+    const channelRequest: ChannelRequest<Ctx> = { options, openChannelCb: cb, currentChannel: null };
     this.channelRequests.push(channelRequest);
 
     if (this.connectionState === ConnectionState.CONNECTED) {
@@ -200,7 +205,7 @@ export class Client {
     };
   };
 
-  private handleOpenChannel = (channelRequest: ChannelRequest) => {
+  private handleOpenChannel = (channelRequest: ChannelRequest<Ctx>) => {
     const { options, openChannelCb } = channelRequest;
 
     const { skip } = options;
@@ -222,7 +227,7 @@ export class Client {
       return;
     }
 
-    const channel = new Channel({ openChannelCb });
+    const channel = new Channel<Ctx>({ openChannelCb });
     channelRequest.currentChannel = channel;
 
     this.debug({
@@ -321,7 +326,7 @@ export class Client {
   };
 
   /** Gets a channel by Id */
-  public getChannel(id: number): Channel {
+  public getChannel(id: number): Channel<Ctx> {
     const chan = this.channels[id];
 
     this.debug({
