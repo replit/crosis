@@ -81,6 +81,13 @@ export class Channel<Ctx> {
   }
 
   public onCommand = (listener: (cmd: api.Command) => void) => {
+    if (this.closed) {
+      const e = new Error('Trying to listen to commands on a closed channel');
+      this.onUnrecoverableError(e);
+
+      throw e;
+    }
+
     this.emitter.on('command', listener);
 
     return () => this.emitter.removeListener('command', listener);
@@ -115,8 +122,7 @@ export class Channel<Ctx> {
 
     // Send close command to chan0
     this.sendToClient(cmd);
-
-    this.closeInternal();
+    this.closed = true;
   };
 
   /**
@@ -126,9 +132,17 @@ export class Channel<Ctx> {
    */
   public send = (cmdJson: api.ICommand) => {
     if (!this.sendToClient) {
-      this.onUnrecoverableError(new Error('Sending on a closed channel'));
+      const e = new Error('Sending on a channel that never opened');
+      this.onUnrecoverableError(e);
 
-      return;
+      throw e;
+    }
+
+    if (this.closed) {
+      const e = new Error('Calling send on closed channel');
+      this.onUnrecoverableError(e);
+
+      throw e;
     }
 
     cmdJson.channel = this.id;
@@ -141,6 +155,13 @@ export class Channel<Ctx> {
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
   public request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
+    if (this.closed) {
+      const e = new Error('Calling request on closed channel');
+      this.onUnrecoverableError(e);
+
+      throw e;
+    }
+
     // Random base36 int
     const ref = Number(Math.random().toString().split('.')[1]).toString(36);
     cmdJson.ref = ref;
@@ -181,6 +202,13 @@ export class Channel<Ctx> {
    * Called when the channel recieves a message
    */
   public handleCommand = (cmd: api.Command) => {
+    if (this.closed) {
+      // Ignore commands coming in after close.
+      // this can happen if we requested a close and there are
+      // still commands that are processed before our close request
+      return;
+    }
+
     this.emitter.emit('command', cmd);
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
@@ -207,7 +235,8 @@ export class Channel<Ctx> {
         new Error('Expected channel to be marked as closed when the initiator is channel'),
       );
       // Do some cleanup regardless
-      this.closeInternal();
+      this.closed = true;
+      this.emitter.removeAllListeners();
 
       return;
     }
@@ -219,12 +248,11 @@ export class Channel<Ctx> {
         ),
       );
       // Do some cleanup regardless
-      this.closeInternal();
+      this.closed = true;
+      this.emitter.removeAllListeners();
 
       return;
     }
-
-    this.closeInternal();
 
     if (this.openChannelCbClose) {
       // The channel opened previously and we need to send the close reason
@@ -268,39 +296,5 @@ export class Channel<Ctx> {
 
   getMaxListeners() {
     return this.emitter.getMaxListeners();
-  }
-
-  /**
-   * Make sure the channel is unusable upon closing. We do this when the
-   * user calls close & pid1 responds to a close, or we disconnect.
-   * Any interaction with the channel is considered an error
-   */
-  private closeInternal() {
-    this.closed = true;
-    this.emitter.removeAllListeners();
-    this.onCommand = () => {
-      const e = new Error('Trying to listen to commands on a closed channel');
-      this.onUnrecoverableError(e);
-
-      throw e;
-    };
-
-    // We can still receive commands from pid1 while there's an inflight close
-    // the user shouldn't get them
-    this.handleCommand = () => undefined;
-
-    this.send = () => {
-      const e = new Error('Calling send on closed channel');
-      this.onUnrecoverableError(e);
-
-      throw e;
-    };
-
-    this.request = () => {
-      const e = new Error('Calling request on closed channel');
-      this.onUnrecoverableError(e);
-
-      throw e;
-    };
   }
 }
