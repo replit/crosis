@@ -10,6 +10,10 @@ module.exports = {
       typescript: {},
     },
   },
+  env: {
+    "browser": true,
+    "node": true,
+  },
   rules: {
     'import/prefer-default-export': 'off',
     indent: 'off',
