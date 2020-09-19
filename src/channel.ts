@@ -43,8 +43,8 @@ export type OpenChannelCb<Ctx> = (res: OpenChannelRes<Ctx>) => void | OnCloseFn;
 type OnCloseFn = (reason: ChannelCloseReason) => void;
 
 export type OpenChannelRes<Ctx> =
-  | { error: null; channel: Channel<Ctx>; context: Ctx }
-  | { error: Error; channel: null; context: Ctx };
+  | { error: null; channel: Channel<Ctx>; context?: Ctx }
+  | { error: Error; channel: null; context?: Ctx };
 
 export class Channel<Ctx> {
   // public
@@ -157,7 +157,7 @@ export class Channel<Ctx> {
     id: number;
     state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED;
     send: (cmd: api.Command) => void;
-    context: Ctx;
+    context?: Ctx;
   }) => {
     this.id = id;
     this.sendToClient = send;
@@ -185,7 +185,7 @@ export class Channel<Ctx> {
    *
    * Called when the channel or client is closed
    */
-  public handleClose = (reason: ChannelCloseReason, context: Ctx) => {
+  public handleClose = (reason: ChannelCloseReason, context?: Ctx) => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;
@@ -214,7 +214,7 @@ export class Channel<Ctx> {
    *
    * Called when the channel has an error opening
    */
-  public handleError = (error: Error, context: Ctx) => {
+  public handleError = (error: Error, context?: Ctx) => {
     this.openChannelCb({ error, channel: null, context });
     this.openChannelCbClose = null;
     this.emitter.removeAllListeners();

@@ -63,7 +63,7 @@ interface ChannelRequest<Ctx> {
   openChannelCb: OpenChannelCb<Ctx>;
 }
 
-export class Client<Ctx extends unknown = null> {
+export class Client<Ctx extends unknown = void> {
   public static ClientCloseReason = ClientCloseReason;
 
   public connectionState: ConnectionState;
@@ -115,12 +115,6 @@ export class Client<Ctx extends unknown = null> {
         port: '80',
       },
       fetchToken: () => Promise.reject(new Error('You must provide a fetchToken function')),
-      // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
-      // @ts-ignore context is not relevant until we call the `open` function
-      // the user needs to pass it to the constructor for us to not ts-ignore
-      // this, however we don't want that because each `open` call can have a new
-      // ctx but the shape will be the same
-      context: null,
     };
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
