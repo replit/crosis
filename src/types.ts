@@ -31,7 +31,7 @@ export interface ChannelOptions<Ctx> {
   name?: string;
   service: string;
   action?: api.OpenChannel.Action;
-  skip?: (context?: Ctx) => boolean;
+  skip?: (context: Ctx) => boolean;
 }
 
 export interface UrlOptions {
@@ -45,5 +45,5 @@ export interface ConnectOptions<Ctx> {
   urlOptions: UrlOptions;
   timeout: number | null;
   WebSocketClass?: typeof WebSocket;
-  context?: Ctx;
+  context: Ctx;
 }
