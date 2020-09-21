@@ -1,4 +1,3 @@
-/* global WebSocket */
 import { api } from '@replit/protocol';
 
 export enum ClientCloseReason {
@@ -28,11 +27,11 @@ export type ChannelCloseReason =
       willReconnect: false;
     };
 
-export interface ChannelOptions<D = any> {
+export interface ChannelOptions<Ctx> {
   name?: string;
   service: string;
   action?: api.OpenChannel.Action;
-  skip?: (context: D) => boolean;
+  skip?: (context: Ctx) => boolean;
 }
 
 export interface UrlOptions {
@@ -41,10 +40,10 @@ export interface UrlOptions {
   port: string;
 }
 
-export interface ConnectOptions<D = any> {
+export interface ConnectOptions<Ctx> {
   fetchToken: (abortSignal: AbortSignal) => Promise<{ token: string | null, aborted: boolean }>;
   urlOptions: UrlOptions;
   timeout: number | null;
   WebSocketClass?: typeof WebSocket;
-  context: D;
+  context: Ctx;
 }

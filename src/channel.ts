@@ -38,15 +38,15 @@ export interface RequestResult extends api.Command {
  * closeChannel() // Will call potential returned cleanup function
  *
  */
-export type OpenChannelCb<D = any> = (res: OpenChannelRes<D>) => void | OnCloseFn;
+export type OpenChannelCb<Ctx> = (res: OpenChannelRes<Ctx>) => void | OnCloseFn;
 
 type OnCloseFn = (reason: ChannelCloseReason) => void;
 
-export type OpenChannelRes<D = any> =
-  | { error: null; channel: Channel; context: D }
-  | { error: Error; channel: null; context: D };
+export type OpenChannelRes<Ctx> =
+  | { error: null; channel: Channel<Ctx>; context: Ctx }
+  | { error: Error; channel: null; context: Ctx };
 
-export class Channel {
+export class Channel<Ctx> {
   // public
   public state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED | null;
 
@@ -58,13 +58,13 @@ export class Channel {
 
   private requestMap: { [ref: string]: (res: RequestResult) => void };
 
-  private openChannelCb: OpenChannelCb;
+  private openChannelCb: OpenChannelCb<Ctx>;
 
   private emitter: EventEmitter;
 
-  private openChannelCbClose: ReturnType<OpenChannelCb> | null;
+  private openChannelCbClose: ReturnType<OpenChannelCb<Ctx>> | null;
 
-  constructor(config: { openChannelCb: OpenChannelCb }) {
+  constructor(config: { openChannelCb: OpenChannelCb<Ctx> }) {
     this.id = null;
     this.sendToClient = null;
     this.state = null;
@@ -157,7 +157,7 @@ export class Channel {
     id: number;
     state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED;
     send: (cmd: api.Command) => void;
-    context: any;
+    context: Ctx;
   }) => {
     this.id = id;
     this.sendToClient = send;
@@ -185,7 +185,7 @@ export class Channel {
    *
    * Called when the channel or client is closed
    */
-  public handleClose = (reason: ChannelCloseReason, context: any) => {
+  public handleClose = (reason: ChannelCloseReason, context: Ctx) => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;
@@ -214,7 +214,7 @@ export class Channel {
    *
    * Called when the channel has an error opening
    */
-  public handleError = (error: Error, context: any) => {
+  public handleError = (error: Error, context: Ctx) => {
     this.openChannelCb({ error, channel: null, context });
     this.openChannelCbClose = null;
     this.emitter.removeAllListeners();

@@ -12,8 +12,9 @@ import {
 /**
  * The only required option is `fetchToken`, all others are optional and will use defaults
  */
-interface ConnectArgs<D> extends Partial<Omit<ConnectOptions<D>, 'fetchToken'>> {
-  fetchToken: ConnectOptions<D>['fetchToken'];
+interface ConnectArgs<Ctx> extends Partial<Omit<ConnectOptions<Ctx>, 'fetchToken'>> {
+  fetchToken: ConnectOptions<Ctx>['fetchToken'];
+  context: Ctx;
 }
 
 type CloseResult =
@@ -57,27 +58,27 @@ type DebugLog =
 
 type DebugFunc = (log: DebugLog) => void;
 
-interface ChannelRequest {
-  options: ChannelOptions;
-  currentChannel: Channel | null;
-  openChannelCb: OpenChannelCb;
+interface ChannelRequest<Ctx> {
+  options: ChannelOptions<Ctx>;
+  currentChannel: Channel<Ctx> | null;
+  openChannelCb: OpenChannelCb<Ctx>;
 }
 
-export class Client {
+export class Client<Ctx extends unknown = null> {
   public static ClientCloseReason = ClientCloseReason;
 
   public connectionState: ConnectionState;
 
   private ws: WebSocket | null;
 
-  private connectOptions: ConnectOptions;
+  private connectOptions: ConnectOptions<Ctx> | null;
 
-  private chan0Cb: OpenChannelCb | null;
+  private chan0Cb: OpenChannelCb<Ctx> | null;
 
-  private channelRequests: Array<ChannelRequest>;
+  private channelRequests: Array<ChannelRequest<Ctx>>;
 
   private channels: {
-    [id: number]: Channel;
+    [id: number]: Channel<Ctx>;
   };
 
   private debug: DebugFunc;
@@ -107,16 +108,7 @@ export class Client {
   constructor() {
     this.ws = null;
     this.channels = {};
-    this.connectOptions = {
-      timeout: 10000,
-      urlOptions: {
-        secure: false,
-        host: 'eval.repl.it',
-        port: '80',
-      },
-      fetchToken: () => Promise.reject(new Error('You must provide a fetchToken function')),
-      context: null,
-    };
+    this.connectOptions = null;
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = () => {};
@@ -146,7 +138,7 @@ export class Client {
    * Every client automatically "has" channel 0 and can use it to open more channels.
    * See http://protodoc.turbio.repl.co/protov2 from more info
    */
-  public open = <D = any>(options: ConnectArgs<D>, cb: OpenChannelCb<D>) => {
+  public open = (options: ConnectArgs<Ctx>, cb: OpenChannelCb<Ctx>) => {
     if (this.chan0Cb) {
       throw new Error('You must call `close` before opening the client again');
     }
@@ -159,7 +151,12 @@ export class Client {
     }
 
     this.connectOptions = {
-      ...this.connectOptions,
+      timeout: 10000,
+      urlOptions: {
+        secure: false,
+        host: 'eval.repl.it',
+        port: '80',
+      },
       ...options,
     };
 
@@ -182,8 +179,12 @@ export class Client {
    *
    * http://protodoc.turbio.repl.co/protov2#opening-channels
    */
-  public openChannel = <D = any>(options: ChannelOptions, cb: OpenChannelCb<D>) => {
-    const channelRequest: ChannelRequest = { options, openChannelCb: cb, currentChannel: null };
+  public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>) => {
+    const channelRequest: ChannelRequest<Ctx> = {
+      options,
+      openChannelCb: cb,
+      currentChannel: null,
+    };
     this.channelRequests.push(channelRequest);
 
     if (this.connectionState === ConnectionState.CONNECTED) {
@@ -200,8 +201,14 @@ export class Client {
     };
   };
 
-  private handleOpenChannel = (channelRequest: ChannelRequest) => {
+  private handleOpenChannel = (channelRequest: ChannelRequest<Ctx>) => {
     const { options, openChannelCb } = channelRequest;
+
+    if (!this.connectOptions) {
+      this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+      return;
+    }
 
     const { skip } = options;
     if (skip && skip(this.connectOptions.context)) {
@@ -222,7 +229,7 @@ export class Client {
       return;
     }
 
-    const channel = new Channel({ openChannelCb });
+    const channel = new Channel<Ctx>({ openChannelCb });
     channelRequest.currentChannel = channel;
 
     this.debug({
@@ -274,6 +281,12 @@ export class Client {
 
       this.debug({ type: 'breadcrumb', message: 'openChanres' });
 
+      if (!this.connectOptions) {
+        this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+        return;
+      }
+
       if (state === api.OpenChannelRes.State.ERROR) {
         this.debug({ type: 'breadcrumb', message: 'error', data: error });
         channel.handleError(
@@ -321,7 +334,7 @@ export class Client {
   };
 
   /** Gets a channel by Id */
-  public getChannel(id: number): Channel {
+  public getChannel(id: number): Channel<Ctx> {
     const chan = this.channels[id];
 
     this.debug({
@@ -423,6 +436,13 @@ export class Client {
       throw error;
     }
 
+    if (!this.connectOptions) {
+      const error = new Error('Expected connectionOptions');
+      this.onUnrecoverableError(error);
+
+      throw error;
+    }
+
     this.connectTries += 1;
     this.connectionState = ConnectionState.CONNECTING;
 
@@ -486,7 +506,6 @@ export class Client {
 
       return;
     }
-
 
     if (token && aborted) {
       this.onUnrecoverableError(new Error('Expected either aborted or a token'));
@@ -627,6 +646,12 @@ export class Client {
             throw new Error('Cannot call close inside connect callback');
           };
 
+          if (!this.connectOptions) {
+            this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+            return;
+          }
+
           chan0.handleOpen({
             id: 0,
             state: api.OpenChannelRes.State.CREATED,
@@ -740,6 +765,12 @@ export class Client {
 
         const channel = this.channels[cmd.closeChanRes.id];
 
+        if (!this.connectOptions) {
+          this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+          return;
+        }
+
         channel.handleClose(
           {
             initiator: 'channel',
@@ -844,14 +875,21 @@ export class Client {
         return;
       }
 
+      if (!this.connectOptions) {
+        this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+        return;
+      }
+
       channel.handleClose(closeReason, this.connectOptions.context);
     });
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
     if (!willReconnect) {
-      // Client is done being used
+      // Client is done being used until the next `open` call
       this.chan0Cb = null;
+      this.connectOptions = null;
       return;
     }
 
