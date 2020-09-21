@@ -490,7 +490,8 @@ test('connecting with a context object', (done) => {
   );
 });
 
-test('falling back to polling', (done) => {
+// re-add once we add polling
+test.skip('falling back to polling', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
   client.setUnrecoverErrorHandler(onUnrecoverableError);
@@ -525,9 +526,7 @@ test('falling back to polling', (done) => {
     {
       fetchToken: () => Promise.resolve({ token: 'bad token', aborted: false }),
       WebSocketClass: WebSocket,
-      maxConnectRetries,
       timeout: 0,
-      polling: false,
     },
     open,
   );
@@ -538,7 +537,7 @@ test('fetch token fail', (done) => {
   const client = new Client();
 
   client.setUnrecoverErrorHandler((e) => {
-    expect(chan0Cb).toHaveBeenCalledTimes(0);
+    expect(chan0Cb).toHaveBeenCalledTimes(1);
     expect(e.message).toContain('fail');
 
     done();
