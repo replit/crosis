@@ -83,7 +83,7 @@ export class Client<Ctx extends unknown = null> {
 
   private debug: DebugFunc;
 
-  private onUnrecoverableError: (e: Error) => void;
+  private userUnrecoverableErrorHandler: ((e: Error) => void) | null;
 
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
@@ -112,17 +112,7 @@ export class Client<Ctx extends unknown = null> {
     this.chan0Cb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = () => {};
-    this.onUnrecoverableError = (e) => {
-      this.handleClose({
-        closeReason: ClientCloseReason.Error,
-        error: e,
-      });
-
-      // eslint-disable-next-line no-console
-      console.error('Please supply your own unrecoverable error handling function');
-
-      throw e;
-    };
+    this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
     this.connectTries = 0;
     this.retryTimeoutId = null;
@@ -229,7 +219,7 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const channel = new Channel<Ctx>({ openChannelCb });
+    const channel = new Channel<Ctx>({ openChannelCb }, this.onUnrecoverableError);
     channelRequest.currentChannel = channel;
 
     this.debug({
@@ -289,9 +279,9 @@ export class Client<Ctx extends unknown = null> {
 
       if (state === api.OpenChannelRes.State.ERROR) {
         this.debug({ type: 'breadcrumb', message: 'error', data: error });
-        channel.handleError(
-          new Error(error || 'Something went wrong'),
-          this.connectOptions.context,
+
+        this.onUnrecoverableError(
+          new Error(`Channel open resulted with an error: ${error || 'with no message'}`),
         );
 
         return;
@@ -306,7 +296,7 @@ export class Client<Ctx extends unknown = null> {
       this.channels[id] = channel;
       channelRequest.currentChannel = channel;
 
-      channel.handleOpen({ id, state, send: this.send, context: this.connectOptions.context });
+      channel.handleOpenRes({ id, state, send: this.send, context: this.connectOptions.context });
     });
   };
 
@@ -370,14 +360,7 @@ export class Client<Ctx extends unknown = null> {
    * caused by the user mis-using the client.
    */
   public setUnrecoverErrorHandler(onUnrecoverableError: (e: Error) => void) {
-    this.onUnrecoverableError = (e: Error) => {
-      this.handleClose({
-        closeReason: ClientCloseReason.Error,
-        error: e,
-      });
-
-      onUnrecoverableError(e);
-    };
+    this.userUnrecoverableErrorHandler = onUnrecoverableError;
   }
 
   /** Start a ping<>pong for debugging and latency stats */
@@ -457,7 +440,7 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const chan0 = new Channel({ openChannelCb: this.chan0Cb });
+    const chan0 = new Channel({ openChannelCb: this.chan0Cb }, this.onUnrecoverableError);
     this.channels[0] = chan0;
 
     const WebSocketClass = getWebSocketClass(this.connectOptions);
@@ -652,7 +635,7 @@ export class Client<Ctx extends unknown = null> {
             return;
           }
 
-          chan0.handleOpen({
+          chan0.handleOpenRes({
             id: 0,
             state: api.OpenChannelRes.State.CREATED,
             send: this.send,
@@ -936,5 +919,23 @@ export class Client<Ctx extends unknown = null> {
 
       ws.close();
     }
+  };
+
+  private onUnrecoverableError = (e: Error) => {
+    this.handleClose({
+      closeReason: ClientCloseReason.Error,
+      error: e,
+    });
+
+    if (this.userUnrecoverableErrorHandler) {
+      this.userUnrecoverableErrorHandler(e);
+
+      return;
+    }
+
+    // eslint-disable-next-line no-console
+    console.error('Please supply your own unrecoverable error handling function');
+
+    throw e;
   };
 }

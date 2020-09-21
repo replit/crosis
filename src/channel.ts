@@ -47,7 +47,6 @@ export type OpenChannelRes<Ctx> =
   | { error: Error; channel: null; context: Ctx };
 
 export class Channel<Ctx> {
-  // public
   public state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED | null;
 
   public id: number | null;
@@ -64,7 +63,12 @@ export class Channel<Ctx> {
 
   private openChannelCbClose: ReturnType<OpenChannelCb<Ctx>> | null;
 
-  constructor(config: { openChannelCb: OpenChannelCb<Ctx> }) {
+  private onUnrecoverableError: (e: Error) => void;
+
+  constructor(
+    config: { openChannelCb: OpenChannelCb<Ctx> },
+    onUnrecoverableError: (e: Error) => void,
+  ) {
     this.id = null;
     this.sendToClient = null;
     this.state = null;
@@ -73,9 +77,17 @@ export class Channel<Ctx> {
     this.openChannelCb = config.openChannelCb;
     this.openChannelCbClose = null;
     this.emitter = new EventEmitter();
+    this.onUnrecoverableError = onUnrecoverableError;
   }
 
   public onCommand = (listener: (cmd: api.Command) => void) => {
+    if (this.closed) {
+      const e = new Error('Trying to listen to commands on a closed channel');
+      this.onUnrecoverableError(e);
+
+      throw e;
+    }
+
     this.emitter.on('command', listener);
 
     return () => this.emitter.removeListener('command', listener);
@@ -89,7 +101,10 @@ export class Channel<Ctx> {
    */
   public close = (action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE) => {
     if (this.closed === true) {
-      throw new Error('Channel already closed');
+      const e = new Error('Channel already closed');
+      this.onUnrecoverableError(e);
+
+      throw e;
     }
 
     const cmd = api.Command.create({
@@ -101,14 +116,14 @@ export class Channel<Ctx> {
     });
 
     if (!this.sendToClient) {
-      throw new Error('Expected sendToClient');
+      const e = new Error('Expected sendToClient');
+      this.onUnrecoverableError(e);
+
+      throw e;
     }
 
     // Send close command to chan0
     this.sendToClient(cmd);
-
-    this.handleCommand = () => undefined;
-    this.send = () => undefined;
     this.closed = true;
   };
 
@@ -119,7 +134,17 @@ export class Channel<Ctx> {
    */
   public send = (cmdJson: api.ICommand) => {
     if (!this.sendToClient) {
-      throw new Error('Sending on a closed channel');
+      const e = new Error('Sending on a channel that never opened');
+      this.onUnrecoverableError(e);
+
+      throw e;
+    }
+
+    if (this.closed) {
+      const e = new Error('Calling send on closed channel');
+      this.onUnrecoverableError(e);
+
+      throw e;
     }
 
     cmdJson.channel = this.id;
@@ -132,6 +157,13 @@ export class Channel<Ctx> {
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
   public request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
+    if (this.closed) {
+      const e = new Error('Calling request on closed channel');
+      this.onUnrecoverableError(e);
+
+      throw e;
+    }
+
     // Random base36 int
     const ref = Number(Math.random().toString().split('.')[1]).toString(36);
     cmdJson.ref = ref;
@@ -148,7 +180,7 @@ export class Channel<Ctx> {
    *
    * Called when the channel opens
    */
-  public handleOpen = ({
+  public handleOpenRes = ({
     id,
     state,
     send,
@@ -172,6 +204,13 @@ export class Channel<Ctx> {
    * Called when the channel recieves a message
    */
   public handleCommand = (cmd: api.Command) => {
+    if (this.closed) {
+      // Ignore commands coming in after close.
+      // this can happen if we requested a close and there are
+      // still commands that are processed before our close request
+      return;
+    }
+
     this.emitter.emit('command', cmd);
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
@@ -193,31 +232,50 @@ export class Channel<Ctx> {
       delete this.requestMap[ref];
     });
 
-    this.closed = true;
+    if (reason.initiator === 'channel' && !this.closed) {
+      const e = new Error('Expected channel to be marked as closed when the initiator is channel');
+      this.onUnrecoverableError(e);
+      // Do some cleanup regardless
+      this.closed = true;
+      this.emitter.removeAllListeners();
 
-    if (this.openChannelCbClose) {
-      this.openChannelCbClose(reason);
-      this.openChannelCbClose = null;
-    } else if (!reason.willReconnect) {
-      this.openChannelCb({
-        error: new Error('Channel closed'),
-        channel: null,
-        context,
-      });
+      throw e;
     }
 
-    this.emitter.removeAllListeners();
-  };
+    if (reason.initiator === 'channel' && !this.openChannelCbClose) {
+      const e = new Error(
+        'Expected openChannelCbClose to be truthy when the close intiator is the channel',
+      );
+      this.onUnrecoverableError(e);
+      // Do some cleanup regardless
+      this.closed = true;
+      this.emitter.removeAllListeners();
 
-  /**
-   * @hidden should only be called by [[Client]]
-   *
-   * Called when the channel has an error opening
-   */
-  public handleError = (error: Error, context: Ctx) => {
-    this.openChannelCb({ error, channel: null, context });
-    this.openChannelCbClose = null;
-    this.emitter.removeAllListeners();
+      return;
+    }
+
+    if (this.openChannelCbClose) {
+      // The channel opened previously and we need to send the close reason
+      // to the close callback supplied to us by the user
+      this.openChannelCbClose(reason);
+      this.openChannelCbClose = null;
+
+      return;
+    }
+
+    if (reason.willReconnect) {
+      // We never got to open a channel, and we will reconnect
+      // no need to do anything as we never the open callback
+      return;
+    }
+
+    // We never opened the channel and we will never open
+    // report to the openChannelCb
+    this.openChannelCb({
+      error: new Error('Failed to open'),
+      channel: null,
+      context,
+    });
   };
 
   /**
