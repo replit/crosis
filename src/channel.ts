@@ -101,9 +101,10 @@ export class Channel<Ctx> {
    */
   public close = (action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE) => {
     if (this.closed === true) {
-      this.onUnrecoverableError(new Error('Channel already closed'));
+      const e = new Error('Channel already closed');
+      this.onUnrecoverableError(e);
 
-      return;
+      throw e;
     }
 
     const cmd = api.Command.create({
@@ -115,9 +116,10 @@ export class Channel<Ctx> {
     });
 
     if (!this.sendToClient) {
-      this.onUnrecoverableError(new Error('Expected sendToClient'));
+      const e = new Error('Expected sendToClient');
+      this.onUnrecoverableError(e);
 
-      return;
+      throw e;
     }
 
     // Send close command to chan0
@@ -231,22 +233,20 @@ export class Channel<Ctx> {
     });
 
     if (reason.initiator === 'channel' && !this.closed) {
-      this.onUnrecoverableError(
-        new Error('Expected channel to be marked as closed when the initiator is channel'),
-      );
+      const e = new Error('Expected channel to be marked as closed when the initiator is channel');
+      this.onUnrecoverableError(e);
       // Do some cleanup regardless
       this.closed = true;
       this.emitter.removeAllListeners();
 
-      return;
+      throw e;
     }
 
     if (reason.initiator === 'channel' && !this.openChannelCbClose) {
-      this.onUnrecoverableError(
-        new Error(
-          'Expected openChannelCbClose to be truthy when the close intiator is the channel',
-        ),
+      const e = new Error(
+        'Expected openChannelCbClose to be truthy when the close intiator is the channel',
       );
+      this.onUnrecoverableError(e);
       // Do some cleanup regardless
       this.closed = true;
       this.emitter.removeAllListeners();
