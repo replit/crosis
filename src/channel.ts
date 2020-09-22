@@ -88,7 +88,9 @@ export class Channel {
 
     this.onCommandListeners.push(listener);
 
-    return () => this.onCommandListeners.filter((l) => l !== listener);
+    return () => {
+      this.onCommandListeners = this.onCommandListeners.filter((l) => l !== listener);
+    };
   };
 
   /**
