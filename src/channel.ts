@@ -1,8 +1,7 @@
-import { EventEmitter } from 'events';
 import { api } from '@replit/protocol';
 import { ChannelCloseReason } from './types';
 
-export interface RequestResult extends api.Command {
+interface RequestResult extends api.Command {
   channelClosed?: ChannelCloseReason;
 }
 
@@ -38,51 +37,49 @@ export interface RequestResult extends api.Command {
  * closeChannel() // Will call potential returned cleanup function
  *
  */
-export type OpenChannelCb<Ctx> = (res: OpenChannelRes<Ctx>) => void | OnCloseFn;
 
-type OnCloseFn = (reason: ChannelCloseReason) => void;
+export class Channel {
+  public id: number;
 
-export type OpenChannelRes<Ctx> =
-  | { error: null; channel: Channel<Ctx>; context: Ctx }
-  | { error: Error; channel: null; context: Ctx };
+  public status: 'open' | 'closed' | 'closing';
 
-export class Channel<Ctx> {
-  public state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED | null;
+  public name: string | void;
 
-  public id: number | null;
+  public service: string;
 
-  public closed: boolean;
-
-  private sendToClient: ((cmd: api.Command) => void) | null;
+  private sendToClient: (cmd: api.Command) => void;
 
   private requestMap: { [ref: string]: (res: RequestResult) => void };
 
-  private openChannelCb: OpenChannelCb<Ctx>;
-
   private onCommandListeners: Array<(cmd: api.Command) => void>;
-
-  private openChannelCbClose: ReturnType<OpenChannelCb<Ctx>> | null;
 
   private onUnrecoverableError: (e: Error) => void;
 
-  constructor(
-    config: { openChannelCb: OpenChannelCb<Ctx> },
-    onUnrecoverableError: (e: Error) => void,
-  ) {
-    this.id = null;
-    this.sendToClient = null;
-    this.state = null;
-    this.closed = false;
-    this.requestMap = {};
-    this.openChannelCb = config.openChannelCb;
-    this.openChannelCbClose = null;
-    this.emitter = new EventEmitter();
+  constructor({
+    id,
+    name,
+    service,
+    send,
+    onUnrecoverableError,
+  }: {
+    id: number;
+    name: string | void;
+    service: string;
+    send: (cmd: api.Command) => void;
+    onUnrecoverableError: (e: Error) => void;
+  }) {
+    this.id = id;
+    this.name = name;
+    this.service = service;
+    this.sendToClient = send;
     this.onUnrecoverableError = onUnrecoverableError;
+    this.status = 'open';
+    this.requestMap = {};
     this.onCommandListeners = [];
   }
 
   public onCommand = (listener: (cmd: api.Command) => void) => {
-    if (this.closed) {
+    if (this.status === 'closed') {
       const e = new Error('Trying to listen to commands on a closed channel');
       this.onUnrecoverableError(e);
 
@@ -95,54 +92,20 @@ export class Channel<Ctx> {
   };
 
   /**
-   * Closes the channel
-   *
-   * see http://protodoc.turbio.repl.co/protov2#closing-channels
-   * @param action [[api.OpenChannel.Action]] specifies how you want to close the channel
-   */
-  public close = (action: api.CloseChannel.Action = api.CloseChannel.Action.TRY_CLOSE) => {
-    if (this.closed === true) {
-      const e = new Error('Channel already closed');
-      this.onUnrecoverableError(e);
-
-      throw e;
-    }
-
-    const cmd = api.Command.create({
-      channel: 0,
-      closeChan: {
-        action,
-        id: this.id,
-      },
-    });
-
-    if (!this.sendToClient) {
-      const e = new Error('Expected sendToClient');
-      this.onUnrecoverableError(e);
-
-      throw e;
-    }
-
-    // Send close command to chan0
-    this.sendToClient(cmd);
-    this.closed = true;
-  };
-
-  /**
    * Receives a command and sends it over the wire
    * along with the channel id.
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
   public send = (cmdJson: api.ICommand) => {
-    if (!this.sendToClient) {
-      const e = new Error('Sending on a channel that never opened');
+    if (this.status === 'closed') {
+      const e = new Error('Calling send on closed channel');
       this.onUnrecoverableError(e);
 
       throw e;
     }
 
-    if (this.closed) {
-      const e = new Error('Calling send on closed channel');
+    if (this.status === 'closing') {
+      const e = new Error('Cannot send any more commands after a close request');
       this.onUnrecoverableError(e);
 
       throw e;
@@ -158,13 +121,6 @@ export class Channel<Ctx> {
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
   public request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
-    if (this.closed) {
-      const e = new Error('Calling request on closed channel');
-      this.onUnrecoverableError(e);
-
-      throw e;
-    }
-
     // Random base36 int
     const ref = Number(Math.random().toString().split('.')[1]).toString(36);
     cmdJson.ref = ref;
@@ -179,39 +135,9 @@ export class Channel<Ctx> {
   /**
    * @hidden should only be called by [[Client]]
    *
-   * Called when the channel opens
-   */
-  public handleOpenRes = ({
-    id,
-    state,
-    send,
-    context,
-  }: {
-    id: number;
-    state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED;
-    send: (cmd: api.Command) => void;
-    context: Ctx;
-  }) => {
-    this.id = id;
-    this.sendToClient = send;
-    this.state = state;
-
-    this.openChannelCbClose = this.openChannelCb({ channel: this, error: null, context });
-  };
-
-  /**
-   * @hidden should only be called by [[Client]]
-   *
    * Called when the channel recieves a message
    */
   public handleCommand = (cmd: api.Command) => {
-    if (this.closed) {
-      // Ignore commands coming in after close.
-      // this can happen if we requested a close and there are
-      // still commands that are processed before our close request
-      return;
-    }
-
     this.onCommandListeners.forEach((l) => l(cmd));
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
@@ -224,8 +150,10 @@ export class Channel<Ctx> {
    * @hidden should only be called by [[Client]]
    *
    * Called when the channel or client is closed
+   * concludes all the requests promises and cleans up
+   * the onCommand listeners
    */
-  public handleClose = (reason: ChannelCloseReason, context: Ctx) => {
+  public handleClose = (reason: ChannelCloseReason) => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;
@@ -233,49 +161,7 @@ export class Channel<Ctx> {
       delete this.requestMap[ref];
     });
 
-    if (reason.initiator === 'channel' && !this.closed) {
-      const e = new Error('Expected channel to be marked as closed when the initiator is channel');
-      this.onUnrecoverableError(e);
-      // Do some cleanup regardless
-      this.closed = true;
-      this.emitter.removeAllListeners();
-
-      throw e;
-    }
-
-    if (reason.initiator === 'channel' && !this.openChannelCbClose) {
-      const e = new Error(
-        'Expected openChannelCbClose to be truthy when the close intiator is the channel',
-      );
-      this.onUnrecoverableError(e);
-      // Do some cleanup regardless
-      this.closed = true;
-      this.emitter.removeAllListeners();
-
-      return;
-    }
-
-    if (this.openChannelCbClose) {
-      // The channel opened previously and we need to send the close reason
-      // to the close callback supplied to us by the user
-      this.openChannelCbClose(reason);
-      this.openChannelCbClose = null;
-
-      return;
-    }
-
-    if (reason.willReconnect) {
-      // We never got to open a channel, and we will reconnect
-      // no need to do anything as we never the open callback
-      return;
-    }
-
-    // We never opened the channel and we will never open
-    // report to the openChannelCb
-    this.openChannelCb({
-      error: new Error('Failed to open'),
-      channel: null,
-      context,
-    });
+    this.status = 'closed';
+    this.onCommandListeners = [];
   };
 }
