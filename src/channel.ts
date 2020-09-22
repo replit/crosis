@@ -59,7 +59,7 @@ export class Channel<Ctx> {
 
   private openChannelCb: OpenChannelCb<Ctx>;
 
-  private emitter: EventEmitter;
+  private onCommandListeners: Array<(cmd: api.Command) => void>;
 
   private openChannelCbClose: ReturnType<OpenChannelCb<Ctx>> | null;
 
@@ -78,6 +78,7 @@ export class Channel<Ctx> {
     this.openChannelCbClose = null;
     this.emitter = new EventEmitter();
     this.onUnrecoverableError = onUnrecoverableError;
+    this.onCommandListeners = [];
   }
 
   public onCommand = (listener: (cmd: api.Command) => void) => {
@@ -88,9 +89,9 @@ export class Channel<Ctx> {
       throw e;
     }
 
-    this.emitter.on('command', listener);
+    this.onCommandListeners.push(listener);
 
-    return () => this.emitter.removeListener('command', listener);
+    return () => this.onCommandListeners.filter((l) => l !== listener);
   };
 
   /**
@@ -211,7 +212,7 @@ export class Channel<Ctx> {
       return;
     }
 
-    this.emitter.emit('command', cmd);
+    this.onCommandListeners.forEach((l) => l(cmd));
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
       this.requestMap[cmd.ref](cmd);
@@ -277,24 +278,4 @@ export class Channel<Ctx> {
       context,
     });
   };
-
-  /**
-   * @hidden should only be called by [[Client]]
-   *
-   * Used to avoid warnings on listener count
-   */
-
-  setMaxListeners(count: number) {
-    this.emitter.setMaxListeners(count);
-  }
-
-  /**
-   * @hidden should only be called by [[Client]]
-   *
-   * Used to avoid warnings on listener count
-   */
-
-  getMaxListeners() {
-    return this.emitter.getMaxListeners();
-  }
 }
