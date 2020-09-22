@@ -130,10 +130,7 @@ export class Client<Ctx extends unknown = null> {
     }
 
     if (!options.fetchToken || typeof options.fetchToken !== 'function') {
-      const error = new Error('You must provide a fetchToken function');
-
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
-      throw error;
+      throw new Error('You must provide a fetchToken function');
     }
 
     this.connectOptions = {
@@ -274,8 +271,6 @@ export class Client<Ctx extends unknown = null> {
       }
 
       if (state === api.OpenChannelRes.State.ERROR) {
-        this.debug({ type: 'breadcrumb', message: 'error', data: error });
-
         this.onUnrecoverableError(
           new Error(`Channel open resulted with an error: ${error || 'with no message'}`),
         );
@@ -333,7 +328,8 @@ export class Client<Ctx extends unknown = null> {
 
     if (!chan) {
       const error = new Error(`No channel with number ${id}`);
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+
+      this.onUnrecoverableError(error);
 
       throw error;
     }
@@ -373,15 +369,15 @@ export class Client<Ctx extends unknown = null> {
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       const error = new Error('Client must be disconnected to connect');
+      this.onUnrecoverableError(error);
 
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
       throw error;
     }
 
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
       const error = new Error('Client already connected to an active websocket connection');
+      this.onUnrecoverableError(error);
 
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
       throw error;
     }
 
