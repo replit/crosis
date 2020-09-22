@@ -50,10 +50,6 @@ type DebugLog =
   | {
       type: 'log';
       log: TxRx;
-    }
-  | {
-      type: 'ping';
-      latency: number;
     };
 
 type DebugFunc = (log: DebugLog) => void;
@@ -362,36 +358,6 @@ export class Client<Ctx extends unknown = null> {
   public setUnrecoverErrorHandler(onUnrecoverableError: (e: Error) => void) {
     this.userUnrecoverableErrorHandler = onUnrecoverableError;
   }
-
-  /** Start a ping<>pong for debugging and latency stats */
-  public startPing = () => {
-    const chan0 = this.getChannel(0);
-    let pingTime = Date.now();
-
-    const ping = () => {
-      if (chan0.closed) {
-        return;
-      }
-
-      pingTime = Date.now();
-      chan0.send({ ping: {} });
-    };
-
-    chan0.onCommand((cmd) => {
-      if (cmd.body === 'pong') {
-        const pongTime = Date.now();
-        const latency = pongTime - pingTime;
-
-        this.debug({ type: 'ping', latency });
-
-        // Start next ping
-        setTimeout(ping, 10 * 1000);
-      }
-    });
-
-    // Kick off
-    ping();
-  };
 
   private connect = async () => {
     this.debug({
