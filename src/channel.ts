@@ -117,10 +117,15 @@ export class Channel {
     const ref = Number(Math.random().toString().split('.')[1]).toString(36);
     cmdJson.ref = ref;
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.requestMap[ref] = resolve;
 
-      this.send(cmdJson);
+      try {
+        this.send(cmdJson);
+      } catch (e) {
+        delete this.requestMap[ref];
+        reject(e);
+      }
     });
   };
 
