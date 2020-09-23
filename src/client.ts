@@ -1,5 +1,5 @@
 import { api } from '@replit/protocol';
-import { Channel, OpenChannelCb } from './channel';
+import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay } from './util/helpers';
 import {
   ConnectOptions,
@@ -54,11 +54,31 @@ type DebugLog =
 
 type DebugFunc = (log: DebugLog) => void;
 
-interface ChannelRequest<Ctx> {
-  options: ChannelOptions<Ctx>;
-  currentChannel: Channel<Ctx> | null;
-  openChannelCb: OpenChannelCb<Ctx>;
-}
+type OnCloseFn = void | ((reason: ChannelCloseReason) => void);
+
+type OpenChannelRes<Ctx> =
+  | { error: null; channel: Channel; context: Ctx }
+  | { error: Error; channel: null; context: Ctx };
+
+type OpenChannelCb<Ctx> = (res: OpenChannelRes<Ctx>) => OnCloseFn;
+
+type ChannelRequest<Ctx> =
+  | {
+      options: ChannelOptions<Ctx>;
+      openChannelCb: OpenChannelCb<Ctx>;
+      isOpen: true;
+      closeRequested: boolean;
+      channelId: number;
+      cleanupCb: ReturnType<OpenChannelCb<Ctx>>;
+    }
+  | {
+      options: ChannelOptions<Ctx>;
+      openChannelCb: OpenChannelCb<Ctx>;
+      isOpen: false;
+      closeRequested: boolean;
+      channelId: null;
+      cleanupCb: null;
+    };
 
 export class Client<Ctx extends unknown = null> {
   public static ClientCloseReason = ClientCloseReason;
@@ -76,7 +96,7 @@ export class Client<Ctx extends unknown = null> {
   private channelRequests: Array<ChannelRequest<Ctx>>;
 
   private channels: {
-    [id: number]: Channel<Ctx>;
+    [id: number]: Channel;
   };
 
   private debug: DebugFunc;
@@ -167,25 +187,38 @@ export class Client<Ctx extends unknown = null> {
     const channelRequest: ChannelRequest<Ctx> = {
       options,
       openChannelCb: cb,
-      currentChannel: null,
+      isOpen: false,
+      channelId: null,
+      cleanupCb: null,
+      closeRequested: false,
     };
+
     this.channelRequests.push(channelRequest);
 
     if (this.connectionState === ConnectionState.CONNECTED) {
       // We're connected, open channel. Otherwise we'll open the channel once we connect
-      this.handleOpenChannel(channelRequest);
+      this.requestOpenChannel(channelRequest);
     }
 
-    return () => {
-      if (channelRequest.currentChannel !== null && !channelRequest.currentChannel.closed) {
-        channelRequest.currentChannel.close();
+    const closeChannel = () => {
+      channelRequest.closeRequested = true;
+
+      if (!channelRequest.isOpen) {
+        // Channel is not open, let's just remove it from our list.
+        // If there's an inflight open request then we'll be sending a close
+        // request right after it's done.
+        this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
+
+        return;
       }
 
-      this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
+      this.requestCloseChannel(channelRequest);
     };
+
+    return closeChannel;
   };
 
-  private handleOpenChannel = (channelRequest: ChannelRequest<Ctx>) => {
+  private requestOpenChannel = (channelRequest: ChannelRequest<Ctx>) => {
     const { options, openChannelCb } = channelRequest;
 
     if (!this.connectOptions) {
@@ -207,14 +240,11 @@ export class Client<Ctx extends unknown = null> {
           : api.OpenChannel.Action.ATTACH_OR_CREATE;
     }
 
-    if (channelRequest.currentChannel) {
-      this.onUnrecoverableError(new Error('Unexpected currentChannel'));
+    if (channelRequest.channelId) {
+      this.onUnrecoverableError(new Error('Unexpected channelId'));
 
       return;
     }
-
-    const channel = new Channel<Ctx>({ openChannelCb }, this.onUnrecoverableError);
-    channelRequest.currentChannel = channel;
 
     this.debug({
       type: 'breadcrumb',
@@ -231,8 +261,6 @@ export class Client<Ctx extends unknown = null> {
     // Random base36 int
     const ref = Number(Math.random().toString().split('.')[1]).toString(36);
 
-    // avoid warnings on listener count
-    chan0.setMaxListeners(chan0.getMaxListeners() + 1);
     // Not using Channel.request here because we want to
     // resolve the response synchronously. We can receive
     // openChanRes and a command on the requested channel
@@ -285,11 +313,99 @@ export class Client<Ctx extends unknown = null> {
         return;
       }
 
+      const channel = new Channel({
+        id,
+        name: options.name,
+        service: options.service,
+        onUnrecoverableError: this.onUnrecoverableError,
+        send: this.send,
+      });
       this.channels[id] = channel;
-      channelRequest.currentChannel = channel;
+      // TODO we should stop relying on mutating the same channelrequest
+      (channelRequest as ChannelRequest<Ctx>).channelId = id;
+      (channelRequest as ChannelRequest<Ctx>).isOpen = true;
+      (channelRequest as ChannelRequest<Ctx>).cleanupCb = openChannelCb({
+        channel,
+        error: null,
+        context: this.connectOptions.context,
+      });
 
-      channel.handleOpenRes({ id, state, send: this.send, context: this.connectOptions.context });
+      if (channelRequest.closeRequested) {
+        // While we're opening the channel, we got a request to close this channel
+        // let's take care of that and request a close
+        this.requestCloseChannel(channelRequest);
+      }
     });
+  };
+
+  private requestCloseChannel = async (channelRequest: ChannelRequest<Ctx>) => {
+    if (!channelRequest.isOpen) {
+      this.onUnrecoverableError(new Error('Tried to request a channel close before opening'));
+
+      return;
+    }
+
+    const chan = this.getChannel(channelRequest.channelId);
+    chan.status = 'closing';
+
+    const chan0 = this.getChannel(0);
+
+    if (!chan0) {
+      this.onUnrecoverableError(
+        new Error('Tried to request a channel close but there was no chan0'),
+      );
+
+      return;
+    }
+
+    const res = await chan0.request({
+      closeChan: {
+        action: api.CloseChannel.Action.TRY_CLOSE,
+        id: channelRequest.channelId,
+      },
+    });
+
+    if (res.channelClosed) {
+      // channel0 is closed, which means all other channels are already closed
+      return;
+    }
+
+    if (res.closeChanRes == null) {
+      this.onUnrecoverableError(new Error('Expected closeChanRes'));
+
+      return;
+    }
+
+    const { id } = res.closeChanRes;
+
+    if (id == null) {
+      this.onUnrecoverableError(new Error(`Expected id, got ${id}`));
+
+      return;
+    }
+
+    this.debug({
+      type: 'breadcrumb',
+      message: 'handleCloseChannel',
+      data: {
+        id: res.closeChanRes.id,
+        reason: res.closeChanRes.status,
+      },
+    });
+
+    if (!this.connectOptions) {
+      this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+      return;
+    }
+
+    this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
+    delete this.channels[id];
+
+    chan.handleClose({ initiator: 'channel', willReconnect: false });
+    if (channelRequest.cleanupCb) {
+      channelRequest.cleanupCb({ initiator: 'channel', willReconnect: false });
+    }
   };
 
   /**
@@ -301,7 +417,7 @@ export class Client<Ctx extends unknown = null> {
   public close = () => {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
-    if (!this.chan0Cb) {
+    if (!this.chan0Cb || !this.connectOptions) {
       throw new Error('Must call client.connect before closing');
     }
 
@@ -316,7 +432,7 @@ export class Client<Ctx extends unknown = null> {
   };
 
   /** Gets a channel by Id */
-  public getChannel(id: number): Channel<Ctx> {
+  public getChannel(id: number): Channel {
     const chan = this.channels[id];
 
     this.debug({
@@ -389,17 +505,23 @@ export class Client<Ctx extends unknown = null> {
     tryCount += 1;
     this.connectionState = ConnectionState.CONNECTING;
 
-    this.channels = {};
-    this.channelRequests.forEach((cr) => {
-      cr.currentChannel = null;
-    });
-
     if (!this.chan0Cb) {
       this.onUnrecoverableError(new Error('Expected chan0Cb'));
 
       return;
     }
 
+    if (this.channelRequests.some((cr) => cr.isOpen)) {
+      this.onUnrecoverableError(new Error('All channels should be closed when we connect'));
+
+      return;
+    }
+
+    if (Object.keys(this.channels).length) {
+      this.onUnrecoverableError(new Error('Found an an unexpected existing channels'));
+
+      return;
+    }
 
     const chan0 = new Channel({
       id: 0,
@@ -721,63 +843,6 @@ export class Client<Ctx extends unknown = null> {
 
     // Pass it to the right channel
     this.getChannel(cmd.channel).handleCommand(cmd);
-
-    switch (cmd.body) {
-      case 'closeChanRes': {
-        if (cmd.closeChanRes == null) {
-          this.onUnrecoverableError(new Error('Expected closeChanRes'));
-
-          return;
-        }
-
-        if (cmd.closeChanRes.id == null || cmd.closeChanRes.status == null) {
-          this.onUnrecoverableError(
-            new Error(
-              `Expected id and status in closeChanRes, got ${cmd.closeChanRes.id} and ${cmd.closeChanRes.status}`,
-            ),
-          );
-
-          return;
-        }
-
-        this.debug({
-          type: 'breadcrumb',
-          message: 'handleCloseChannel',
-          data: {
-            id: cmd.closeChanRes.id,
-            reason: cmd.closeChanRes.status,
-          },
-        });
-
-        const channel = this.channels[cmd.closeChanRes.id];
-
-        if (!this.connectOptions) {
-          this.onUnrecoverableError(new Error('Expected connectionOptions'));
-
-          return;
-        }
-
-        channel.handleClose(
-          {
-            initiator: 'channel',
-            willReconnect: false,
-          },
-          this.connectOptions.context,
-        );
-
-        delete this.channels[cmd.closeChanRes.id];
-
-        const channelRequest = this.channelRequests.find((cr) => cr.currentChannel === channel);
-
-        if (channelRequest) {
-          // If the user didn't close the channel directly we still need to remove the channelRequest
-          this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
-        }
-
-        break;
-      }
-      default:
-    }
   };
 
   /**
@@ -824,7 +889,7 @@ export class Client<Ctx extends unknown = null> {
     this.ws.onerror = onClose;
 
     this.channelRequests.forEach((channelRequest) => {
-      this.handleOpenChannel(channelRequest);
+      this.requestOpenChannel(channelRequest);
     });
   };
 
@@ -858,25 +923,76 @@ export class Client<Ctx extends unknown = null> {
       clearTimeout(this.retryTimeoutId);
     }
 
-    const willReconnect = closeResult.closeReason === ClientCloseReason.Disconnected;
+    const willClientReconnect = closeResult.closeReason === ClientCloseReason.Disconnected;
 
-    const closeReason: ChannelCloseReason = {
-      initiator: 'client',
-      willReconnect,
-    };
+    this.channelRequests.forEach((channelRequest) => {
+      const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
 
-    Object.values(this.channels).forEach((channel) => {
-      if (channel.closed) {
-        // channel was closed by user but "closeChanRes' has not been received
-        // `channel.handleClose` should be called once command is received
-        return;
+      if (!willChannelReconnect) {
+        // If the channel won't reconnect, make sure to remove it from channelRequests
+        // so that in case the client reconnects in the future we don't try to open it
+        this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
       }
 
-      if (!this.connectOptions) {
-        this.onUnrecoverableError(new Error('Expected connectionOptions'));
+      if (channelRequest.isOpen) {
+        const channel = this.getChannel(channelRequest.channelId);
+        channel.handleClose({
+          initiator: 'client',
+          willReconnect: willChannelReconnect,
+        });
+        delete this.channels[channelRequest.channelId];
+      } else if (!willChannelReconnect) {
+        // channel won't reconnect and was never opened
+        // we'll call the open channel callback with an error
+        if (!this.connectOptions) {
+          this.onUnrecoverableError(new Error('Expected connectionOptions'));
 
-        return;
+          return;
+        }
+
+        channelRequest.openChannelCb({
+          channel: null,
+          error: new Error('Failed to open'),
+          context: this.connectOptions.context,
+        });
       }
+
+      const { cleanupCb } = channelRequest;
+
+      // Re-set the channel request's state
+      // TODO we should stop relying on mutating the same channelrequest
+      (channelRequest as ChannelRequest<Ctx>).channelId = null;
+      (channelRequest as ChannelRequest<Ctx>).isOpen = false;
+      (channelRequest as ChannelRequest<Ctx>).cleanupCb = null;
+      (channelRequest as ChannelRequest<Ctx>).closeRequested = false;
+
+      if (cleanupCb) {
+        // Call the cleanupCb after we update the values
+        // on the channelRequest to make sure any cascading effects
+        // have the right values for channelRequest
+        cleanupCb({
+          initiator: 'client',
+          willReconnect: willChannelReconnect,
+        });
+      }
+    });
+
+    if (this.channels[0]) {
+      this.channels[0].handleClose({
+        initiator: 'client',
+        willReconnect: willClientReconnect,
+      });
+      delete this.channels[0];
+    }
+
+    if (Object.keys(this.channels).length !== 0) {
+      this.channels = {};
+      this.onUnrecoverableError(
+        new Error('channels object should be empty after channelRequests and chan0 cleanup'),
+      );
+
+      return;
+    }
 
     if (this.chan0CleanupCb) {
       // Client successfully connected once
@@ -885,7 +1001,7 @@ export class Client<Ctx extends unknown = null> {
         willReconnect: willClientReconnect,
       });
       this.chan0CleanupCb = null;
-    } else if (!willReconnect) {
+    } else if (!willClientReconnect) {
       this.chan0Cb({
         channel: null,
         error: new Error('Failed to open'),
@@ -895,10 +1011,11 @@ export class Client<Ctx extends unknown = null> {
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
-    if (!willReconnect) {
+    if (!willClientReconnect) {
       // Client is done being used until the next `open` call
       this.chan0Cb = null;
       this.connectOptions = null;
+
       return;
     }
 
