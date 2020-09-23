@@ -83,10 +83,6 @@ export class Client<Ctx extends unknown = null> {
 
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
-  private connectTries: number;
-
-  private connectToken: string | null;
-
   /**
    * Abort controller is used so that when the user calls
    * client.close while we're fetching a token, we can be sure
@@ -110,9 +106,7 @@ export class Client<Ctx extends unknown = null> {
     this.debug = () => {};
     this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
-    this.connectTries = 0;
     this.retryTimeoutId = null;
-    this.connectToken = null;
     this.fetchTokenAbortController = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
@@ -337,11 +331,6 @@ export class Client<Ctx extends unknown = null> {
     return chan;
   }
 
-  /** Gets the token that was used to connect */
-  public getToken(): string | null {
-    return this.connectToken;
-  }
-
   /** Sets a logging/debugging function */
   public setDebugFunc(debugFunc: DebugFunc): void {
     this.debug = debugFunc;
@@ -355,13 +344,15 @@ export class Client<Ctx extends unknown = null> {
     this.userUnrecoverableErrorHandler = onUnrecoverableError;
   }
 
-  private connect = async () => {
+  private connect = async (n = 0) => {
+    let tryCount = n;
+
     this.debug({
       type: 'breadcrumb',
       message: 'connecting',
       data: {
         connectionState: this.connectionState,
-        connectTries: this.connectTries,
+        connectTries: tryCount,
         readyState: this.ws ? this.ws.readyState : undefined,
         chan0CbExists: Boolean(this.chan0Cb),
       },
@@ -388,7 +379,7 @@ export class Client<Ctx extends unknown = null> {
       throw error;
     }
 
-    this.connectTries += 1;
+    tryCount += 1;
     this.connectionState = ConnectionState.CONNECTING;
 
     this.channels = {};
@@ -648,14 +639,14 @@ export class Client<Ctx extends unknown = null> {
           message: 'retrying',
           data: {
             connectionState: this.connectionState,
-            connectTries: this.connectTries,
+            connectTries: tryCount,
             error,
             wsReadyState: this.ws ? this.ws.readyState : undefined,
           },
         });
         this.connectionState = ConnectionState.DISCONNECTED;
-        this.connect();
-      }, getNextRetryDelay(this.connectTries));
+        this.connect(tryCount);
+      }, getNextRetryDelay(tryCount));
     };
   };
 
@@ -743,11 +734,6 @@ export class Client<Ctx extends unknown = null> {
    * Called when chan0 connects. Opens all other required channels
    */
   private handleConnect = () => {
-    /**
-     * Set back to 0 for the next time the client connects
-     */
-    this.connectTries = 0;
-
     this.connectionState = ConnectionState.CONNECTED;
 
     this.debug({ type: 'breadcrumb', message: 'connected!' });
@@ -798,8 +784,6 @@ export class Client<Ctx extends unknown = null> {
     }
 
     this.cleanupSocket();
-
-    this.connectToken = null;
 
     if (this.retryTimeoutId) {
       // Client was closed while reconnecting
