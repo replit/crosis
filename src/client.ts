@@ -184,6 +184,10 @@ export class Client<Ctx extends unknown = null> {
       throw new Error('You must call client.open before attempting to open any channels');
     }
 
+    if (options.name && this.channelRequests.some((cr) => cr.options.name === options.name)) {
+      throw new Error(`Channel with name ${options.name} already opened`);
+    }
+
     const channelRequest: ChannelRequest<Ctx> = {
       options,
       openChannelCb: cb,
@@ -200,7 +204,13 @@ export class Client<Ctx extends unknown = null> {
       this.requestOpenChannel(channelRequest);
     }
 
-    const closeChannel = () => {
+    let calledClose = false;
+    const closeChannel = async (): Promise<void> => {
+      if (calledClose) {
+        throw new Error('Called close already');
+      }
+
+      calledClose = true;
       channelRequest.closeRequested = true;
 
       if (!channelRequest.isOpen) {
@@ -209,10 +219,10 @@ export class Client<Ctx extends unknown = null> {
         // request right after it's done.
         this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
 
-        return;
+        return undefined;
       }
 
-      this.requestCloseChannel(channelRequest);
+      return this.requestCloseChannel(channelRequest);
     };
 
     return closeChannel;
@@ -862,7 +872,9 @@ export class Client<Ctx extends unknown = null> {
     // Update socket closure to do something else
     const onClose = (event: CloseEvent | ErrorEvent) => {
       if (this.connectionState === ConnectionState.DISCONNECTED) {
-        this.onUnrecoverableError(new Error('Got a close event on socket but client is in disconnected state'));
+        this.onUnrecoverableError(
+          new Error('Got a close event on socket but client is in disconnected state'),
+        );
 
         return;
       }
