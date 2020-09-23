@@ -157,6 +157,10 @@ export class Client<Ctx extends unknown = null> {
    * http://protodoc.turbio.repl.co/protov2#opening-channels
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>) => {
+    if (!this.chan0Cb) {
+      throw new Error('You must call client.open before attempting to open any channels');
+    }
+
     const channelRequest: ChannelRequest<Ctx> = {
       options,
       openChannelCb: cb,
