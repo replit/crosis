@@ -1,8 +1,11 @@
-import { ConnectOptions } from '../types';
+import { ConnectOptions, UrlOptions } from '../types';
 
 const BACKOFF_FACTOR = 1.7;
 const MAX_BACKOFF = 15000;
 
+/**
+ * Calculates the backoff for n retry
+ */
 export function getNextRetryDelay(retryNumber: number) {
   const randomMs = Math.floor(Math.random() * 500);
   const backoff = BACKOFF_FACTOR ** retryNumber * 1000;
@@ -22,6 +25,9 @@ function isWebSocket(w: unknown): w is WebSocket {
   return 'OPEN' in w && (w as WebSocket).OPEN === 1;
 }
 
+/**
+ * Gets a websocket class from the global scope, or asserts if the supplied websocket follows the standard
+ */
 export function getWebSocketClass(options: ConnectOptions<unknown>) {
   if (options.WebSocketClass) {
     if (!isWebSocket(options.WebSocketClass)) {
@@ -40,4 +46,13 @@ export function getWebSocketClass(options: ConnectOptions<unknown>) {
   }
 
   throw new Error('Please pass in a WebSocket class or add it to global');
+}
+
+/**
+ * Given a token and the URL options, creates a websocket connection string
+ */
+export function getConnectionStr(token: string, urlOptions: UrlOptions) {
+  const { secure, host, port } = urlOptions;
+
+  return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
 }

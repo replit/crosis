@@ -39,16 +39,42 @@ interface RequestResult extends api.Command {
  */
 
 export class Channel {
+  /**
+   * The channel's id, this is supplied to us by the container
+   */
   public id: number;
 
+  /**
+   * The current connection status of the channel.
+   * When the channel is open or closing you can potentially
+   * receive commands on the channel.
+   */
   public status: 'open' | 'closed' | 'closing';
 
+  /**
+   * Sends the command to the container
+   */
   private sendToClient: (cmd: api.Command) => void;
 
+  /**
+   * A map of request reference id to resolver function generated
+   * when `channel.request` is called.
+   * Once we receive a response with the same reference id
+   * we look up this map and resolve the request.
+   */
   private requestMap: { [ref: string]: (res: RequestResult) => void };
 
+  /**
+   * Make shift event emitter listener array. Any time `onCommand`
+   * is called we push the callback into this array.
+   * When we receive a command from the client through
+   * `handleCommand` we call all the callbakcs in this array
+   */
   private onCommandListeners: Array<(cmd: api.Command) => void>;
 
+  /**
+   * Supplied to us by the client to call when something wonky happens.
+   */
   private onUnrecoverableError: (e: Error) => void;
 
   constructor({
@@ -68,6 +94,12 @@ export class Channel {
     this.onCommandListeners = [];
   }
 
+  /**
+   * To listen to commands received by this channel, supply a
+   * a callback to this function and the callback will be called
+   * any time we receive a command on this channel.
+   * @param listener the command listener
+   */
   public onCommand = (listener: (cmd: api.Command) => void) => {
     if (this.status === 'closed') {
       const e = new Error('Trying to listen to commands on a closed channel');
@@ -147,7 +179,6 @@ export class Channel {
    * @hidden should only be called by [[Client]]
    *
    * Called when the channel or client is closed
-
    * concludes all the requests promises and cleans up
    * the onCommand listeners
    */

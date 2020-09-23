@@ -1,12 +1,11 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
-import { getWebSocketClass, getNextRetryDelay } from './util/helpers';
+import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
 import {
   ConnectOptions,
   ClientCloseReason,
   ChannelCloseReason,
   ChannelOptions,
-  UrlOptions,
 } from './types';
 
 /**
@@ -81,28 +80,76 @@ type ChannelRequest<Ctx> =
     };
 
 export class Client<Ctx extends unknown = null> {
-  public static ClientCloseReason = ClientCloseReason;
-
+  /**
+   * Indicates the current state of the connection with the container.
+   * This will only be DISCONNECTED if `open` has not been called
+   * or the client closed permanently. Otherwise it'll be
+   * CONNECTED or CONNECTING
+   */
   public connectionState: ConnectionState;
 
+  /**
+   * The websocket used for communication with the container.
+   */
   private ws: WebSocket | null;
 
+  /**
+   * Supplied to us as the first argument when calling `client.open`.
+   * The most important option is the token getter
+   */
   private connectOptions: ConnectOptions<Ctx> | null;
 
+  /**
+   * Supplied to us as the second argument when calling `client.open`.
+   * Any time we connect we will call this callback with the control channel.
+   * If we disconnect before ever connecting and we won't retry;
+   * i.e. user called `client.close` or an unrecoverable error occured,
+   * we will call this function with an error.
+   * This has the same api as the second argument to openChannel.
+   */
   private chan0Cb: OpenChannelCb<Ctx> | null;
 
+  /**
+   * This is the return value from chan0Cb. This will be null as long as we
+   * haven't connected. Once connected, we call this anytime a connection ends
+   * it will be passed a `willReconnect` boolean indicating whether we're reconnecting or
+   * not, depending on the closure reason
+   */
   private chan0CleanupCb: ReturnType<OpenChannelCb<Ctx>> | null;
 
+  /**
+   * Anytime `openChannel` is called, we throw the request in here. This is used to maintain
+   * the `openChannel` calls accross reconnects and use to orchestrate channel opening and closing
+   */
   private channelRequests: Array<ChannelRequest<Ctx>>;
 
+  /**
+   * This is purely for optimization reasons, we don't wanna look through the channelRequests
+   * array to find the channel everytime. Instead we pull it out quickly from this map.
+   * Any channel here (except for channel 0) should have a corresponding `channelRequest`
+   * and the request should be in an `isOpen` true state with a corresponding channel id
+   */
   private channels: {
     [id: number]: Channel;
   };
 
+  /**
+   * Called for breadcrumbs and other debug reasons
+   */
   private debug: DebugFunc;
 
+  /**
+   * A function supplied to us by the user of the client. Will be called
+   * any time we have an unrecoverable error, usually an invariance
+   */
   private userUnrecoverableErrorHandler: ((e: Error) => void) | null;
 
+  /**
+   * The connection might require multiple retries to be established.
+   * Anytime we need to retry, we should also add an incremental backoff,
+   * we do that using `setTimeout`. When the client closes before our
+   * retry is initiated, we clear this timeout.
+   */
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
   /**
@@ -112,12 +159,6 @@ export class Client<Ctx extends unknown = null> {
    * for a token and eventually continue on as if we still want to connect
    */
   private fetchTokenAbortController: AbortController | null;
-
-  static getConnectionStr(token: string, urlOptions: UrlOptions) {
-    const { secure, host, port } = urlOptions;
-
-    return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
-  }
 
   constructor() {
     this.ws = null;
@@ -138,8 +179,18 @@ export class Client<Ctx extends unknown = null> {
   /**
    * Starts connecting to the server and and opens channel 0
    *
-   * Every client automatically "has" channel 0 and can use it to open more channels.
-   * See http://protodoc.turbio.repl.co/protov2 from more info
+   * See https://protodoc.turbio.repl.co/protov2 from more protocol specific info.
+   *
+   * Every client connected automatically "has" channel 0 listen to global events.
+   * Any time the client connects it will call callback with channel 0 so you can use it.
+   * Please refrain from using channel 0 to open channels and use `client.openChannel` instead.
+   *
+   * If we disconnect before ever connecting and calling the callback
+   * (i.e. `client.close` is called or we encountered a major error)
+   * the callback is called with an error. Otherwise, if we did connect
+   * and we're disconnecting the cleanup function returned from the callback
+   * is called. The cleanup function is also called any time a disconnect happens
+   * with a boolean indicating whether the client will reconnect or not
    */
   public open = (options: ConnectArgs<Ctx>, cb: OpenChannelCb<Ctx>) => {
     if (this.chan0Cb) {
@@ -171,13 +222,24 @@ export class Client<Ctx extends unknown = null> {
   };
 
   /**
-   * Opens a service channel.
-   * If action is specified the action will be sent with the request
-   * If action is not specfied it will:
-   *    1- if name is specified, it will send a request with [[api.OpenChannel.Action.ATTACH_OR_CREATE]]
-   *    2- if name is not specified, it will send a request with [[api.OpenChannel.Action.CREATE]]
    *
-   * http://protodoc.turbio.repl.co/protov2#opening-channels
+   * See https://protodoc.turbio.repl.co/protov2#opening-channels from more protocol specific info.
+   *
+   * Opens a channel and returns a callback to close the channel, the returned
+   * calback can be called at any point in the life cycle of channel opening.
+   *
+   * The api for this is very similar to the API of `client.open`. When the channel
+   * opens the callback is called with the channel so it can be used to send commands
+   * and listen to commands on the channel (see Channel).
+   *
+   * If we disconnect before ever opening the channel and calling the callback
+   * (i.e. `client.close` is called, the returned close function is called
+   * or we encountered a major error) the callback is called with an error.
+   * Otherwise, if we did connect and we're disconnecting the cleanup function
+   * returned from the supplied callback is called. The cleanup function is also
+   * called any time a disconnect happens with a boolean indicating whether
+   * the channel will reconnect or not.
+   *
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>) => {
     if (!this.chan0Cb) {
@@ -615,7 +677,7 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const connStr = Client.getConnectionStr(token, this.connectOptions.urlOptions);
+    const connStr = getConnectionStr(token, this.connectOptions.urlOptions);
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
