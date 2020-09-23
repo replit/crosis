@@ -71,6 +71,8 @@ export class Client<Ctx extends unknown = null> {
 
   private chan0Cb: OpenChannelCb<Ctx> | null;
 
+  private chan0CleanupCb: ReturnType<OpenChannelCb<Ctx>> | null;
+
   private channelRequests: Array<ChannelRequest<Ctx>>;
 
   private channels: {
@@ -102,6 +104,7 @@ export class Client<Ctx extends unknown = null> {
     this.channels = {};
     this.connectOptions = null;
     this.chan0Cb = null;
+    this.chan0CleanupCb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = () => {};
     this.userUnrecoverableErrorHandler = null;
@@ -397,7 +400,14 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const chan0 = new Channel({ openChannelCb: this.chan0Cb }, this.onUnrecoverableError);
+
+    const chan0 = new Channel({
+      id: 0,
+      name: '0',
+      service: '0',
+      onUnrecoverableError: this.onUnrecoverableError,
+      send: this.send,
+    });
     this.channels[0] = chan0;
 
     const WebSocketClass = getWebSocketClass(this.connectOptions);
@@ -607,21 +617,21 @@ export class Client<Ctx extends unknown = null> {
             return;
           }
 
-          chan0.handleOpenRes({
-            id: 0,
-            state: api.OpenChannelRes.State.CREATED,
-            send: this.send,
+          this.handleConnect();
+
+          // defer closing if the user decides to call client.close inside chan0Cb
+          const originalClose = this.close;
+          this.close = () => setTimeout(() => {
+              originalClose();
+            }, 0);
+
+          this.chan0CleanupCb = this.chan0Cb({
+            channel: chan0,
+            error: null,
             context: this.connectOptions.context,
           });
 
-          // If user called close inside open callback (throws a error) we should not continue connecting
-          if (!closedDuringConnect) {
-            this.close = originalClose;
-
-            this.connectToken = token;
-
-            this.handleConnect();
-          }
+          this.close = originalClose;
 
           break;
         }
@@ -682,6 +692,8 @@ export class Client<Ctx extends unknown = null> {
             wsReadyState: this.ws ? this.ws.readyState : undefined,
           },
         });
+        chan0.handleClose({ initiator: 'client', willReconnect: true });
+        delete this.channels[0];
         this.connectionState = ConnectionState.DISCONNECTED;
         this.connect(tryCount);
       }, getNextRetryDelay(tryCount));
@@ -866,8 +878,20 @@ export class Client<Ctx extends unknown = null> {
         return;
       }
 
-      channel.handleClose(closeReason, this.connectOptions.context);
-    });
+    if (this.chan0CleanupCb) {
+      // Client successfully connected once
+      this.chan0CleanupCb({
+        initiator: 'client',
+        willReconnect: willClientReconnect,
+      });
+      this.chan0CleanupCb = null;
+    } else if (!willReconnect) {
+      this.chan0Cb({
+        channel: null,
+        error: new Error('Failed to open'),
+        context: this.connectOptions.context,
+      });
+    }
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
