@@ -365,8 +365,8 @@ export class Client<Ctx extends unknown = null> {
       throw error;
     }
 
-    if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
-      const error = new Error('Client already connected to an active websocket connection');
+    if (this.ws) {
+      const error = new Error('Unexpected existing websocket instance');
       this.onUnrecoverableError(error);
 
       throw error;
@@ -746,6 +746,12 @@ export class Client<Ctx extends unknown = null> {
 
     // Update socket closure to do something else
     const onClose = (event: CloseEvent | ErrorEvent) => {
+      if (this.connectionState === ConnectionState.DISCONNECTED) {
+        this.onUnrecoverableError(new Error('Got a close event on socket but client is in disconnected state'));
+
+        return;
+      }
+
       this.debug({
         type: 'breadcrumb',
         message: 'wsclose',
@@ -773,6 +779,18 @@ export class Client<Ctx extends unknown = null> {
   };
 
   private handleClose = (closeResult: CloseResult) => {
+    if (!this.chan0Cb || !this.connectOptions) {
+      this.onUnrecoverableError(new Error('open should have been called before `handleClose`'));
+
+      return;
+    }
+
+    if (this.connectionState === ConnectionState.DISCONNECTED) {
+      this.onUnrecoverableError(new Error('handleClose is called but client already disconnected'));
+
+      return;
+    }
+
     if (this.ws && this.fetchTokenAbortController) {
       // Fetching a token is required prior to initializing a websocket, we can't
       // have both at the same time as the abort controller is unset after we fetch the token
@@ -868,10 +886,12 @@ export class Client<Ctx extends unknown = null> {
   };
 
   private onUnrecoverableError = (e: Error) => {
-    this.handleClose({
-      closeReason: ClientCloseReason.Error,
-      error: e,
-    });
+    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+      this.handleClose({
+        closeReason: ClientCloseReason.Error,
+        error: e,
+      });
+    }
 
     if (this.userUnrecoverableErrorHandler) {
       this.userUnrecoverableErrorHandler(e);
