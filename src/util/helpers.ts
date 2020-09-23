@@ -22,7 +22,7 @@ function isWebSocket(w: unknown): w is WebSocket {
   return 'OPEN' in w && (w as WebSocket).OPEN === 1;
 }
 
-export function getWebSocketClass(options: ConnectOptions) {
+export function getWebSocketClass(options: ConnectOptions<unknown>) {
   if (options.WebSocketClass) {
     if (!isWebSocket(options.WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');
