@@ -483,9 +483,15 @@ export class Client<Ctx extends unknown = null> {
      * 3- ContainerState.SLEEP command
      * 4- User calling `close` before we connect
      */
-    let onFailed: (err: Error) => void;
+    let onFailed: ((err: Error) => void) | null = null;
 
     ws.onerror = () => {
+      if (!onFailed) {
+        this.onUnrecoverableError(new Error('Got websocket error but no `onFailed` cb'));
+
+        return;
+      }
+
       onFailed(new Error('WebSocket errored'));
     };
 
@@ -493,6 +499,12 @@ export class Client<Ctx extends unknown = null> {
      * Abrupt socket closures should report failed
      */
     ws.onclose = () => {
+      if (!onFailed) {
+        this.onUnrecoverableError(new Error('Got websocket closure but no `onFailed` cb'));
+
+        return;
+      }
+
       onFailed(new Error('WebSocket closed before we got READY'));
     };
 
@@ -518,6 +530,14 @@ export class Client<Ctx extends unknown = null> {
         timeoutId = setTimeout(() => {
           this.debug({ type: 'breadcrumb', message: 'connect timeout' });
 
+          if (!onFailed) {
+            this.onUnrecoverableError(
+              new Error('Connecting timed out but there was no `onFailed` cb'),
+            );
+
+            return;
+          }
+
           onFailed(new Error('timeout'));
         }, timeout);
       };
@@ -533,7 +553,7 @@ export class Client<Ctx extends unknown = null> {
      * If we ever get ContainterState SLEEP it means that something went wrong
      * and connection should be dropped
      */
-    const dispose = chan0.onCommand((cmd: api.Command) => {
+    const unlistenChan0 = chan0.onCommand((cmd: api.Command) => {
       // Everytime we get a message on channel0
       // we will reset the timeout
       resetTimeout();
@@ -561,29 +581,24 @@ export class Client<Ctx extends unknown = null> {
       switch (state) {
         case StateEnum.READY: {
           // Once we're READY we can stop listening to incoming commands
-          dispose();
+          unlistenChan0();
 
-          if (this.retryTimeoutId) {
-            clearTimeout(this.retryTimeoutId);
-          }
           cancelTimeout();
-
-          let closedDuringConnect = false;
-          const originalClose = this.close;
-
-          this.close = () => {
-            closedDuringConnect = true;
-
-            // Cleanup in case user calls close inside open callback
-            this.cleanupSocket();
-            cancelTimeout();
-            dispose();
-
-            throw new Error('Cannot call close inside connect callback');
-          };
 
           if (!this.connectOptions) {
             this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+            return;
+          }
+
+          if (!chan0) {
+            this.onUnrecoverableError(new Error('Expected chan0 to be truthy'));
+
+            return;
+          }
+
+          if (!this.chan0Cb) {
+            this.onUnrecoverableError(new Error('Expected chan0Cb to be truthy'));
 
             return;
           }
@@ -607,6 +622,12 @@ export class Client<Ctx extends unknown = null> {
           break;
         }
         case StateEnum.SLEEP:
+          if (!onFailed) {
+            this.onUnrecoverableError(new Error('Got SLEEP but there was no `onFailed` cb'));
+
+            return;
+          }
+
           onFailed(new Error('Got SLEEP as container state'));
 
           break;
@@ -616,8 +637,19 @@ export class Client<Ctx extends unknown = null> {
     });
 
     onFailed = (error: Error) => {
+      // Make sure this function is not called multiple times.
+      onFailed = null;
+
+      // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
+      // will be used in additon to new `cancelTimeout` and `unlistenChan0` functions.
+      this.cleanupSocket();
+      cancelTimeout();
+      unlistenChan0();
+
       if (this.retryTimeoutId) {
-        clearTimeout(this.retryTimeoutId);
+        this.onUnrecoverableError(new Error('unexpected existing retryTimeoutId'));
+
+        return;
       }
 
       if (!this.chan0Cb) {
@@ -627,13 +659,15 @@ export class Client<Ctx extends unknown = null> {
         return;
       }
 
-      // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
-      // will be used in additon to new `cancelTimeout` and `dispose` functions.
-      this.cleanupSocket();
-      cancelTimeout();
-      dispose();
-
       this.retryTimeoutId = setTimeout(() => {
+        if (!this.chan0Cb) {
+          this.onUnrecoverableError(new Error('Scheduled retry is called after we closed?'));
+
+          return;
+        }
+
+        this.retryTimeoutId = null;
+
         this.debug({
           type: 'breadcrumb',
           message: 'retrying',
