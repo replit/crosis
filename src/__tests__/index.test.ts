@@ -55,23 +55,59 @@ function genToken() {
 jest.setTimeout(10 * 1000);
 
 test('client connect', (done) => {
-  const onUnrecoverableError = jest.fn<void, [Error]>();
-  const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
+  const client = new Client<{ username: string }>();
+  client.setUnrecoverErrorHandler(done);
+
+  const ctx = { username: 'zyzz' };
 
   client.open(
     {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
       WebSocketClass: WebSocket,
+      context: ctx,
     },
-    ({ channel, error }) => {
-      expect(channel?.closed).toBe(false);
+    ({ channel, error, context }) => {
+      expect(channel?.status).toBe('open');
+      expect(context).toBe(ctx);
       expect(error).toEqual(null);
 
-      setTimeout(() => client.close());
+      client.close();
 
       return () => {
-        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
+        done();
+      };
+    },
+  );
+});
+
+test('client retries', (done) => {
+  const client = new Client();
+  client.setUnrecoverErrorHandler(done);
+
+  let tryCount = 0;
+
+  client.open(
+    {
+      fetchToken: () => {
+        tryCount += 1;
+
+        if (tryCount === 1) {
+          return Promise.resolve({ token: 'test - bad token retries', aborted: false });
+        }
+
+        return Promise.resolve({ token: genToken(), aborted: false });
+      },
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(tryCount).toBe(2);
+      expect(channel?.status).toBe('open');
+      expect(error).toEqual(null);
+
+      client.close();
+
+      return () => {
         done();
       };
     },
@@ -83,29 +119,29 @@ test('channel closing itself when client willReconnect', (done) => {
   let clientOpenCount = 0;
   let channelOpenCount = 0;
 
-  const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
+  client.setUnrecoverErrorHandler(done);
 
   client.open(
     {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
       WebSocketClass: WebSocket,
+      context: null,
     },
     ({ channel, error }) => {
       clientOpenCount += 1;
-      expect(channel?.closed).toBe(false);
       expect(error).toEqual(null);
+      expect(channel?.status).toBe('open');
 
       if (!disconnectTriggered) {
         setTimeout(() => {
+          disconnectTriggered = true;
           // eslint-disable-next-line
           // @ts-ignore: trigger unintentional disconnect
-          client.ws?.onclose();
-          disconnectTriggered = true;
+          client.ws.close();
         }, 1000);
       } else {
-        setTimeout(() => client.close());
+        client.close();
       }
 
       return ({ willReconnect }) => {
@@ -116,7 +152,6 @@ test('channel closing itself when client willReconnect', (done) => {
         expect(clientOpenCount).toEqual(2);
         expect(channelOpenCount).toEqual(1);
 
-        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       };
     },
@@ -124,10 +159,11 @@ test('channel closing itself when client willReconnect', (done) => {
 
   const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
     channelOpenCount += 1;
-    expect(channel?.closed).toBe(false);
     expect(error).toBe(null);
+    expect(channel?.status).toBe('open');
 
-    return () => {
+    return ({ willReconnect }) => {
+      expect(willReconnect).toBeTruthy();
       // This cleanup function gets called because we triggered an unintentional
       // disconnect above (`client.ws.onclose()`). Since this is unintentional
       // the client will reconnect itself. But this outer `openChannel`callback will NOT
@@ -141,18 +177,19 @@ test('channel closing itself when client willReconnect', (done) => {
 test('channel open and close', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
+  client.setUnrecoverErrorHandler(done);
 
   const channelClose = jest.fn();
 
   client.open(
     {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
       WebSocketClass: WebSocket,
+      context: null,
     },
     ({ channel, error }) => {
-      expect(channel?.closed).toBe(false);
       expect(error).toEqual(null);
+      expect(channel?.status).toBe('open');
 
       return () => {
         expect(channelClose).toHaveBeenCalled();
@@ -164,12 +201,17 @@ test('channel open and close', (done) => {
   );
 
   const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
-    expect(channel?.closed).toBe(false);
+    expect(channel?.status).toBe('open');
     expect(error).toBe(null);
 
     close();
 
-    return () => {
+    expect(channel?.status).toBe('closing');
+
+    return ({ willReconnect }) => {
+      expect(willReconnect).toBeFalsy();
+      expect(channel?.status).toBe('closed');
+
       channelClose();
       client.close();
     };
@@ -177,63 +219,65 @@ test('channel open and close', (done) => {
 });
 
 test('channel skips opening', (done) => {
-  const onUnrecoverableError = jest.fn<void, [Error]>();
-  const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
+  const client = new Client<{ username: string }>();
+  client.setUnrecoverErrorHandler(done);
+
   const service = 'shell';
+  const ctx = { username: 'midas' };
+  const skipfn = jest.fn().mockImplementation(() => true);
+  const opencb = jest.fn();
 
   client.open(
     {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
       WebSocketClass: WebSocket,
+      context: ctx,
     },
     ({ error }) => {
       expect(error).toBeNull();
 
-      setTimeout(() => client.close());
+      setTimeout(() => {
+        expect(skipfn).toHaveBeenCalledTimes(1);
+        expect(skipfn).toHaveBeenCalledWith(ctx);
+        expect(opencb).not.toHaveBeenCalled();
+
+        client.close();
+      }, 0);
 
       return () => {
-        // eslint-disable-next-line
-        // @ts-ignore
-        const request = client.channelRequests.find((cr) => cr.options.service === service);
-
-        if (!request) {
-          throw new Error('Expected request');
-        }
-
-        // If currentChannel is null we didn't try to open a the channel
-        expect(request.currentChannel).toBeNull();
-
-        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       };
     },
   );
 
-  client.openChannel({ service, skip: () => true }, () => {});
+  client.openChannel(
+    {
+      service,
+      skip: skipfn,
+    },
+    opencb,
+  );
 });
 
 test('channel skips opening conditionally', (done) => {
-  let disconnectTriggered = false;
+  let unexpectedDisconnectTriggered = false;
   let clientOpenCount = 0;
   let channelOpenCount = 0;
 
-  const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
-  const service = 'shell';
+  client.setUnrecoverErrorHandler(done);
 
   client.open(
     {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
       WebSocketClass: WebSocket,
+      context: null,
     },
     ({ channel, error }) => {
       clientOpenCount += 1;
-      expect(channel?.closed).toBe(false);
+      expect(channel?.status).toBe('open');
       expect(error).toEqual(null);
-
-      if (disconnectTriggered) {
+      if (unexpectedDisconnectTriggered) {
         setTimeout(() => client.close());
       }
 
@@ -245,7 +289,6 @@ test('channel skips opening conditionally', (done) => {
         expect(clientOpenCount).toEqual(2);
         expect(channelOpenCount).toEqual(1);
 
-        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       };
     },
@@ -254,76 +297,32 @@ test('channel skips opening conditionally', (done) => {
   client.openChannel(
     {
       skip: () => channelOpenCount > 0,
-      service,
+      service: 'shell',
     },
     ({ channel, error }) => {
-      if (!disconnectTriggered) {
+      if (!unexpectedDisconnectTriggered) {
         setTimeout(() => {
           // eslint-disable-next-line
           // @ts-ignore: trigger unintentional disconnect
-          client.ws?.onclose();
-          disconnectTriggered = true;
+          client.ws.close();
+          unexpectedDisconnectTriggered = true;
         }, 1000);
+
+        expect(error).toBe(null);
+        expect(channel?.status).toBe('open');
+
+        channelOpenCount += 1;
+
+        return;
       }
 
-      channelOpenCount += 1;
-      expect(channel?.closed).toBe(false);
-      expect(error).toBe(null);
-    },
-  );
-});
-
-// Test is broken right now due to polling fallback
-test.skip('client errors opening', (done) => {
-  const onUnrecoverableError = jest.fn<void, [Error]>();
-  const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
-  let errorCount = 0;
-
-  const clientClose = jest.fn();
-  const channelClose = jest.fn();
-
-  const maybeDone = () => {
-    if (errorCount === 2) {
-      // Close functions are not called when connect/openChannel return an error
-      // Any setup logic should be avoided
-      expect(clientClose).not.toHaveBeenCalled();
-      expect(channelClose).not.toHaveBeenCalled();
-
-      expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
-      done();
-    }
-  };
-
-  client.open(
-    {
-      maxConnectRetries: 0,
-      fetchToken: () => Promise.resolve({ token: 'test - no good', aborted: false }),
-      WebSocketClass: WebSocket,
-    },
-    ({ channel, error }) => {
       expect(error).toBeTruthy();
-      expect(channel).toEqual(null);
-      errorCount += 1;
-
-      setTimeout(maybeDone);
-
-      return clientClose;
+      expect(error?.message).toBe('Failed to open');
     },
   );
-
-  client.openChannel({ service: 'shell' }, ({ channel, error }) => {
-    expect(error).toBeTruthy();
-    expect(channel).toEqual(null);
-    errorCount += 1;
-
-    setTimeout(maybeDone);
-
-    return channelClose;
-  });
 });
 
-test('client reconnect', (done) => {
+test('client reconnects unexpected disconnects', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
   client.setUnrecoverErrorHandler(onUnrecoverableError);
@@ -335,12 +334,13 @@ test('client reconnect', (done) => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
       WebSocketClass: WebSocket,
+      context: null,
     },
     ({ channel, error }) => {
       expect(error).toEqual(null);
-      expect(channel?.closed).toEqual(false);
+      expect(channel?.status).toEqual('open');
 
       timesConnected += 1;
 
@@ -348,11 +348,11 @@ test('client reconnect', (done) => {
         setTimeout(() => {
           // eslint-disable-next-line
           // @ts-ignore: trigger unintentional disconnect
-          client.ws?.onclose();
+          client.ws?.close();
           disconnectTriggered = true;
         });
       } else {
-        setTimeout(() => client.close());
+        client.close();
       }
 
       return (closeReason) => {
@@ -381,12 +381,11 @@ test('client reconnect', (done) => {
 test('client is closed while reconnecting', (done) => {
   let didOpen = false;
 
-  const open = jest.fn();
-  const close = jest.fn();
+  const onOpen = jest.fn();
+  const onClose = jest.fn();
 
-  const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
+  client.setUnrecoverErrorHandler(done);
   const fetchToken = () => {
     if (didOpen) {
       // We're reconnecting
@@ -394,49 +393,46 @@ test('client is closed while reconnecting', (done) => {
         // Close client while reconnecting
         client.close();
 
-        expect(open).toHaveBeenCalledTimes(1);
-        expect(close).toHaveBeenCalledTimes(1);
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
 
-        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
         done();
       });
     }
 
-    return Promise.resolve({ token: REPL_TOKEN, aborted: false });
+    return Promise.resolve({ token: genToken(), aborted: false });
   };
 
   client.open(
     {
-      // eslint-disable-next-line @typescript-eslint/no-use-before-define
       fetchToken,
       WebSocketClass: WebSocket,
+      context: null,
     },
     ({ channel }) => {
       if (channel) {
         // called once after initial connect
-        open();
+        onOpen();
 
         didOpen = true;
 
         setTimeout(() => {
           // eslint-disable-next-line
           // @ts-ignore: trigger unintentional disconnect
-          client.ws?.onclose();
+          client.ws?.close();
         });
       }
 
       return () => {
         // called once after dissconnect
-        close();
+        onClose();
       };
     },
   );
 });
 
-test('closing before ever connecting', () => {
-  const onUnrecoverableError = jest.fn<void, [Error]>();
+test('closing before ever connecting', (done) => {
   const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
 
   const open = jest.fn();
   const openError = jest.fn();
@@ -444,12 +440,24 @@ test('closing before ever connecting', () => {
 
   client.open(
     {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
+      fetchToken: () => {
+        setTimeout(() => {
+          // `close` called before connecting
+          client.close();
+        }, 0);
+
+        return Promise.resolve({ token: genToken(), aborted: false });
+      },
       WebSocketClass: WebSocket,
+      context: null,
     },
     ({ error }) => {
       if (error) {
         openError();
+        expect(open).not.toHaveBeenCalled();
+        expect(openError).toHaveBeenCalledTimes(1);
+        expect(close).not.toHaveBeenCalled();
+        done();
       } else {
         open();
       }
@@ -459,119 +467,49 @@ test('closing before ever connecting', () => {
       };
     },
   );
-
-  // `close` called before connecting
-  client.close();
-
-  expect(open).not.toHaveBeenCalled();
-  expect(openError).toHaveBeenCalledTimes(1);
-  expect(close).not.toHaveBeenCalled();
 });
 
-test('closing client while opening', (done) => {
-  const onUnrecoverableError = jest.fn<void, [Error]>();
-  const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
+// // re-add once we add polling
+// test.skip('falling back to polling', (done) => {
+//   const onUnrecoverableError = jest.fn<void, [Error]>();
+//   const client = new Client();
+//   client.setUnrecoverErrorHandler(onUnrecoverableError);
 
-  client.open(
-    {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
-      WebSocketClass: WebSocket,
-    },
-    () => {
-      try {
-        client.close();
-      } catch {
-        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
-        done();
-      }
-    },
-  );
-});
+//   const maxConnectRetries = 1;
+//   const open = jest.fn();
 
-test('connecting with a context object', (done) => {
-  const onUnrecoverableError = jest.fn<void, [Error]>();
-  const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
-  const user = 'abc';
+//   client.setDebugFunc((log) => {
+//     if (log.type === 'breadcrumb' && log.message === 'falling back to polling') {
+//       // eslint-disable-next-line
+//       const data = log.data as any;
 
-  client.open<{ user: string }>(
-    {
-      fetchToken: () => Promise.resolve({ token: REPL_TOKEN, aborted: false }),
-      WebSocketClass: WebSocket,
-      context: { user },
-    },
-    ({ context }) => {
-      expect(context).toEqual({ user });
-    },
-  );
+//       expect(data.connectTries).toEqual(maxConnectRetries + 1);
+//       expect(data.error).toBeDefined();
+//       expect(data.wsReadyState).toBeUndefined();
 
-  client.openChannel<{ user: string }>(
-    {
-      service: 'shell',
-      skip: (context) => {
-        expect(context).toEqual({ user });
+//       // eslint-disable-next-line
+//       // @ts-ignore need to reach in and grab some private fields real quick...
+//       const { urlOptions, polling } = client.connectOptions;
 
-        return false;
-      },
-    },
-    ({ error, context }) => {
-      expect(context).toEqual({ user });
+//       expect(urlOptions.host).toEqual('gp-v2.herokuapp.com');
+//       expect(polling).toBe(true);
 
-      if (error) {
-        // Client closed so test is done.
+//       expect(open).not.toHaveBeenCalled();
 
-        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
-        done();
-        return;
-      }
+//       expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
+//       done();
+//     }
+//   });
 
-      client.close();
-    },
-  );
-});
-
-// re-add once we add polling
-test.skip('falling back to polling', (done) => {
-  const onUnrecoverableError = jest.fn<void, [Error]>();
-  const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
-
-  const maxConnectRetries = 1;
-  const open = jest.fn();
-
-  client.setDebugFunc((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'falling back to polling') {
-      // eslint-disable-next-line
-      const data = log.data as any;
-
-      expect(data.connectTries).toEqual(maxConnectRetries + 1);
-      expect(data.error).toBeDefined();
-      expect(data.wsReadyState).toBeUndefined();
-
-      // eslint-disable-next-line
-      // @ts-ignore need to reach in and grab some private fields real quick...
-      const { urlOptions, polling } = client.connectOptions;
-
-      expect(urlOptions.host).toEqual('gp-v2.herokuapp.com');
-      expect(polling).toBe(true);
-
-      expect(open).not.toHaveBeenCalled();
-
-      expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
-      done();
-    }
-  });
-
-  client.open(
-    {
-      fetchToken: () => Promise.resolve({ token: 'bad token', aborted: false }),
-      WebSocketClass: WebSocket,
-      timeout: 0,
-    },
-    open,
-  );
-});
+//   client.open(
+//     {
+//       fetchToken: () => Promise.resolve({ token: 'bad token', aborted: false }),
+//       WebSocketClass: WebSocket,
+//       timeout: 0,
+//     },
+//     open,
+//   );
+// });
 
 test('fetch token fail', (done) => {
   const chan0Cb = jest.fn();
@@ -590,6 +528,7 @@ test('fetch token fail', (done) => {
         throw new Error('fail');
       },
       WebSocketClass: WebSocket,
+      context: null,
     },
     chan0Cb,
   );
@@ -621,11 +560,12 @@ test('fetch abort signal works as expected', (done) => {
           }, 0);
         }),
       WebSocketClass: WebSocket,
+      context: null,
     },
     ({ channel, error }) => {
       expect(channel).toBe(null);
       expect(error).toBeTruthy();
-      expect(error?.message).toBe('Channel closed');
+      expect(error?.message).toBe('Failed to open');
       expect(onAbort).toHaveBeenCalledTimes(1);
 
       done();
