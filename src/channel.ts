@@ -43,10 +43,6 @@ export class Channel {
 
   public status: 'open' | 'closed' | 'closing';
 
-  public name: string | void;
-
-  public service: string;
-
   private sendToClient: (cmd: api.Command) => void;
 
   private requestMap: { [ref: string]: (res: RequestResult) => void };
@@ -57,20 +53,14 @@ export class Channel {
 
   constructor({
     id,
-    name,
-    service,
     send,
     onUnrecoverableError,
   }: {
     id: number;
-    name: string | void;
-    service: string;
     send: (cmd: api.Command) => void;
     onUnrecoverableError: (e: Error) => void;
   }) {
     this.id = id;
-    this.name = name;
-    this.service = service;
     this.sendToClient = send;
     this.onUnrecoverableError = onUnrecoverableError;
     this.status = 'open';
@@ -152,6 +142,7 @@ export class Channel {
    * @hidden should only be called by [[Client]]
    *
    * Called when the channel or client is closed
+
    * concludes all the requests promises and cleans up
    * the onCommand listeners
    */

@@ -325,8 +325,6 @@ export class Client<Ctx extends unknown = null> {
 
       const channel = new Channel({
         id,
-        name: options.name,
-        service: options.service,
         onUnrecoverableError: this.onUnrecoverableError,
         send: this.send,
       });
@@ -535,8 +533,6 @@ export class Client<Ctx extends unknown = null> {
 
     const chan0 = new Channel({
       id: 0,
-      name: '0',
-      service: '0',
       onUnrecoverableError: this.onUnrecoverableError,
       send: this.send,
     });
