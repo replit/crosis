@@ -476,14 +476,12 @@ export class Client<Ctx extends unknown = null> {
   }
 
   private connect = async (n = 0) => {
-    let tryCount = n;
-
     this.debug({
       type: 'breadcrumb',
       message: 'connecting',
       data: {
         connectionState: this.connectionState,
-        connectTries: tryCount,
+        connectTries: n,
         readyState: this.ws ? this.ws.readyState : undefined,
         chan0CbExists: Boolean(this.chan0Cb),
       },
@@ -510,11 +508,14 @@ export class Client<Ctx extends unknown = null> {
       throw error;
     }
 
-    tryCount += 1;
-    this.connectionState = ConnectionState.CONNECTING;
-
     if (!this.chan0Cb) {
       this.onUnrecoverableError(new Error('Expected chan0Cb'));
+
+      return;
+    }
+
+    if (this.chan0CleanupCb) {
+      this.onUnrecoverableError(new Error('Unexpected chan0CleanupCb, are you sure you closed'));
 
       return;
     }
@@ -530,6 +531,9 @@ export class Client<Ctx extends unknown = null> {
 
       return;
     }
+
+    const tryCount = n + 1;
+    this.connectionState = ConnectionState.CONNECTING;
 
     const chan0 = new Channel({
       id: 0,
