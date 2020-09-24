@@ -54,7 +54,7 @@ export class Channel {
   /**
    * Sends the command to the container
    */
-  private sendToClient: (cmd: api.Command) => void;
+  private sendToContainer: (cmd: api.Command) => void;
 
   /**
    * A map of request reference id to resolver function generated
@@ -87,7 +87,7 @@ export class Channel {
     onUnrecoverableError: (e: Error) => void;
   }) {
     this.id = id;
-    this.sendToClient = send;
+    this.sendToContainer = send;
     this.onUnrecoverableError = onUnrecoverableError;
     this.status = 'open';
     this.requestMap = {};
@@ -136,7 +136,7 @@ export class Channel {
     }
 
     cmdJson.channel = this.id;
-    this.sendToClient(api.Command.create(cmdJson));
+    this.sendToContainer(api.Command.create(cmdJson));
   };
 
   /**
