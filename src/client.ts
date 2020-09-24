@@ -533,7 +533,7 @@ export class Client<Ctx extends unknown = null> {
    * Unrecoverable errors are internal errors or invariance errors
    * caused by the user mis-using the client.
    */
-  public setUnrecoverErrorHandler(onUnrecoverableError: (e: Error) => void) {
+  public setUnrecoverableErrorHandler(onUnrecoverableError: (e: Error) => void) {
     this.userUnrecoverableErrorHandler = onUnrecoverableError;
   }
 

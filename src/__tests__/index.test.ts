@@ -56,7 +56,7 @@ jest.setTimeout(10 * 1000);
 
 test('client connect', (done) => {
   const client = new Client<{ username: string }>();
-  client.setUnrecoverErrorHandler(done);
+  client.setUnrecoverableErrorHandler(done);
 
   const ctx = { username: 'zyzz' };
 
@@ -82,7 +82,7 @@ test('client connect', (done) => {
 
 test('client retries', (done) => {
   const client = new Client();
-  client.setUnrecoverErrorHandler(done);
+  client.setUnrecoverableErrorHandler(done);
 
   let tryCount = 0;
 
@@ -120,7 +120,7 @@ test('channel closing itself when client willReconnect', (done) => {
   let channelOpenCount = 0;
 
   const client = new Client();
-  client.setUnrecoverErrorHandler(done);
+  client.setUnrecoverableErrorHandler(done);
 
   client.open(
     {
@@ -177,7 +177,7 @@ test('channel closing itself when client willReconnect', (done) => {
 test('channel open and close', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
-  client.setUnrecoverErrorHandler(done);
+  client.setUnrecoverableErrorHandler(done);
 
   const channelClose = jest.fn();
 
@@ -220,7 +220,7 @@ test('channel open and close', (done) => {
 
 test('channel skips opening', (done) => {
   const client = new Client<{ username: string }>();
-  client.setUnrecoverErrorHandler(done);
+  client.setUnrecoverableErrorHandler(done);
 
   const service = 'shell';
   const ctx = { username: 'midas' };
@@ -265,7 +265,7 @@ test('channel skips opening conditionally', (done) => {
   let channelOpenCount = 0;
 
   const client = new Client();
-  client.setUnrecoverErrorHandler(done);
+  client.setUnrecoverableErrorHandler(done);
 
   client.open(
     {
@@ -325,7 +325,7 @@ test('channel skips opening conditionally', (done) => {
 test('client reconnects unexpected disconnects', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
-  client.setUnrecoverErrorHandler(onUnrecoverableError);
+  client.setUnrecoverableErrorHandler(onUnrecoverableError);
 
   let disconnectTriggered = false;
   let timesConnected = 0;
@@ -385,7 +385,7 @@ test('client is closed while reconnecting', (done) => {
   const onClose = jest.fn();
 
   const client = new Client();
-  client.setUnrecoverErrorHandler(done);
+  client.setUnrecoverableErrorHandler(done);
   const fetchToken = () => {
     if (didOpen) {
       // We're reconnecting
@@ -515,7 +515,7 @@ test('fetch token fail', (done) => {
   const chan0Cb = jest.fn();
   const client = new Client();
 
-  client.setUnrecoverErrorHandler((e) => {
+  client.setUnrecoverableErrorHandler((e) => {
     expect(chan0Cb).toHaveBeenCalledTimes(1);
     expect(e.message).toContain('fail');
 
@@ -536,7 +536,7 @@ test('fetch token fail', (done) => {
 
 test('fetch abort signal works as expected', (done) => {
   const client = new Client();
-  client.setUnrecoverErrorHandler(() => {
+  client.setUnrecoverableErrorHandler(() => {
     done(new Error('did not expect fatal to be called'));
   });
 
