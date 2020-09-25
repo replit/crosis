@@ -1,6 +1,6 @@
 #!/bin/bash
-echo Add a repl token to use for tests:
-read token
+echo Add token secret for tests:
+read secret
 
-REPL_TOKEN=$token ./node_modules/.bin/jest --no-cache test $@
+TOKEN_SECRET=$secret ./node_modules/.bin/jest --no-cache test $@
 NODE_ENV="test"

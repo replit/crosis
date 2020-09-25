@@ -4,15 +4,15 @@ export enum ClientCloseReason {
   /**
    * called `client.close`
    */
-  Intentional,
+  Intentional = 'Intentional',
   /**
    * The websocket connection died
    */
-  Disconnected,
+  Disconnected = 'Disconnected',
   /**
    * The client encountered an unrecoverable/invariant error
    */
-  Error,
+  Error = 'Error',
 }
 
 // Channel close can either be due to client closing
