@@ -41,7 +41,7 @@ export interface UrlOptions {
 }
 
 export interface ConnectOptions<Ctx> {
-  fetchToken: (abortSignal: AbortSignal) => Promise<{ token: string | null, aborted: boolean }>;
+  fetchToken: (abortSignal: AbortSignal) => Promise<{ token: null, aborted: true } | { token: string, aborted: false }>;
   urlOptions: UrlOptions;
   timeout: number | null;
   WebSocketClass?: typeof WebSocket;

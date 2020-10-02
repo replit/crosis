@@ -322,6 +322,71 @@ test('channel skips opening conditionally', (done) => {
   );
 });
 
+test('client rejects opening channel before client opens', () => {
+  const client = new Client();
+
+  expect(() => {
+    client.openChannel({ name: Math.random().toString(), service: 'exec' }, () => {});
+  }).toThrow();
+});
+
+
+test('client rejects opening channel after closing client', () => {
+  const client = new Client();
+
+  const errorHandler = jest.fn();
+  client.setUnrecoverableErrorHandler(errorHandler);
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve({ token: null, aborted: true }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    () => {},
+  );
+
+
+  client.close();
+
+  expect(() => {
+    client.openChannel({ name: Math.random().toString(), service: 'exec' }, () => {});
+  }).toThrow();
+
+  expect(errorHandler).toHaveBeenCalledTimes(0);
+});
+
+test('client rejects opening same channel twice', (done) => {
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(done);
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ error }) => {
+      // expect(channel?.status).toBe('open');
+      expect(error).toEqual(null);
+
+      const name = Math.random().toString();
+      client.openChannel({ name, service: 'exec' }, () => {});
+
+      expect(() => {
+        client.openChannel({ name, service: 'exec' }, () => {});
+      }).toThrow();
+
+      client.close();
+
+      return () => {
+        done();
+      };
+    },
+  );
+});
+
+
 test('client reconnects unexpected disconnects', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
@@ -400,7 +465,7 @@ test('client is closed while reconnecting', (done) => {
       });
     }
 
-    return Promise.resolve({ token: genToken(), aborted: false });
+    return Promise.resolve({ token: genToken(), aborted: false } as const);
   };
 
   client.open(
