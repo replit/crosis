@@ -40,10 +40,28 @@ export interface UrlOptions {
   port: string;
 }
 
-export interface ConnectOptions<Ctx> {
+interface ConnectOptionsWithToken<Ctx> {
+  withPreconnectedSocket: false,
   fetchToken: (abortSignal: AbortSignal) => Promise<{ token: null, aborted: true } | { token: string, aborted: false }>;
+  context: Ctx;
   urlOptions: UrlOptions;
   timeout: number | null;
   WebSocketClass?: typeof WebSocket;
+}
+
+interface ConnectOptionsWithSocket<Ctx> {
+  withPreconnectedSocket: true,
+  getSocket: (abortSignal: AbortSignal) => Promise<{ ws: null, aborted: true } | { ws: WebSocket, aborted: false }>;
   context: Ctx;
 }
+
+export type ConnectOptions<Ctx> = ConnectOptionsWithSocket<Ctx> | ConnectOptionsWithToken<Ctx>;
+
+
+interface ConnectArgsWithToken<Ctx> extends Partial<ConnectOptionsWithToken<Ctx>> {
+  context: Ctx,
+  withPreconnectedSocket: false,
+  fetchToken: (abortSignal: AbortSignal) => Promise<{ token: null, aborted: true } | { token: string, aborted: false }>;
+}
+
+export type ConnectArgs<Ctx> = ConnectOptionsWithSocket<Ctx> | ConnectArgsWithToken<Ctx>

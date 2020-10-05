@@ -29,6 +29,10 @@ function isWebSocket(w: unknown): w is WebSocket {
  * Gets a websocket class from the global scope, or asserts if the supplied websocket follows the standard
  */
 export function getWebSocketClass(options: ConnectOptions<unknown>) {
+  if (options.withPreconnectedSocket) {
+    throw new Error('Did not expected to be called with withPreconnectedSocket');
+  }
+
   if (options.WebSocketClass) {
     if (!isWebSocket(options.WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');

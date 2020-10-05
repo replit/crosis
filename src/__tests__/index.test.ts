@@ -63,6 +63,7 @@ test('client connect', (done) => {
   client.open(
     {
       fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: ctx,
     },
@@ -97,6 +98,7 @@ test('client retries', (done) => {
 
         return Promise.resolve({ token: genToken(), aborted: false });
       },
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -125,6 +127,7 @@ test('channel closing itself when client willReconnect', (done) => {
   client.open(
     {
       fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -184,6 +187,7 @@ test('channel open and close', (done) => {
   client.open(
     {
       fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -230,6 +234,7 @@ test('channel skips opening', (done) => {
   client.open(
     {
       fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: ctx,
     },
@@ -270,6 +275,7 @@ test('channel skips opening conditionally', (done) => {
   client.open(
     {
       fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -330,7 +336,6 @@ test('client rejects opening channel before client opens', () => {
   }).toThrow();
 });
 
-
 test('client rejects opening channel after closing client', () => {
   const client = new Client();
 
@@ -340,12 +345,12 @@ test('client rejects opening channel after closing client', () => {
   client.open(
     {
       fetchToken: () => Promise.resolve({ token: null, aborted: true }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
     () => {},
   );
-
 
   client.close();
 
@@ -363,6 +368,7 @@ test('client rejects opening same channel twice', (done) => {
   client.open(
     {
       fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -386,7 +392,6 @@ test('client rejects opening same channel twice', (done) => {
   );
 });
 
-
 test('client reconnects unexpected disconnects', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
@@ -400,6 +405,7 @@ test('client reconnects unexpected disconnects', (done) => {
   client.open(
     {
       fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -471,6 +477,7 @@ test('client is closed while reconnecting', (done) => {
   client.open(
     {
       fetchToken,
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -513,6 +520,7 @@ test('closing before ever connecting', (done) => {
 
         return Promise.resolve({ token: genToken(), aborted: false });
       },
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -569,7 +577,8 @@ test('closing before ever connecting', (done) => {
 //   client.open(
 //     {
 //       fetchToken: () => Promise.resolve({ token: 'bad token', aborted: false }),
-//       WebSocketClass: WebSocket,
+//        withPreconnectedSocket: false,
+//        WebSocketClass: WebSocket,
 //       timeout: 0,
 //     },
 //     open,
@@ -592,6 +601,7 @@ test('fetch token fail', (done) => {
       fetchToken: () => {
         throw new Error('fail');
       },
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -624,6 +634,7 @@ test('fetch abort signal works as expected', (done) => {
             client.close();
           }, 0);
         }),
+      withPreconnectedSocket: false,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -634,6 +645,75 @@ test('fetch abort signal works as expected', (done) => {
       expect(onAbort).toHaveBeenCalledTimes(1);
 
       done();
+
+      return () => {};
+    },
+  );
+});
+
+test.only('client multiplexed', (done) => {
+  const wsSourceClient = new Client();
+  const clientMultiplexed = new Client();
+
+  const onError = (err: Error) => {
+    wsSourceClient.close();
+    clientMultiplexed.close();
+
+    done(err);
+  };
+  wsSourceClient.setUnrecoverableErrorHandler(onError);
+  clientMultiplexed.setUnrecoverableErrorHandler(onError);
+
+  wsSourceClient.open(
+    {
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      withPreconnectedSocket: false,
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(channel?.status).toBe('open');
+      expect(error).toBeNull();
+
+      // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+      // @ts-ignore (ws is private)
+      const { ws } = wsSourceClient;
+
+      clientMultiplexed.open(
+        {
+          getSocket: () => {
+            if (!ws) {
+              throw new Error('Expected socket');
+            }
+
+            return Promise.resolve({ ws, aborted: false });
+          },
+          withPreconnectedSocket: true,
+          context: null,
+        },
+        ({ channel: chan0, error: err2 }) => {
+          expect(chan0?.status).toBe('open');
+          expect(err2).toBeNull();
+
+          let ponged = false;
+          chan0?.onCommand((cmd) => {
+            if (cmd.body === 'pong') {
+              ponged = true;
+              clientMultiplexed.close();
+            }
+          });
+
+          chan0?.send({ ping: {} });
+
+          return () => {
+            expect(ponged).toBeTruthy();
+
+            wsSourceClient.close();
+
+            done();
+          };
+        },
+      );
 
       return () => {};
     },

@@ -6,15 +6,8 @@ import {
   ClientCloseReason,
   ChannelCloseReason,
   ChannelOptions,
+  ConnectArgs,
 } from './types';
-
-/**
- * The only required option is `fetchToken`, all others are optional and will use defaults
- */
-interface ConnectArgs<Ctx> extends Partial<Omit<ConnectOptions<Ctx>, 'fetchToken'>> {
-  fetchToken: ConnectOptions<Ctx>['fetchToken'];
-  context: Ctx;
-}
 
 type CloseResult =
   | {
@@ -158,7 +151,7 @@ export class Client<Ctx extends unknown = null> {
    * that we don't have a `connect` call lingering around waiting
    * for a token and eventually continue on as if we still want to connect
    */
-  private fetchTokenAbortController: AbortController | null;
+  private tokenOrSocketAbortController: AbortController | null;
 
   constructor() {
     this.ws = null;
@@ -171,7 +164,7 @@ export class Client<Ctx extends unknown = null> {
     this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
     this.retryTimeoutId = null;
-    this.fetchTokenAbortController = null;
+    this.tokenOrSocketAbortController = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -197,19 +190,29 @@ export class Client<Ctx extends unknown = null> {
       throw new Error('You must call `close` before opening the client again');
     }
 
-    if (!options.fetchToken || typeof options.fetchToken !== 'function') {
-      throw new Error('You must provide a fetchToken function');
-    }
+    if (options.withPreconnectedSocket) {
+      if (!options.getSocket || typeof options.getSocket !== 'function') {
+        throw new Error('You must provide a getSocket function');
+      }
 
-    this.connectOptions = {
-      timeout: 10000,
-      urlOptions: {
-        secure: false,
-        host: 'eval.repl.it',
-        port: '80',
-      },
-      ...options,
-    };
+      this.connectOptions = {
+        ...options,
+      };
+    } else {
+      if (!options.fetchToken || typeof options.fetchToken !== 'function') {
+        throw new Error('You must provide a fetchToken function');
+      }
+
+      this.connectOptions = {
+        timeout: 10000,
+        urlOptions: {
+          secure: false,
+          host: 'eval.repl.it',
+          port: '80',
+        },
+        ...options,
+      };
+    }
 
     this.debug({
       type: 'breadcrumb',
@@ -491,7 +494,7 @@ export class Client<Ctx extends unknown = null> {
       throw new Error('Must call client.connect before closing');
     }
 
-    this.fetchTokenAbortController?.abort();
+    this.tokenOrSocketAbortController?.abort();
 
     // TODO: wrap in `setTimeout` to make async? Would need to do this
     // to support calling `close` synchronously in `connect` callback
@@ -542,6 +545,7 @@ export class Client<Ctx extends unknown = null> {
       type: 'breadcrumb',
       message: 'connecting',
       data: {
+        connectOptions: this.connectOptions,
         connectionState: this.connectionState,
         connectTries: n,
         readyState: this.ws ? this.ws.readyState : undefined,
@@ -604,16 +608,110 @@ export class Client<Ctx extends unknown = null> {
     });
     this.channels[0] = chan0;
 
-    const WebSocketClass = getWebSocketClass(this.connectOptions);
-
-    if (this.fetchTokenAbortController) {
-      this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
+    if (this.tokenOrSocketAbortController) {
+      this.onUnrecoverableError(new Error('Expected tokenOrSocketAbortController to be null'));
 
       return;
     }
 
     const abortController = new AbortController();
-    this.fetchTokenAbortController = abortController;
+    this.tokenOrSocketAbortController = abortController;
+
+    if (this.connectOptions.withPreconnectedSocket) {
+      let socketGetterResult;
+      try {
+        socketGetterResult = await this.connectOptions.getSocket(abortController.signal);
+      } catch (e) {
+        this.onUnrecoverableError(e);
+
+        return;
+      }
+
+      this.tokenOrSocketAbortController = null;
+
+      const { ws, aborted } = socketGetterResult;
+
+      if (abortController.signal.aborted !== aborted) {
+        // the aborted return value and the abort signal should be equivalent
+        if (abortController.signal.aborted) {
+          // In cases where our abort signal has been called means `client.close` was called
+          // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
+          this.onUnrecoverableError(
+            new Error(
+              'Expected abort returned from getSocket to be truthy when the controller aborts',
+            ),
+          );
+
+          return;
+        }
+
+        // the user shouldn't return abort without the abort signal being called, if aborting is desired
+        // client.close should be called
+        this.onUnrecoverableError(
+          new Error('Abort should only be truthy returned when the abort signal is triggered'),
+        );
+
+        return;
+      }
+
+      if (ws && aborted) {
+        this.onUnrecoverableError(new Error('Expected either aborted or a ws'));
+
+        return;
+      }
+
+      if (aborted) {
+        // Just return. The user called `client.close leading to a get ws abort
+        // chan0Cb will be called with with an error Channel close, no need to do anything here.
+        return;
+      }
+
+      if (!ws) {
+        this.onUnrecoverableError(new Error('Expected ws to be truthy'));
+
+        return;
+      }
+
+
+      if (!this.connectOptions) {
+        this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+        return;
+      }
+
+      if (!chan0) {
+        this.onUnrecoverableError(new Error('Expected chan0 to be truthy'));
+
+        return;
+      }
+
+      if (!this.chan0Cb) {
+        this.onUnrecoverableError(new Error('Expected chan0Cb to be truthy'));
+
+        return;
+      }
+
+      this.ws = ws;
+      ws.onmessage = this.onSocketMessage;
+
+      this.handleConnect();
+
+      // defer closing if the user decides to call client.close inside chan0Cb
+      const originalClose = this.close;
+      this.close = () => setTimeout(() => {
+          originalClose();
+        }, 0);
+
+      this.chan0CleanupCb = this.chan0Cb({
+        channel: chan0,
+        error: null,
+        context: this.connectOptions.context,
+      });
+
+      this.close = originalClose;
+
+      return;
+    }
 
     let tokenFetchResult;
     try {
@@ -624,7 +722,7 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    this.fetchTokenAbortController = null;
+    this.tokenOrSocketAbortController = null;
 
     const { token, aborted } = tokenFetchResult;
 
@@ -676,6 +774,8 @@ export class Client<Ctx extends unknown = null> {
 
       return;
     }
+
+    const WebSocketClass = getWebSocketClass(this.connectOptions);
 
     const connStr = getConnectionStr(token, this.connectOptions.urlOptions);
     const ws = new WebSocketClass(connStr);
@@ -980,11 +1080,11 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    if (this.ws && this.fetchTokenAbortController) {
+    if (this.ws && this.tokenOrSocketAbortController) {
       // Fetching a token is required prior to initializing a websocket, we can't
       // have both at the same time as the abort controller is unset after we fetch the token
       this.onUnrecoverableError(
-        new Error('fetchTokenAbortController and websocket exist simultaneously'),
+        new Error('tokenOrSocketAbortController and websocket exist simultaneously'),
       );
 
       // Fallthrough to try to clean up
