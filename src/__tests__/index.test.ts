@@ -651,7 +651,7 @@ test('fetch abort signal works as expected', (done) => {
   );
 });
 
-test.only('client multiplexed', (done) => {
+test('client multiplexed', (done) => {
   const wsSourceClient = new Client();
   const clientMultiplexed = new Client();
 
