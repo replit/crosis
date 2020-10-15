@@ -114,7 +114,7 @@ export class Client extends EventEmitter {
 
     this.ws = null;
     this.channels = {
-      0: new Channel(),
+      0: new Channel(null),
     };
     this.inflightChannels = new Set();
     this.token = null;
@@ -217,6 +217,18 @@ export class Client extends EventEmitter {
     service: string;
     action?: api.OpenChannel.Action;
   }): Channel => {
+    if (name) {
+      if (Object.values(this.channels).some((c) => c.name === name)) {
+        throw new Error(`Named channel already opened ${name}`);
+      }
+
+      this.inflightChannels.forEach((infc) => {
+        if (infc.name === name) {
+          throw new Error(`Named channel already inflight ${name}`);
+        }
+      });
+    }
+
     let ac = action;
     if (!ac) {
       ac = name == null ? api.OpenChannel.Action.CREATE : api.OpenChannel.Action.ATTACH_OR_CREATE;
@@ -232,7 +244,7 @@ export class Client extends EventEmitter {
       },
     });
 
-    const channel = new Channel();
+    const channel = new Channel(name || null);
 
     // Random base36 int
     const ref = Number(Math.random().toString().split('.')[1]).toString(36);
