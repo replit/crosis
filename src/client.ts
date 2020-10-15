@@ -155,6 +155,12 @@ export class Client<Ctx extends unknown = null> {
    */
   private fetchTokenAbortController: AbortController | null;
 
+  /**
+   * Was the client destroyed? A destroyed client is a client that cannot
+   * be used ever again
+   */
+  private destroyed: boolean;
+
   constructor() {
     this.ws = null;
     this.channels = {};
@@ -167,6 +173,7 @@ export class Client<Ctx extends unknown = null> {
     this.channelRequests = [];
     this.retryTimeoutId = null;
     this.fetchTokenAbortController = null;
+    this.destroyed = true;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -194,6 +201,10 @@ export class Client<Ctx extends unknown = null> {
 
     if (!options.fetchToken || typeof options.fetchToken !== 'function') {
       throw new Error('You must provide a fetchToken function');
+    }
+
+    if (this.destroyed) {
+      throw new Error('Client has been destroyed and cannot be re-used');
     }
 
     this.connectOptions = {
@@ -243,6 +254,10 @@ export class Client<Ctx extends unknown = null> {
 
     if (options.name && this.channelRequests.some((cr) => cr.options.name === options.name)) {
       throw new Error(`Channel with name ${options.name} already opened`);
+    }
+
+    if (this.destroyed) {
+      throw new Error('Client has been destroyed and is');
     }
 
     const channelRequest: ChannelRequest<Ctx> = {
@@ -498,6 +513,25 @@ export class Client<Ctx extends unknown = null> {
     // channels close asynchronously so calling close inside `openChannel`
     // is fine sice the callback function exits.
     this.handleClose({ closeReason: ClientCloseReason.Intentional });
+  };
+
+  /**
+   * Destroy closes the connection, so all the rules of `close` apply here.
+   * The only difference is that `destroy` renders the client unsuable afterwards
+   * and frees up some resources protecting against potential leaks
+   */
+  public destroy = () => {
+    this.destroyed = true;
+    this.debug({ type: 'breadcrumb', message: 'destroy' });
+
+    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+      this.close();
+    }
+
+    this.debug = () => {};
+    this.userUnrecoverableErrorHandler = null;
+    this.channelRequests = [];
+    this.destroyed = true;
   };
 
   /** Gets a channel by Id */
