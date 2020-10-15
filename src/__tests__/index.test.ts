@@ -322,38 +322,29 @@ test('channel skips opening conditionally', (done) => {
   );
 });
 
-test('client rejects opening channel before client opens', () => {
+test('openChannel before open', (done) => {
   const client = new Client();
+  client.setUnrecoverableErrorHandler(done);
 
-  expect(() => {
-    client.openChannel({ name: Math.random().toString(), service: 'exec' }, () => {});
-  }).toThrow();
-});
+  client.openChannel({ service: 'exec' }, ({ channel }) => {
+    expect(channel).toBeTruthy();
 
-
-test('client rejects opening channel after closing client', () => {
-  const client = new Client();
-
-  const errorHandler = jest.fn();
-  client.setUnrecoverableErrorHandler(errorHandler);
+    client.close();
+    done();
+  });
 
   client.open(
     {
-      fetchToken: () => Promise.resolve({ token: null, aborted: true }),
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },
-    () => {},
+    ({ channel }) => {
+      expect(channel).toBeTruthy();
+
+      return () => {};
+    },
   );
-
-
-  client.close();
-
-  expect(() => {
-    client.openChannel({ name: Math.random().toString(), service: 'exec' }, () => {});
-  }).toThrow();
-
-  expect(errorHandler).toHaveBeenCalledTimes(0);
 });
 
 test('client rejects opening same channel twice', (done) => {
@@ -385,7 +376,6 @@ test('client rejects opening same channel twice', (done) => {
     },
   );
 });
-
 
 test('client reconnects unexpected disconnects', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();

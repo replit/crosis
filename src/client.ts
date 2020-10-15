@@ -242,10 +242,6 @@ export class Client<Ctx extends unknown = null> {
    *
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>) => {
-    if (!this.chan0Cb) {
-      throw new Error('You must call client.open before attempting to open any channels');
-    }
-
     if (options.name && this.channelRequests.some((cr) => cr.options.name === options.name)) {
       throw new Error(`Channel with name ${options.name} already opened`);
     }
