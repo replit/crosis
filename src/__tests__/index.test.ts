@@ -347,6 +347,50 @@ test('openChannel before open', (done) => {
   );
 });
 
+
+test('closing maintains openChannel requests', (done) => {
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(done);
+
+  let first = true;
+  client.openChannel({ service: 'exec' }, ({ channel }) => {
+    expect(channel).toBeTruthy();
+
+    if (first) {
+      client.close();
+      first = false;
+
+      setTimeout(() => {
+        // open again should call this same function
+        client.open(
+          {
+            fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+            WebSocketClass: WebSocket,
+            context: null,
+          },
+          () => {},
+        );
+      }, 200);
+    } else {
+      client.close();
+      done();
+    }
+  });
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel }) => {
+      expect(channel).toBeTruthy();
+
+      return () => {};
+    },
+  );
+});
+
 test('client rejects opening same channel twice', (done) => {
   const client = new Client();
   client.setUnrecoverableErrorHandler(done);
