@@ -1,12 +1,7 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
-import {
-  ConnectOptions,
-  ClientCloseReason,
-  ChannelCloseReason,
-  ChannelOptions,
-} from './types';
+import { ConnectOptions, ClientCloseReason, ChannelCloseReason, ChannelOptions } from './types';
 
 /**
  * The only required option is `fetchToken`, all others are optional and will use defaults
@@ -1001,12 +996,6 @@ export class Client<Ctx extends unknown = null> {
 
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
-
-      if (!willChannelReconnect) {
-        // If the channel won't reconnect, make sure to remove it from channelRequests
-        // so that in case the client reconnects in the future we don't try to open it
-        this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
-      }
 
       if (channelRequest.isOpen) {
         const channel = this.getChannel(channelRequest.channelId);
