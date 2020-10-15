@@ -475,9 +475,13 @@ export class Client<Ctx extends unknown = null> {
 
   /**
    * Closes the connection.
-   * - If `open` was called but we didn't connect yet treat it as a connection error
+   * - `open` must have been called before calling this method
+   * - If we haven't connected yet, open callback will be called with an error
    * - If there's an open WebSocket connection it will be closed
-   * - Any open channels or channel requests are closed
+   * - Any open channels will be closed
+   *   - Does not clear openChannel requests
+   *   - If a channel never opened, its openChannel callback will be called with an error
+   *   - Otherwise returned cleanup callback is called
    */
   public close = () => {
     this.debug({ type: 'breadcrumb', message: 'user close' });
