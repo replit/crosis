@@ -16,6 +16,8 @@ export class Channel extends EventEmitter {
 
   public closed: boolean;
 
+  public name: string | null
+
   // private
   private sendQueue: Array<api.ICommand>;
 
@@ -23,7 +25,7 @@ export class Channel extends EventEmitter {
 
   private requestMap: { [ref: string]: (res: RequestResult) => void };
 
-  constructor() {
+  constructor(name: string | null) {
     super();
 
     this.state = null;
@@ -33,6 +35,7 @@ export class Channel extends EventEmitter {
     this.sendQueue = [];
     this.sendToClient = this.enqueueSend;
     this.requestMap = {};
+    this.name = name;
   }
 
   /**
