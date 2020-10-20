@@ -173,7 +173,7 @@ export class Client<Ctx extends unknown = null> {
     this.channelRequests = [];
     this.retryTimeoutId = null;
     this.fetchTokenAbortController = null;
-    this.destroyed = true;
+    this.destroyed = false;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
