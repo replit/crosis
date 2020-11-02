@@ -278,7 +278,7 @@ test('channel skips opening conditionally', (done) => {
       expect(channel?.status).toBe('open');
       expect(error).toEqual(null);
       if (unexpectedDisconnectTriggered) {
-        setTimeout(() => client.close());
+        client.close();
       }
 
       return ({ willReconnect }) => {
@@ -670,6 +670,71 @@ test('fetch abort signal works as expected', (done) => {
       done();
 
       return () => {};
+    },
+  );
+});
+
+test('can close and open in synchronously without aborting fetch token', (done) => {
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(() => {
+    done(new Error('did not expect fatal to be called'));
+  });
+
+  const onAbort = jest.fn();
+  const firstChan0Cb = jest.fn();
+
+  let resolveFetchToken: null | Function = null;
+  client.open(
+    {
+      // never resolves
+      fetchToken: (abortSignal) => new Promise((r) => {
+        resolveFetchToken = r;
+
+          abortSignal.onabort = () => {
+            onAbort();
+            // don't resolve
+          };
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    firstChan0Cb,
+  );
+
+  client.close();
+
+  expect(resolveFetchToken).toBeTruthy();
+  // resolving the first fetch token later shouldn't casue any errors
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  resolveFetchToken!({ aborted: true, token: null });
+  expect(onAbort).toHaveBeenCalledTimes(1);
+  expect(firstChan0Cb).toHaveBeenCalledTimes(1);
+  expect(firstChan0Cb).toHaveBeenLastCalledWith(expect.objectContaining({
+    channel: null,
+    context: null,
+    error: expect.any(Error),
+  }));
+
+  client.setUnrecoverableErrorHandler(done);
+
+
+  client.open(
+    {
+      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(channel?.status).toBe('open');
+      expect(error).toEqual(null);
+
+      client.close();
+
+      return () => {
+        expect(firstChan0Cb).toHaveBeenCalledTimes(1);
+
+        done();
+      };
     },
   );
 });

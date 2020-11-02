@@ -501,13 +501,11 @@ export class Client<Ctx extends unknown = null> {
       throw new Error('Must call client.connect before closing');
     }
 
-    this.fetchTokenAbortController?.abort();
+    if (this.fetchTokenAbortController) {
+      this.fetchTokenAbortController.abort();
+      this.fetchTokenAbortController = null;
+    }
 
-    // TODO: wrap in `setTimeout` to make async? Would need to do this
-    // to support calling `close` synchronously in `connect` callback
-    // This is only an issue with channel 0 since it never closes. Other
-    // channels close asynchronously so calling close inside `openChannel`
-    // is fine sice the callback function exits.
     this.handleClose({ closeReason: ClientCloseReason.Intentional });
   };
 
