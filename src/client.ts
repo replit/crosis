@@ -995,26 +995,26 @@ export class Client<Ctx extends unknown = null> {
   };
 
   private handleClose = (closeResult: CloseResult) => {
-    if (!this.chan0Cb || !this.connectOptions) {
-      this.onUnrecoverableError(new Error('open should have been called before `handleClose`'));
+    if (closeResult.closeReason !== ClientCloseReason.Error) {
+      // If we got here as a result of an error we'll ignore these assertions to avoid
+      // infinite recursion in onUnrecoverableError
+      if (this.connectionState === ConnectionState.DISCONNECTED) {
+        this.onUnrecoverableError(
+          new Error('handleClose is called but client already disconnected'),
+        );
 
-      return;
-    }
+        return;
+      }
 
-    if (this.connectionState === ConnectionState.DISCONNECTED) {
-      this.onUnrecoverableError(new Error('handleClose is called but client already disconnected'));
+      if (this.ws && this.fetchTokenAbortController) {
+        // Fetching a token is required prior to initializing a websocket, we can't
+        // have both at the same time as the abort controller is unset after we fetch the token
+        this.onUnrecoverableError(
+          new Error('fetchTokenAbortController and websocket exist simultaneously'),
+        );
 
-      return;
-    }
-
-    if (this.ws && this.fetchTokenAbortController) {
-      // Fetching a token is required prior to initializing a websocket, we can't
-      // have both at the same time as the abort controller is unset after we fetch the token
-      this.onUnrecoverableError(
-        new Error('fetchTokenAbortController and websocket exist simultaneously'),
-      );
-
-      // Fallthrough to try to clean up
+        return;
+      }
     }
 
     this.cleanupSocket();
@@ -1039,17 +1039,17 @@ export class Client<Ctx extends unknown = null> {
       } else if (!willChannelReconnect) {
         // channel won't reconnect and was never opened
         // we'll call the open channel callback with an error
-        if (!this.connectOptions) {
+        if (this.connectOptions) {
+          channelRequest.openChannelCb({
+            channel: null,
+            error: new Error('Failed to open'),
+            context: this.connectOptions.context,
+          });
+        } else if (closeResult.closeReason !== ClientCloseReason.Error) {
           this.onUnrecoverableError(new Error('Expected connectionOptions'));
 
           return;
         }
-
-        channelRequest.openChannelCb({
-          channel: null,
-          error: new Error('Failed to open'),
-          context: this.connectOptions.context,
-        });
       }
 
       const { cleanupCb } = channelRequest;
@@ -1082,11 +1082,14 @@ export class Client<Ctx extends unknown = null> {
 
     if (Object.keys(this.channels).length !== 0) {
       this.channels = {};
-      this.onUnrecoverableError(
-        new Error('channels object should be empty after channelRequests and chan0 cleanup'),
-      );
+      if (closeResult.closeReason !== ClientCloseReason.Error) {
+        // if we got here as a result of an error we're not gonna call onUnrecoverableError again
+        this.onUnrecoverableError(
+          new Error('channels object should be empty after channelRequests and chan0 cleanup'),
+        );
 
-      return;
+        return;
+      }
     }
 
     if (this.chan0CleanupCb) {
@@ -1097,11 +1100,18 @@ export class Client<Ctx extends unknown = null> {
       });
       this.chan0CleanupCb = null;
     } else if (!willClientReconnect) {
-      this.chan0Cb({
-        channel: null,
-        error: new Error('Failed to open'),
-        context: this.connectOptions.context,
-      });
+      if (this.chan0Cb && this.connectOptions) {
+        this.chan0Cb({
+          channel: null,
+          error: new Error('Failed to open'),
+          context: this.connectOptions.context,
+        });
+      } else if (closeResult.closeReason !== ClientCloseReason.Error) {
+        // if we got here as a result of an error we're not gonna call onUnrecoverableError again
+        this.onUnrecoverableError(new Error('open should have been called before `handleClose`'));
+
+        return;
+      }
     }
 
     this.connectionState = ConnectionState.DISCONNECTED;
