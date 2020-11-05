@@ -196,15 +196,27 @@ export class Client<Ctx extends unknown = null> {
    */
   public open = (options: ConnectArgs<Ctx>, cb: OpenChannelCb<Ctx>) => {
     if (this.chan0Cb) {
-      throw new Error('You must call `close` before opening the client again');
+      const error = new Error('You must call `close` before opening the client again');
+      this.onUnrecoverableError(error);
+
+      // throw to stop the execution of the caller
+      throw error;
     }
 
     if (!options.fetchToken || typeof options.fetchToken !== 'function') {
-      throw new Error('You must provide a fetchToken function');
+      const error = new Error('You must provide a fetchToken function');
+      this.onUnrecoverableError(error);
+
+      // throw to stop the execution of the caller
+      throw error;
     }
 
     if (this.destroyed) {
-      throw new Error('Client has been destroyed and cannot be re-used');
+      const error = new Error('Client has been destroyed and cannot be re-used');
+      this.onUnrecoverableError(error);
+
+      // throw to stop the execution of the caller
+      throw error;
     }
 
     this.connectOptions = {
@@ -249,11 +261,19 @@ export class Client<Ctx extends unknown = null> {
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>) => {
     if (options.name && this.channelRequests.some((cr) => cr.options.name === options.name)) {
-      throw new Error(`Channel with name ${options.name} already opened`);
+      const error = new Error(`Channel with name ${options.name} already opened`);
+      this.onUnrecoverableError(error);
+
+      // throw to stop the execution of the caller
+      throw error;
     }
 
     if (this.destroyed) {
-      throw new Error('Client has been destroyed and is');
+      const error = new Error('Client has been destroyed and is');
+      this.onUnrecoverableError(error);
+
+      // throw to stop the execution of the caller
+      throw error;
     }
 
     const channelRequest: ChannelRequest<Ctx> = {
@@ -275,7 +295,9 @@ export class Client<Ctx extends unknown = null> {
     let calledClose = false;
     const closeChannel = async (): Promise<void> => {
       if (calledClose) {
-        throw new Error('Called close already');
+        this.onUnrecoverableError(new Error('Closing channel multiple times'));
+
+        return undefined;
       }
 
       calledClose = true;
@@ -498,7 +520,11 @@ export class Client<Ctx extends unknown = null> {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
     if (!this.chan0Cb || !this.connectOptions) {
-      throw new Error('Must call client.connect before closing');
+      const error = new Error('Must call client.connect before closing');
+      this.onUnrecoverableError(error);
+
+      // throw to stop the execution of the caller
+      throw error;
     }
 
     if (this.fetchTokenAbortController) {
@@ -928,7 +954,9 @@ export class Client<Ctx extends unknown = null> {
     const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
 
     if (this.ws == null) {
-      throw new Error('Calling send on a closed client');
+      this.onUnrecoverableError(new Error('Calling send on a closed client'));
+
+      return;
     }
 
     this.ws.send(buffer);
@@ -1177,8 +1205,8 @@ export class Client<Ctx extends unknown = null> {
           error: e,
         });
       } catch (handleCloseErr) {
-        // we need to keep going and report the unrecoverable error regardless of what happens
-        // inside handleClose
+        // We tried our best to clean up. But we need to keep going and report
+        // unrecoverable error regardless of what happens inside handleClose
         // eslint-disable-next-line no-console
         console.error('handleClose errored during unrecoverable error');
         // eslint-disable-next-line no-console
