@@ -293,9 +293,9 @@ export class Client<Ctx extends unknown = null> {
     }
 
     let calledClose = false;
-    const closeChannel = async (): Promise<void> => {
+    const closeChannel = () => {
       if (calledClose) {
-        return undefined;
+        return;
       }
 
       calledClose = true;
@@ -307,10 +307,10 @@ export class Client<Ctx extends unknown = null> {
         // request right after it's done opening
         this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
 
-        return undefined;
+        return;
       }
 
-      return this.requestCloseChannel(channelRequest);
+      this.requestCloseChannel(channelRequest);
     };
 
     return closeChannel;
