@@ -441,6 +441,8 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
+    const { channelId } = channelRequest;
+
     const chan = this.getChannel(channelRequest.channelId);
     chan.status = 'closing';
 
@@ -454,6 +456,16 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
+    this.debug({
+      type: 'breadcrumb',
+      message: 'requestChannelClose',
+      data: {
+        id: channelId,
+        name: channelRequest.options.name,
+        service: channelRequest.options.service,
+      },
+    });
+
     const res = await chan0.request({
       closeChan: {
         action: api.CloseChannel.Action.TRY_CLOSE,
@@ -462,41 +474,52 @@ export class Client<Ctx extends unknown = null> {
     });
 
     if (res.channelClosed) {
-      // channel0 is closed, which means all other channels are already closed
-      return;
-    }
+      this.debug({
+        type: 'breadcrumb',
+        message: 'requestChannelClose:chan0Closed',
+        data: {
+          id: channelId,
+          name: channelRequest.options.name,
+          service: channelRequest.options.service,
+        },
+      });
+    } else {
+      if (res.closeChanRes == null) {
+        this.onUnrecoverableError(new Error('Expected closeChanRes'));
 
-    if (res.closeChanRes == null) {
-      this.onUnrecoverableError(new Error('Expected closeChanRes'));
+        return;
+      }
 
-      return;
-    }
+      const { id } = res.closeChanRes;
 
-    const { id } = res.closeChanRes;
+      if (id == null) {
+        this.onUnrecoverableError(new Error(`Expected id, got ${id}`));
 
-    if (id == null) {
-      this.onUnrecoverableError(new Error(`Expected id, got ${id}`));
+        return;
+      }
 
-      return;
-    }
+      if (id !== channelId) {
+        this.onUnrecoverableError(
+          new Error(`Expected id from closeChanRes to be ${channelId} got ${id}`),
+        );
 
-    this.debug({
-      type: 'breadcrumb',
-      message: 'handleCloseChannel',
-      data: {
-        id: res.closeChanRes.id,
-        reason: res.closeChanRes.status,
-      },
-    });
+        return;
+      }
 
-    if (!this.connectOptions) {
-      this.onUnrecoverableError(new Error('Expected connectionOptions'));
-
-      return;
+      this.debug({
+        type: 'breadcrumb',
+        message: 'requestChannelClose:closeChanRes',
+        data: {
+          id: channelId,
+          name: channelRequest.options.name,
+          service: channelRequest.options.service,
+          closeStatus: res.closeChanRes.status,
+        },
+      });
     }
 
     this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
-    delete this.channels[id];
+    delete this.channels[channelId];
 
     chan.handleClose({ initiator: 'channel', willReconnect: false });
     if (channelRequest.cleanupCb) {
