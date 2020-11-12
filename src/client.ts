@@ -295,8 +295,6 @@ export class Client<Ctx extends unknown = null> {
     let calledClose = false;
     const closeChannel = async (): Promise<void> => {
       if (calledClose) {
-        this.onUnrecoverableError(new Error('Closing channel multiple times'));
-
         return undefined;
       }
 
@@ -306,7 +304,7 @@ export class Client<Ctx extends unknown = null> {
       if (!channelRequest.isOpen) {
         // Channel is not open, let's just remove it from our list.
         // If there's an inflight open request then we'll be sending a close
-        // request right after it's done.
+        // request right after it's done opening
         this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
 
         return undefined;
