@@ -49,7 +49,7 @@ export function getWebSocketClass(options: ConnectOptions<unknown>) {
 }
 
 /**
- * Given a token and the URL options, creates a websocket connection string
+ * Given connection metadata, creates a websocket connection string
  */
 export function getConnectionStr(connectionMetadata: GovalMetadata) {
   return new URL(`/wsv2/${connectionMetadata.token}`, connectionMetadata.gurl).toString();
