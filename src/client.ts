@@ -1,13 +1,20 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
-import { ConnectOptions, ClientCloseReason, ChannelCloseReason, ChannelOptions } from './types';
+import { ConnectOptions, ClientCloseReason, ChannelCloseReason, ChannelOptions, UrlOptions } from './types';
 
 /**
- * The only required option is `fetchToken`, all others are optional and will use defaults
+ * The only required option is `fetchConnectionMetadata` (falling back to
+ * `fetchToken`), all others are optional and will use defaults.
+ *
+ * TODO(lhchavez): Once the migration is done, drop `fetchToken` and only use
+ * `fetchConnectionMetadata`.
  */
-interface ConnectArgs<Ctx> extends Partial<Omit<ConnectOptions<Ctx>, 'fetchToken'>> {
-  fetchToken: ConnectOptions<Ctx>['fetchToken'];
+interface ConnectArgs<Ctx> extends Partial<ConnectOptions<Ctx>> {
+  fetchToken?: (
+    abortSignal: AbortSignal,
+  ) => Promise<{ token: null; aborted: true } | { token: string; aborted: false }>;
+  urlOptions?: UrlOptions;
   context: Ctx;
 }
 
@@ -74,6 +81,12 @@ type ChannelRequest<Ctx> =
       cleanupCb: null;
     };
 
+const defaultUrlOptions = {
+  secure: false,
+  host: 'eval.repl.it',
+  port: '80',
+};
+
 export class Client<Ctx extends unknown = null> {
   /**
    * Indicates the current state of the connection with the container.
@@ -90,7 +103,7 @@ export class Client<Ctx extends unknown = null> {
 
   /**
    * Supplied to us as the first argument when calling `client.open`.
-   * The most important option is the token getter
+   * The most important option is the connection metadata getter
    */
   private connectOptions: ConnectOptions<Ctx> | null;
 
@@ -148,10 +161,10 @@ export class Client<Ctx extends unknown = null> {
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
   /**
-   * Abort controller is used so that when the user calls
-   * client.close while we're fetching a token, we can be sure
-   * that we don't have a `connect` call lingering around waiting
-   * for a token and eventually continue on as if we still want to connect
+   * Abort controller is used so that when the user calls client.close while
+   * we're fetching connection metadata, we can be sure that we don't have a
+   * `connect` call lingering around waiting for connection metadata and
+   * eventually continue on as if we still want to connect
    */
   private fetchTokenAbortController: AbortController | null;
 
@@ -203,12 +216,32 @@ export class Client<Ctx extends unknown = null> {
       throw error;
     }
 
-    if (!options.fetchToken || typeof options.fetchToken !== 'function') {
-      const error = new Error('You must provide a fetchToken function');
-      this.onUnrecoverableError(error);
+    let fetchConnectionMetadata = options.fetchConnectionMetadata;
+    if (!fetchConnectionMetadata || typeof fetchConnectionMetadata !== 'function') {
+      const fetchToken = options.fetchToken;
+      if (!fetchToken || typeof fetchToken !== 'function') {
+        const error = new Error('You must provide a fetchConnectionMetadata/fetchToken function');
+        this.onUnrecoverableError(error);
 
-      // throw to stop the execution of the caller
-      throw error;
+        // throw to stop the execution of the caller
+        throw error;
+      }
+      const { secure, host, port } = options.urlOptions || defaultUrlOptions;
+
+      fetchConnectionMetadata = async (abortSignal: AbortSignal) => {
+        const { token, aborted } = await fetchToken(abortSignal);
+        if (aborted || !token) {
+          return { connectionMetadata: null, aborted: true };
+        }
+        return {
+          connectionMetadata: {
+            token,
+            gurl: `ws${secure ? 's' : ''}://${host}:${port}`,
+            conmanURL: `http${secure ? 's' : ''}://${host}:${port}`,
+          },
+          aborted: false,
+        };
+      };
     }
 
     if (this.destroyed) {
@@ -220,12 +253,8 @@ export class Client<Ctx extends unknown = null> {
     }
 
     this.connectOptions = {
+      fetchConnectionMetadata,
       timeout: 10000,
-      urlOptions: {
-        secure: false,
-        host: 'eval.repl.it',
-        port: '80',
-      },
       ...options,
     };
 
@@ -668,9 +697,11 @@ export class Client<Ctx extends unknown = null> {
     const abortController = new AbortController();
     this.fetchTokenAbortController = abortController;
 
-    let tokenFetchResult;
+    let connectionMetadataFetchResult;
     try {
-      tokenFetchResult = await this.connectOptions.fetchToken(abortController.signal);
+      connectionMetadataFetchResult = await this.connectOptions.fetchConnectionMetadata(
+        abortController.signal,
+      );
     } catch (e) {
       this.onUnrecoverableError(e);
 
@@ -679,7 +710,7 @@ export class Client<Ctx extends unknown = null> {
 
     this.fetchTokenAbortController = null;
 
-    const { token, aborted } = tokenFetchResult;
+    const { connectionMetadata, aborted } = connectionMetadataFetchResult;
 
     if (abortController.signal.aborted !== aborted) {
       // the aborted return value and the abort signal should be equivalent
@@ -688,7 +719,7 @@ export class Client<Ctx extends unknown = null> {
         // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
         this.onUnrecoverableError(
           new Error(
-            'Expected abort returned from fetchToken to be truthy when the controller aborts',
+            'Expected abort returned from fetchConnectionMetadata to be truthy when the controller aborts',
           ),
         );
 
@@ -704,21 +735,21 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    if (token && aborted) {
-      this.onUnrecoverableError(new Error('Expected either aborted or a token'));
+    if (connectionMetadata && aborted) {
+      this.onUnrecoverableError(new Error('Expected either aborted or a connectionMetadata'));
 
       return;
     }
 
     if (aborted) {
-      // Just return. The user called `client.close leading to a token abort
+      // Just return. The user called `client.close leading to a connectionMetadata abort
       // chan0Cb will be called with with an error Channel close, no need to do anything here.
       return;
     }
 
-    if (!token) {
+    if (!connectionMetadata) {
       this.onUnrecoverableError(
-        new Error('Expected token to be a string or request to be aborted'),
+        new Error('Expected connectionMetadata to be non-empty or request to be aborted'),
       );
 
       return;
@@ -730,7 +761,7 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const connStr = getConnectionStr(token, this.connectOptions.urlOptions);
+    const connStr = getConnectionStr(connectionMetadata);
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
@@ -868,7 +899,8 @@ export class Client<Ctx extends unknown = null> {
 
           // defer closing if the user decides to call client.close inside chan0Cb
           const originalClose = this.close;
-          this.close = () => setTimeout(() => {
+          this.close = () =>
+            setTimeout(() => {
               originalClose();
             }, 0);
 
@@ -1035,8 +1067,9 @@ export class Client<Ctx extends unknown = null> {
       }
 
       if (this.ws && this.fetchTokenAbortController) {
-        // Fetching a token is required prior to initializing a websocket, we can't
-        // have both at the same time as the abort controller is unset after we fetch the token
+        // Fetching connection metadata is required prior to initializing a
+        // websocket, we can't have both at the same time as the abort
+        // controller is unset after we fetch the connection metadata.
         this.onUnrecoverableError(
           new Error('fetchTokenAbortController and websocket exist simultaneously'),
         );
