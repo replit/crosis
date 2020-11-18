@@ -1,7 +1,7 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
-import { ConnectOptions, ClientCloseReason, ChannelCloseReason, ChannelOptions } from './types';
+import { ConnectOptions, ClientCloseReason, ChannelCloseReason, ChannelOptions, UrlOptions } from './types';
 
 /**
  * The only required option is `fetchConnectionMetadata` (falling back to
@@ -14,6 +14,7 @@ interface ConnectArgs<Ctx> extends Partial<ConnectOptions<Ctx>> {
   fetchToken?: (
     abortSignal: AbortSignal,
   ) => Promise<{ token: null; aborted: true } | { token: string; aborted: false }>;
+  urlOptions?: UrlOptions;
   context: Ctx;
 }
 
@@ -254,7 +255,6 @@ export class Client<Ctx extends unknown = null> {
     this.connectOptions = {
       fetchConnectionMetadata,
       timeout: 10000,
-      urlOptions: defaultUrlOptions,
       ...options,
     };
 

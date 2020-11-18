@@ -70,7 +70,8 @@ test('client connect', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: ctx,
     },
@@ -126,11 +127,14 @@ test('client retries', (done) => {
         tryCount += 1;
 
         if (tryCount === 1) {
-          return Promise.resolve({ connectionMetadata: {
-            token: 'test - bad connection metadata retries',
-            gurl: 'ws://invalid.example.com',
-            conmanURL: 'http://invalid.example.com',
-          }, aborted: false });
+          return Promise.resolve({
+            connectionMetadata: {
+              token: 'test - bad connection metadata retries',
+              gurl: 'ws://invalid.example.com',
+              conmanURL: 'http://invalid.example.com',
+            },
+            aborted: false,
+          });
         }
 
         return Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false });
@@ -162,7 +166,8 @@ test('channel closing itself when client willReconnect', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -221,7 +226,8 @@ test('channel open and close', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -267,7 +273,8 @@ test('channel skips opening', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: ctx,
     },
@@ -307,7 +314,8 @@ test('channel skips opening conditionally', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -373,7 +381,8 @@ test('openChannel before open', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -384,7 +393,6 @@ test('openChannel before open', (done) => {
     },
   );
 });
-
 
 test('closing maintains openChannel requests', (done) => {
   const client = new Client();
@@ -402,7 +410,8 @@ test('closing maintains openChannel requests', (done) => {
         // open again should call this same function
         client.open(
           {
-            fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+            fetchConnectionMetadata: () =>
+              Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
             WebSocketClass: WebSocket,
             context: null,
           },
@@ -417,7 +426,8 @@ test('closing maintains openChannel requests', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -435,7 +445,8 @@ test('client rejects opening same channel twice', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -471,7 +482,8 @@ test('client reconnects unexpected disconnects', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -537,7 +549,10 @@ test('client is closed while reconnecting', (done) => {
       });
     }
 
-    return Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false } as const);
+    return Promise.resolve({
+      connectionMetadata: genConnectionMetadata(),
+      aborted: false,
+    } as const);
   };
 
   client.open(
@@ -681,7 +696,8 @@ test('fetch abort signal works as expected', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: (abortSignal) => new Promise((r) => {
+      fetchConnectionMetadata: (abortSignal) =>
+        new Promise((r) => {
           // Listen to abort signal
           abortSignal.onabort = () => {
             onAbort();
@@ -725,8 +741,9 @@ test('can close and open in synchronously without aborting fetch token', (done) 
   client.open(
     {
       // never resolves
-      fetchConnectionMetadata: (abortSignal) => new Promise((r) => {
-        resolveFetchToken = r;
+      fetchConnectionMetadata: (abortSignal) =>
+        new Promise((r) => {
+          resolveFetchToken = r;
 
           abortSignal.onabort = () => {
             onAbort();
@@ -747,18 +764,20 @@ test('can close and open in synchronously without aborting fetch token', (done) 
   resolveFetchToken!({ aborted: true, token: null });
   expect(onAbort).toHaveBeenCalledTimes(1);
   expect(firstChan0Cb).toHaveBeenCalledTimes(1);
-  expect(firstChan0Cb).toHaveBeenLastCalledWith(expect.objectContaining({
-    channel: null,
-    context: null,
-    error: expect.any(Error),
-  }));
+  expect(firstChan0Cb).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      channel: null,
+      context: null,
+      error: expect.any(Error),
+    }),
+  );
 
   client.setUnrecoverableErrorHandler(done);
 
-
   client.open(
     {
-      fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
+      fetchConnectionMetadata: () =>
+        Promise.resolve({ connectionMetadata: genConnectionMetadata(), aborted: false }),
       WebSocketClass: WebSocket,
       context: null,
     },

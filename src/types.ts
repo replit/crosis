@@ -53,7 +53,6 @@ export interface ConnectOptions<Ctx> {
     | { connectionMetadata: null; aborted: true }
     | { connectionMetadata: GovalMetadata; aborted: false }
   >;
-  urlOptions: UrlOptions;
   timeout: number | null;
   WebSocketClass?: typeof WebSocket;
   context: Ctx;
