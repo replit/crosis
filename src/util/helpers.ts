@@ -1,4 +1,4 @@
-import { ConnectOptions, UrlOptions } from '../types';
+import { ConnectOptions, GovalMetadata } from '../types';
 
 const BACKOFF_FACTOR = 1.7;
 const MAX_BACKOFF = 15000;
@@ -51,8 +51,6 @@ export function getWebSocketClass(options: ConnectOptions<unknown>) {
 /**
  * Given a token and the URL options, creates a websocket connection string
  */
-export function getConnectionStr(token: string, urlOptions: UrlOptions) {
-  const { secure, host, port } = urlOptions;
-
-  return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
+export function getConnectionStr(connectionMetadata: GovalMetadata) {
+  return new URL(`/wsv2/${connectionMetadata.token}`, connectionMetadata.gurl).toString();
 }

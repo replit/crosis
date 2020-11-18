@@ -14,9 +14,9 @@ Read about the protocol here http://protodoc.turbio.repl.co
 
 The central concept is a "channel" that you can send commands to and receive commands from. Communicating with channels requires a network connection. The goal of this client is to provide an API to manage what happens when a disconnect and/or reconnect happens. How you handle this is up to you and depends on the desired UX. In some cases you'll want to disable UI to prevent any new messages being sent when offline and then re-enable once connected agian. In other cases you might want to give the user the illusion that they are connected and queue message locally while disconnected and send them once reconnected.
 
-When a client successfully connects (`client.open`) the provided callback function is called and passed a channel (this is channel 0). Other channels for specific services can be opened by calling `client.openChannel`. The signature of the callback function for `openChannel` matches the one from `client.open`. 
+When a client successfully connects (`client.open`) the provided callback function is called and passed a channel (this is channel 0). Other channels for specific services can be opened by calling `client.openChannel`. The signature of the callback function for `openChannel` matches the one from `client.open`.
 
-The callback functions provided to `open` and `openChannel` can optionally return a function that will be called when the client or channel is closed. This is useful for cleaning up any logic that depends on a channel being available. 
+The callback functions provided to `open` and `openChannel` can optionally return a function that will be called when the client or channel is closed. This is useful for cleaning up any logic that depends on a channel being available.
 
 ```ts
 import { Client } from '@replit/crosis';
@@ -25,8 +25,10 @@ const client = new Client();
 
 const user = { name: 'example' };
 
-const disposeClient = client.open({ 
+const disposeClient = client.open({
   // This will be called for every connect attempt and reconnect attempt
+  fetchConnectionMetadata: fetch(CONNECTION_METADATA_URL).then((r) => r.json()),
+  // DEPRECATED: Same as above but only returns a subset of the information.
   fetchToken: fetch(TOKEN_URL).then((r) => r.text()),
   // An optinal object that will get passed to open/openChannel callbacks
   context: { user },

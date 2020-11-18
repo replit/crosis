@@ -40,8 +40,19 @@ export interface UrlOptions {
   port: string;
 }
 
+export interface GovalMetadata {
+  token: string;
+  gurl: string;
+  conmanURL: string;
+}
+
 export interface ConnectOptions<Ctx> {
-  fetchToken: (abortSignal: AbortSignal) => Promise<{ token: null, aborted: true } | { token: string, aborted: false }>;
+  fetchConnectionMetadata: (
+    abortSignal: AbortSignal,
+  ) => Promise<
+    | { connectionMetadata: null; aborted: true }
+    | { connectionMetadata: GovalMetadata; aborted: false }
+  >;
   urlOptions: UrlOptions;
   timeout: number | null;
   WebSocketClass?: typeof WebSocket;
