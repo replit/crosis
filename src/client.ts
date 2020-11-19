@@ -1,6 +1,7 @@
 /* global WebSocket */
 
 import { EventEmitter } from 'events';
+import * as urllib from 'url';
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { EIOCompat } from './EIOCompat';
@@ -12,10 +13,16 @@ enum ConnectionState {
   DISCONNECTED = 2,
 }
 
-interface UrlOptions {
+export interface UrlOptions {
   secure: boolean;
   host: string;
   port: string;
+}
+
+interface GovalMetadata {
+  token: string;
+  gurl: string;
+  conmanURL: string;
 }
 
 interface TxRx {
@@ -39,12 +46,31 @@ type DebugLog =
 type DebugFunc = (log: DebugLog) => void;
 
 interface ConnectOptions {
-  token: string;
+  // This field has all the information needed to connect with Goval.
+  connectionMetadata: GovalMetadata;
+  // If pollingHost is set, it will connect there and poll as a fallback when
+  // WebSockets are not supported.
+  pollingHost?: string;
+
+  timeout: number | null;
+  WebSocketClass: typeof WebSocket;
+}
+
+export interface ConnectArgs extends Partial<ConnectOptions> {
+  // token, urlOptions, and polling have been deprecated in favor of
+  // connectionMetadata.
+  token?: string;
   urlOptions?: UrlOptions;
   polling?: boolean;
-  timeout?: number | null;
-  WebSocketClass?: typeof WebSocket;
 }
+
+const defaultUrlOptions = {
+  secure: false,
+  host: 'eval.repl.it',
+  port: '80',
+};
+
+const defaultPollingHost = 'gp-v2.herokuapp.com';
 
 /**
  * @hidden
@@ -64,7 +90,7 @@ const isWebSocket = (w: typeof WebSocket | unknown) => {
 /**
  * @hidden
  */
-const getWebSocketClass = (options: ConnectOptions) => {
+const getWebSocketClass = (options: ConnectArgs) => {
   if (options.WebSocketClass) {
     if (!isWebSocket(options.WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');
@@ -89,7 +115,7 @@ export class Client extends EventEmitter {
 
   public connectionState: ConnectionState;
 
-  private token: string | null;
+  private connectionMetadata: GovalMetadata | null;
 
   private ws: WebSocket | null;
 
@@ -103,10 +129,13 @@ export class Client extends EventEmitter {
 
   private didConnect: boolean;
 
-  static getConnectionStr(token: string, urlOptions: UrlOptions) {
-    const { secure, host, port } = urlOptions;
-
-    return `ws${secure ? 's' : ''}://${host}:${port}/wsv2/${token}`;
+  static getConnectionStr(connectionMetadata: GovalMetadata, pollingHost?: string) {
+    const gurl = urllib.parse(connectionMetadata.gurl);
+    if (pollingHost) {
+      gurl.host = pollingHost;
+    }
+    gurl.pathname = `/wsv2/${connectionMetadata.token}`;
+    return urllib.format(gurl);
   }
 
   constructor(debug: DebugFunc = () => {}) {
@@ -117,7 +146,7 @@ export class Client extends EventEmitter {
       0: new Channel(null),
     };
     this.inflightChannels = new Set();
-    this.token = null;
+    this.connectionMetadata = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debug = debug;
     this.didConnect = false;
@@ -131,8 +160,12 @@ export class Client extends EventEmitter {
    * Connects to the server and primes the client to start sending data
    * @returns it returns a promise that is resolved when the server is ready (sends cotainer state)
    */
-  public connect = async (options: ConnectOptions): Promise<void> => {
-    this.debug({ type: 'breadcrumb', message: 'connect', data: { polling: options.polling } });
+  public connect = async (options: ConnectArgs): Promise<void> => {
+    this.debug({
+      type: 'breadcrumb',
+      message: 'connect',
+      data: { polling: !!options.pollingHost || !!options.polling },
+    });
 
     if (this.didConnect) {
       // We don't want to allow connections if we ever connected
@@ -151,12 +184,22 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    if (!options.token) {
-      const error = new Error('You must provide a token');
+    let connectionMetadata = options.connectionMetadata;
+    if (!connectionMetadata) {
+      if (!options.token) {
+        const error = new Error('You must provide a connectionMetadata / token');
 
-      this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
+        this.debug({ type: 'breadcrumb', message: 'error', data: error.message });
 
-      throw error;
+        throw error;
+      }
+      const { secure, host, port } = options.urlOptions || defaultUrlOptions;
+
+      connectionMetadata = {
+        token: options.token,
+        gurl: `ws${secure ? 's' : ''}://${host}:${port}`,
+        conmanURL: `http${secure ? 's' : ''}://${host}:${port}`,
+      };
     }
 
     if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) {
@@ -166,19 +209,15 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    const completeOptions: Required<ConnectOptions> = {
-      token: options.token,
-      urlOptions: options.urlOptions || {
-        secure: false,
-        host: 'eval.repl.it',
-        port: '80',
-      },
+    const pollingHost = options.pollingHost ?? (options.polling ? defaultPollingHost : undefined);
+    const completeOptions: ConnectOptions = {
+      connectionMetadata,
       timeout: options.timeout || null,
       // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
       // @ts-ignore: EIOCompat is compatible with the WebSocket api but
       // lib.dom.d.ts defines WebSockets in a weird way that is causing errors
-      WebSocketClass: options.polling ? EIOCompat : getWebSocketClass(options),
-      polling: !!options.polling,
+      WebSocketClass: pollingHost ? EIOCompat : getWebSocketClass(options),
+      pollingHost,
     };
 
     this.connectionState = ConnectionState.CONNECTING;
@@ -323,13 +362,22 @@ export class Client extends EventEmitter {
     return chan;
   }
 
-  /** Gets the token that was used to connect */
-  public getToken(): string | null {
-    if (!this.token) {
+  /** Gets the metadata that was used to connect */
+  public getConnectionMetadata(): GovalMetadata | null {
+    if (!this.connectionMetadata) {
       return null;
     }
 
-    return this.token;
+    return this.connectionMetadata;
+  }
+
+  /** Gets the token that was used to connect */
+  public getToken(): string | null {
+    if (!this.connectionMetadata) {
+      return null;
+    }
+
+    return this.connectionMetadata.token;
   }
 
   /** Sets a logging/debugging function */
@@ -492,21 +540,24 @@ export class Client extends EventEmitter {
   };
 
   private tryConnect = async ({
-    token,
-    urlOptions,
-    polling,
+    connectionMetadata,
+    pollingHost,
     timeout,
     WebSocketClass,
-  }: Required<ConnectOptions>) => {
-    this.debug({ type: 'breadcrumb', message: 'connect internal', data: { polling } });
+  }: ConnectOptions) => {
+    this.debug({
+      type: 'breadcrumb',
+      message: 'connect internal',
+      data: { polling: !!pollingHost },
+    });
 
     if (this.connectionState === ConnectionState.DISCONNECTED) {
       throw new Error('closed while connecting');
     }
 
-    this.token = token;
+    this.connectionMetadata = connectionMetadata;
 
-    const connStr = Client.getConnectionStr(token, urlOptions);
+    const connStr = Client.getConnectionStr(connectionMetadata, pollingHost);
 
     const ws = new WebSocketClass(connStr);
 
