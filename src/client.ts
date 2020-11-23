@@ -65,9 +65,9 @@ export interface ConnectArgs extends Partial<ConnectOptions> {
 }
 
 const defaultUrlOptions = {
-  secure: false,
+  secure: true,
   host: 'eval.repl.it',
-  port: '80',
+  port: '443',
 };
 
 const defaultPollingHost = 'gp-v2.herokuapp.com';
