@@ -82,9 +82,9 @@ type ChannelRequest<Ctx> =
     };
 
 const defaultUrlOptions = {
-  secure: false,
+  secure: true,
   host: 'eval.repl.it',
-  port: '80',
+  port: '443',
 };
 
 export class Client<Ctx extends unknown = null> {
