@@ -1,0 +1,26 @@
+name: Lint and Test on Repl.it
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # self-hosted = repl.it self-hosted runner
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v2.3.4
+      
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v2.1.2
+
+      # Runs yarn install and caches the packages
+      - uses: bahmutov/npm-install@v1
+      
+      - name: Lint
+        run: yarn run lint
+      
+      - name: Test
+        run: yarn run test
