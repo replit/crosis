@@ -141,9 +141,14 @@ export class Client extends EventEmitter {
   static getConnectionStr(connectionMetadata: GovalMetadata, pollingHost?: string): string {
     const gurl = urllib.parse(connectionMetadata.gurl);
     if (pollingHost) {
+      gurl.hostname = pollingHost;
       gurl.host = pollingHost;
+      gurl.pathname = `/wsv2/${connectionMetadata.token}/${encodeURIComponent(
+        connectionMetadata.gurl,
+      )}`;
+    } else {
+      gurl.pathname = `/wsv2/${connectionMetadata.token}`;
     }
-    gurl.pathname = `/wsv2/${connectionMetadata.token}`;
     return urllib.format(gurl);
   }
 
