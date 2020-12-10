@@ -2,7 +2,6 @@ import { api } from '@replit/protocol';
 
 // In a separate file to circular dependencies in client and channel
 
-// eslint-disable-next-line no-shadow
 export enum ClientCloseReason {
   /**
    * called `client.close`

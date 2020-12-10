@@ -7,7 +7,6 @@ import { Channel } from './channel';
 import { EIOCompat } from './EIOCompat';
 import { ClientCloseReason, ChannelCloseReason } from './closeReasons';
 
-// eslint-disable-next-line no-shadow
 enum ConnectionState {
   CONNECTING = 0,
   CONNECTED = 1,
