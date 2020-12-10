@@ -2,6 +2,9 @@ name: Lint and Test on Repl.it
 
 on:
   push:
+    branches:
+      - master
+      - v6
   pull_request:
   workflow_dispatch:
 
@@ -24,3 +27,6 @@ jobs:
 
       - name: Lint
         run: yarn run lint
+
+      - name: Test
+        run: yarn run test
