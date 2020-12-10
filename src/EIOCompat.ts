@@ -3,7 +3,7 @@
 import * as eio from 'engine.io-client';
 import * as urllib from 'url';
 
-export function splitHref(href: string) {
+export function splitHref(href: string): { uri: string, path: string } {
   const parsed = urllib.parse(href);
 
   const { protocol, slashes, auth, host, pathname } = parsed;
@@ -170,13 +170,13 @@ export class EIOCompat implements WebSocket {
     });
   }
 
-  setReadyState() {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+  setReadyState(): void {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore engine.io-client doesn't have typing for readyState :/
     this.readyState = readyStateStringToValue.get(this.eioSocket.readyState);
   }
 
-  send(buffer: ArrayBuffer) {
+  send(buffer: ArrayBuffer): void {
     const sequencedBuffer = new ArrayBuffer(sequenceBytesCount + buffer.byteLength);
     new Uint8Array(sequencedBuffer).set(new Uint8Array(buffer), sequenceBytesCount);
 
@@ -188,7 +188,7 @@ export class EIOCompat implements WebSocket {
     this.setReadyState();
   }
 
-  close() {
+  close(): void {
     this.onmessage = null;
     this.eioSocket.close();
     this.setReadyState();
@@ -200,7 +200,7 @@ export class EIOCompat implements WebSocket {
   }
 
   // eslint-disable-next-line class-methods-use-this
-  removeEventListener() {
+  removeEventListener(): void {
     throw new Error('Not Implemented');
   }
 

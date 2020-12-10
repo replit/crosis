@@ -7,6 +7,7 @@ import { Channel } from './channel';
 import { EIOCompat } from './EIOCompat';
 import { ClientCloseReason, ChannelCloseReason } from './closeReasons';
 
+// eslint-disable-next-line no-shadow
 enum ConnectionState {
   CONNECTING = 0,
   CONNECTED = 1,
@@ -44,6 +45,15 @@ type DebugLog =
       latency: number;
     };
 type DebugFunc = (log: DebugLog) => void;
+
+type CloseResult =
+  | {
+      closeReason: ClientCloseReason.Intentional;
+    }
+  | {
+      closeReason: ClientCloseReason.Disconnected;
+      wsCloseEvent: CloseEvent;
+    };
 
 interface ConnectOptions {
   // This field has all the information needed to connect with Goval.
@@ -129,7 +139,7 @@ export class Client extends EventEmitter {
 
   private didConnect: boolean;
 
-  static getConnectionStr(connectionMetadata: GovalMetadata, pollingHost?: string) {
+  static getConnectionStr(connectionMetadata: GovalMetadata, pollingHost?: string): string {
     const gurl = urllib.parse(connectionMetadata.gurl);
     if (pollingHost) {
       gurl.host = pollingHost;
@@ -154,7 +164,7 @@ export class Client extends EventEmitter {
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
 
-  public isConnected = () => this.connectionState === ConnectionState.CONNECTED;
+  public isConnected = (): boolean => this.connectionState === ConnectionState.CONNECTED;
 
   /**
    * Connects to the server and primes the client to start sending data
@@ -184,7 +194,7 @@ export class Client extends EventEmitter {
       throw error;
     }
 
-    let connectionMetadata = options.connectionMetadata;
+    let { connectionMetadata } = options;
     if (!connectionMetadata) {
       if (!options.token) {
         const error = new Error('You must provide a connectionMetadata / token');
@@ -213,7 +223,7 @@ export class Client extends EventEmitter {
     const completeOptions: ConnectOptions = {
       connectionMetadata,
       timeout: options.timeout || null,
-      // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore: EIOCompat is compatible with the WebSocket api but
       // lib.dom.d.ts defines WebSockets in a weird way that is causing errors
       WebSocketClass: pollingHost ? EIOCompat : getWebSocketClass(options),
@@ -334,7 +344,7 @@ export class Client extends EventEmitter {
    * - If there's an open WebSocket connection it will be closed
    * - Any open channels or channel requests are closed
    */
-  public close = () => {
+  public close = (): void => {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
     this.onClose({ closeReason: ClientCloseReason.Intentional });
@@ -386,7 +396,7 @@ export class Client extends EventEmitter {
   }
 
   /** Start a ping<>pong for debugging and latency stats */
-  public startPing = () => {
+  public startPing = (): void => {
     const chan0 = this.getChannel(0);
     let pingTime = Date.now();
 
@@ -726,15 +736,6 @@ export class Client extends EventEmitter {
     });
   };
 }
-
-type CloseResult =
-  | {
-      closeReason: ClientCloseReason.Intentional;
-    }
-  | {
-      closeReason: ClientCloseReason.Disconnected;
-      wsCloseEvent: CloseEvent;
-    };
 
 /**
  * Emitted when there's an error while the channel is opening
