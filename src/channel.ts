@@ -43,7 +43,7 @@ export class Channel extends EventEmitter {
    * along with the channel id.
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
-  public send = (cmdJson: api.ICommand) => {
+  public send = (cmdJson: api.ICommand): void => {
     cmdJson.channel = this.id;
     this.sendToClient(api.Command.create(cmdJson));
   };
@@ -107,7 +107,7 @@ export class Channel extends EventEmitter {
     id: number,
     state: api.OpenChannelRes.State.CREATED | api.OpenChannelRes.State.ATTACHED,
     send: (cmd: api.Command) => void,
-  ) => {
+  ): void => {
     this.id = id;
     this.sendToClient = send;
     this.state = state;
@@ -129,7 +129,7 @@ export class Channel extends EventEmitter {
    *
    * Called when the openChanRes is received with error
    */
-  public onOpenError = ({ error: err }: api.IOpenChannelRes) => {
+  public onOpenError = ({ error: err }: api.IOpenChannelRes): void => {
     this.emit('error', { message: err || '' });
   };
 
@@ -138,7 +138,7 @@ export class Channel extends EventEmitter {
    *
    * Called when the channel recieves a message
    */
-  public onCommand = (cmd: api.Command) => {
+  public onCommand = (cmd: api.Command): void => {
     this.emit('command', cmd);
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
@@ -152,7 +152,7 @@ export class Channel extends EventEmitter {
    *
    * Called when the channel or client is closed
    */
-  public onClose = (reason: ChannelCloseReason) => {
+  public onClose = (reason: ChannelCloseReason): void => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;
