@@ -3,4 +3,9 @@ import './util/utf8ReadMonkeypatch'; // pbjs's utf8 decoder is borked
 
 export { Client } from './client';
 export { Channel } from './channel';
-export { ChannelCloseReason, ChannelOptions, ClientCloseReason } from './types';
+export {
+  ChannelCloseReason,
+  ChannelOptions,
+  ClientCloseReason,
+  FetchConnectionMetadataResult,
+} from './types';

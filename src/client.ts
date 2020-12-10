@@ -1,7 +1,14 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
-import { ConnectOptions, ClientCloseReason, ChannelCloseReason, ChannelOptions, UrlOptions } from './types';
+import {
+  ConnectOptions,
+  ClientCloseReason,
+  FetchConnectionMetadataResult,
+  ChannelCloseReason,
+  ChannelOptions,
+  UrlOptions,
+} from './types';
 
 /**
  * The only required option is `fetchConnectionMetadata` (falling back to
@@ -231,7 +238,7 @@ export class Client<Ctx extends unknown = null> {
       fetchConnectionMetadata = async (abortSignal: AbortSignal) => {
         const { token, aborted } = await fetchToken(abortSignal);
         if (aborted || !token) {
-          return { connectionMetadata: null, aborted: true };
+          return { connectionMetadata: null, result: FetchConnectionMetadataResult.Aborted };
         }
         return {
           connectionMetadata: {
@@ -239,7 +246,7 @@ export class Client<Ctx extends unknown = null> {
             gurl: `ws${secure ? 's' : ''}://${host}:${port}`,
             conmanURL: `http${secure ? 's' : ''}://${host}:${port}`,
           },
-          aborted: false,
+          result: FetchConnectionMetadataResult.Ok,
         };
       };
     }
@@ -731,7 +738,8 @@ export class Client<Ctx extends unknown = null> {
 
     this.fetchTokenAbortController = null;
 
-    const { connectionMetadata, aborted } = connectionMetadataFetchResult;
+    const { connectionMetadata, result } = connectionMetadataFetchResult;
+    const aborted = result == FetchConnectionMetadataResult.Aborted;
 
     if (abortController.signal.aborted !== aborted) {
       // the aborted return value and the abort signal should be equivalent
@@ -756,8 +764,10 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    if (connectionMetadata && aborted) {
-      this.onUnrecoverableError(new Error('Expected either aborted or a connectionMetadata'));
+    if (connectionMetadata && result != FetchConnectionMetadataResult.Ok) {
+      this.onUnrecoverableError(
+        new Error('Expected either a non-Ok result or a connectionMetadata'),
+      );
 
       return;
     }
@@ -768,9 +778,14 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
+    if (result == FetchConnectionMetadataResult.RetriableError) {
+      this.retryConnect(tryCount, chan0, new Error('Retriable error'));
+      return;
+    }
+
     if (!connectionMetadata) {
       this.onUnrecoverableError(
-        new Error('Expected connectionMetadata to be non-empty or request to be aborted'),
+        new Error('Expected connectionMetadata to be non-empty or request to be a non-Ok result'),
       );
 
       return;
@@ -960,44 +975,51 @@ export class Client<Ctx extends unknown = null> {
       cancelTimeout();
       unlistenChan0();
 
-      if (this.retryTimeoutId) {
-        this.onUnrecoverableError(new Error('unexpected existing retryTimeoutId'));
-
-        return;
-      }
-
-      if (!this.chan0Cb) {
-        // User called close
-        // TODO (masad-frost) something more explicit here
-        // might be the way to go
-        return;
-      }
-
-      this.retryTimeoutId = setTimeout(() => {
-        if (!this.chan0Cb) {
-          this.onUnrecoverableError(new Error('Scheduled retry is called after we closed?'));
-
-          return;
-        }
-
-        this.retryTimeoutId = null;
-
-        this.debug({
-          type: 'breadcrumb',
-          message: 'retrying',
-          data: {
-            connectionState: this.connectionState,
-            connectTries: tryCount,
-            error,
-            wsReadyState: this.ws ? this.ws.readyState : undefined,
-          },
-        });
-        chan0.handleClose({ initiator: 'client', willReconnect: true });
-        delete this.channels[0];
-        this.connectionState = ConnectionState.DISCONNECTED;
-        this.connect(tryCount);
-      }, getNextRetryDelay(tryCount));
+      this.retryConnect(tryCount, chan0, error);
     };
+  };
+
+  /**
+   * Attempt to reconnect after a short delay.
+   */
+  private retryConnect = (tryCount: number, chan0: Channel, error: Error) => {
+    if (this.retryTimeoutId) {
+      this.onUnrecoverableError(new Error('unexpected existing retryTimeoutId'));
+
+      return;
+    }
+
+    if (!this.chan0Cb) {
+      // User called close
+      // TODO (masad-frost) something more explicit here
+      // might be the way to go
+      return;
+    }
+
+    this.retryTimeoutId = setTimeout(() => {
+      if (!this.chan0Cb) {
+        this.onUnrecoverableError(new Error('Scheduled retry is called after we closed?'));
+
+        return;
+      }
+
+      this.retryTimeoutId = null;
+
+      this.debug({
+        type: 'breadcrumb',
+        message: 'retrying',
+        data: {
+          connectionState: this.connectionState,
+          connectTries: tryCount,
+          error,
+          wsReadyState: this.ws ? this.ws.readyState : undefined,
+        },
+      });
+      chan0.handleClose({ initiator: 'client', willReconnect: true });
+      delete this.channels[0];
+      this.connectionState = ConnectionState.DISCONNECTED;
+      this.connect(tryCount);
+    }, getNextRetryDelay(tryCount));
   };
 
   private send = (cmd: api.Command) => {
