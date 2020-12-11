@@ -4,7 +4,7 @@ import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/h
 import {
   ConnectOptions,
   ClientCloseReason,
-  FetchConnectionMetadataResult,
+  FetchConnectionMetadataError,
   ChannelCloseReason,
   ChannelOptions,
   UrlOptions,
@@ -223,9 +223,9 @@ export class Client<Ctx extends unknown = null> {
       throw error;
     }
 
-    let fetchConnectionMetadata = options.fetchConnectionMetadata;
+    let { fetchConnectionMetadata } = options;
     if (!fetchConnectionMetadata || typeof fetchConnectionMetadata !== 'function') {
-      const fetchToken = options.fetchToken;
+      const { fetchToken } = options;
       if (!fetchToken || typeof fetchToken !== 'function') {
         const error = new Error('You must provide a fetchConnectionMetadata/fetchToken function');
         this.onUnrecoverableError(error);
@@ -236,18 +236,22 @@ export class Client<Ctx extends unknown = null> {
       const { secure, host, port } = options.urlOptions || defaultUrlOptions;
 
       fetchConnectionMetadata = async (abortSignal: AbortSignal) => {
-        const { token, aborted } = await fetchToken(abortSignal);
-        if (aborted || !token) {
-          return { connectionMetadata: null, result: FetchConnectionMetadataResult.Aborted };
-        }
-        return {
-          connectionMetadata: {
+        try {
+          const { token, aborted } = await fetchToken(abortSignal);
+          if (aborted || !token) {
+            return { error: FetchConnectionMetadataError.Aborted };
+          }
+          return {
             token,
             gurl: `ws${secure ? 's' : ''}://${host}:${port}`,
             conmanURL: `http${secure ? 's' : ''}://${host}:${port}`,
-          },
-          result: FetchConnectionMetadataResult.Ok,
-        };
+            error: null,
+          };
+        } catch (e) {
+          return {
+            error: e,
+          };
+        }
       };
     }
 
@@ -738,8 +742,8 @@ export class Client<Ctx extends unknown = null> {
 
     this.fetchTokenAbortController = null;
 
-    const { connectionMetadata, result } = connectionMetadataFetchResult;
-    const aborted = result == FetchConnectionMetadataResult.Aborted;
+    const connectionMetadata = connectionMetadataFetchResult;
+    const aborted = connectionMetadata.error === FetchConnectionMetadataError.Aborted;
 
     if (abortController.signal.aborted !== aborted) {
       // the aborted return value and the abort signal should be equivalent
@@ -764,35 +768,25 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    if (connectionMetadata && result != FetchConnectionMetadataResult.Ok) {
-      this.onUnrecoverableError(
-        new Error('Expected either a non-Ok result or a connectionMetadata'),
-      );
-
-      return;
-    }
-
     if (aborted) {
       // Just return. The user called `client.close leading to a connectionMetadata abort
       // chan0Cb will be called with with an error Channel close, no need to do anything here.
       return;
     }
 
-    if (result == FetchConnectionMetadataResult.RetriableError) {
+    if (connectionMetadata.error === FetchConnectionMetadataError.Retriable) {
       this.retryConnect(tryCount, chan0, new Error('Retriable error'));
-      return;
-    }
-
-    if (!connectionMetadata) {
-      this.onUnrecoverableError(
-        new Error('Expected connectionMetadata to be non-empty or request to be a non-Ok result'),
-      );
-
       return;
     }
 
     if (this.connectionState !== ConnectionState.CONNECTING) {
       this.onUnrecoverableError(new Error('Client was closed before connecting'));
+
+      return;
+    }
+
+    if (connectionMetadata.error) {
+      this.onUnrecoverableError(connectionMetadata.error);
 
       return;
     }
