@@ -1,4 +1,4 @@
-import { ConnectOptions, GovalMetadata } from '../types';
+import type { ConnectOptions, GovalMetadata } from '../types';
 
 const BACKOFF_FACTOR = 1.7;
 const MAX_BACKOFF = 15000;
@@ -6,7 +6,7 @@ const MAX_BACKOFF = 15000;
 /**
  * Calculates the backoff for n retry
  */
-export function getNextRetryDelay(retryNumber: number) {
+export function getNextRetryDelay(retryNumber: number): number {
   const randomMs = Math.floor(Math.random() * 500);
   const backoff = BACKOFF_FACTOR ** retryNumber * 1000;
 
@@ -28,7 +28,7 @@ function isWebSocket(w: unknown): w is WebSocket {
 /**
  * Gets a websocket class from the global scope, or asserts if the supplied websocket follows the standard
  */
-export function getWebSocketClass(options: ConnectOptions<unknown>) {
+export function getWebSocketClass(options: ConnectOptions<unknown>): typeof WebSocket {
   if (options.WebSocketClass) {
     if (!isWebSocket(options.WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');
@@ -51,6 +51,6 @@ export function getWebSocketClass(options: ConnectOptions<unknown>) {
 /**
  * Given connection metadata, creates a websocket connection string
  */
-export function getConnectionStr(connectionMetadata: GovalMetadata) {
+export function getConnectionStr(connectionMetadata: GovalMetadata): string {
   return new URL(`/wsv2/${connectionMetadata.token}`, connectionMetadata.gurl).toString();
 }

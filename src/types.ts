@@ -1,4 +1,4 @@
-import { api } from '@replit/protocol';
+import type { api } from '@replit/protocol';
 
 export enum ClientCloseReason {
   /**

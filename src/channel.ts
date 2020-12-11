@@ -100,7 +100,7 @@ export class Channel {
    * any time we receive a command on this channel.
    * @param listener the command listener
    */
-  public onCommand = (listener: (cmd: api.Command) => void) => {
+  public onCommand = (listener: (cmd: api.Command) => void): (() => void) => {
     if (this.status === 'closed') {
       const e = new Error('Trying to listen to commands on a closed channel');
       this.onUnrecoverableError(e);
@@ -120,7 +120,7 @@ export class Channel {
    * along with the channel id.
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
-  public send = (cmdJson: api.ICommand) => {
+  public send = (cmdJson: api.ICommand): void => {
     if (this.status === 'closed') {
       const e = new Error('Calling send on closed channel');
       this.onUnrecoverableError(e);
@@ -166,7 +166,7 @@ export class Channel {
    *
    * Called when the channel recieves a message
    */
-  public handleCommand = (cmd: api.Command) => {
+  public handleCommand = (cmd: api.Command): void => {
     this.onCommandListeners.forEach((l) => l(cmd));
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
@@ -182,7 +182,7 @@ export class Channel {
    * concludes all the requests promises and cleans up
    * the onCommand listeners
    */
-  public handleClose = (reason: ChannelCloseReason) => {
+  public handleClose = (reason: ChannelCloseReason): void => {
     Object.keys(this.requestMap).forEach((ref) => {
       const requestResult = api.Command.fromObject({}) as RequestResult;
       requestResult.channelClosed = reason;

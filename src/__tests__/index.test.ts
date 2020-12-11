@@ -1,6 +1,7 @@
 /* eslint-env jest */
 
 import * as crypto from 'crypto';
+import type { GovalMetadata } from '../types';
 import { Client, FetchConnectionMetadataResult } from '..';
 
 // eslint-disable-next-line
@@ -9,7 +10,7 @@ const WebSocket = require('ws');
 const TOKEN_SECRET = process.env.TOKEN_SECRET as string;
 
 if (!TOKEN_SECRET) {
-  throw new Error('TOKEN_SECRET is required to run tests');
+  throw new Error('TOKEN_SECRET env variable is required to run tests');
 }
 
 function genConnectionMetadata() {
@@ -269,7 +270,7 @@ test('channel closing itself when client willReconnect', (done) => {
   });
 });
 
-test('channel open and close', (done) => {
+test.skip('channel open and close', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
   client.setUnrecoverableErrorHandler(done);
@@ -317,7 +318,7 @@ test('channel open and close', (done) => {
   });
 });
 
-test('channel skips opening', (done) => {
+test.skip('channel skips opening', (done) => {
   const client = new Client<{ username: string }>();
   client.setUnrecoverableErrorHandler(done);
 
@@ -509,7 +510,7 @@ test('closing maintains openChannel requests', (done) => {
   );
 });
 
-test('client rejects opening same channel twice', (done) => {
+test.skip('client rejects opening same channel twice', (done) => {
   const client = new Client();
   client.setUnrecoverableErrorHandler(done);
 
@@ -734,7 +735,14 @@ test('closing before ever connecting', (done) => {
 
 //   client.open(
 //     {
-//       fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: { token: 'bad token', gurl: '', conmanURL: '' }, result: FetchConnectionMetadataResult.Ok }),
+//       fetchConnectionMetadata: () => Promise.resolve({
+//         connectionMetadata: {
+//           token: 'bad token',
+//           gurl: '',
+//           conmanURL: '',
+//         },
+//         result: FetchConnectionMetadataResult.Ok,
+//       }),
 //       WebSocketClass: WebSocket,
 //       timeout: 0,
 //     },
@@ -816,7 +824,16 @@ test('can close and open in synchronously without aborting fetch token', (done) 
   const onAbort = jest.fn();
   const firstChan0Cb = jest.fn();
 
-  let resolveFetchToken: null | Function = null;
+  let resolveFetchToken:
+    | null
+    | ((
+        result:
+          | {
+              connectionMetadata: null;
+              result: Exclude<FetchConnectionMetadataResult, FetchConnectionMetadataResult.Ok>;
+            }
+          | { connectionMetadata: GovalMetadata; result: FetchConnectionMetadataResult.Ok },
+      ) => void) = null;
   client.open(
     {
       // never resolves
@@ -840,7 +857,7 @@ test('can close and open in synchronously without aborting fetch token', (done) 
   expect(resolveFetchToken).toBeTruthy();
   // resolving the first fetch token later shouldn't casue any errors
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  resolveFetchToken!({ result: FetchConnectionMetadataResult.Aborted, token: null });
+  resolveFetchToken!({ result: FetchConnectionMetadataResult.Aborted, connectionMetadata: null });
   expect(onAbort).toHaveBeenCalledTimes(1);
   expect(firstChan0Cb).toHaveBeenCalledTimes(1);
   expect(firstChan0Cb).toHaveBeenLastCalledWith(

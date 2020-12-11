@@ -4,7 +4,8 @@ sometimes in heavy unicode land. In here, we monkey patch protobufjs's standard
 utf8.read function to our own fixed version.
 */
 
-/* eslint-disable import/no-extraneous-dependencies, no-eval, @typescript-eslint/ban-ts-ignore  */
+// eslint-disable-next-line max-len
+/* eslint-disable no-bitwise, no-plusplus, import/no-extraneous-dependencies, no-eval, @typescript-eslint/ban-ts-comment  */
 import * as utf8 from '@protobufjs/utf8';
 
 function utf8ReadFixed(buffer: Uint8Array, start: number, end: number) {
@@ -38,8 +39,8 @@ function utf8ReadFixed(buffer: Uint8Array, start: number, end: number) {
       str += String.fromCharCode(
         ((t & 0xF) << 12) |
         ((buffer[i++] & 0x3F) << 6) |
-        (buffer[i++] & 0x3F
-      ));
+        (buffer[i++] & 0x3F),
+      );
     } else if (t >= 0xF0) {
       // here's where things really get nasty. These code points end up as
       // utf16 surrogate pairs. It looks something like:
