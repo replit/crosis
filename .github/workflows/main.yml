@@ -1,0 +1,33 @@
+name: Lint and Test on Repl.it
+
+on:
+  push:
+    branches:
+      - master
+      - v6
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # self-hosted = repl.it self-hosted runner
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v2.3.4
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v2.1.2
+
+      # Runs yarn install and caches the packages
+      - uses: bahmutov/npm-install@v1
+
+      - name: Build
+        run: yarn run build
+
+      - name: Lint
+        run: yarn run lint
+
+      - name: Test
+        continue-on-error: true # Don't have a way of providing the token right now.
+        run: yarn run test
