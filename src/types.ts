@@ -46,25 +46,28 @@ export interface GovalMetadata {
   conmanURL: string;
 }
 
-export const FetchConnectionMetadataError = {
+export enum FetchConnectionMetadataError {
   /**
    * Fetch was aborted.
    */
-  Aborted: new Error('Aborted'),
+  Aborted = 'Aborted',
 
   /**
    * The fetch failed due to a recoverable error (mostly a transient network
    * condition).
    */
-  Retriable: new Error('Retriable'),
-};
+  Retriable = 'Retriable',
+}
 
 /**
  * A type that helps signal whether an operation was successful or errored.
  */
 type Result<Res, Err = Error> = (Res & { error: null }) | { error: Err };
 
-export type FetchConnectionMetadataResult = Result<GovalMetadata>;
+export type FetchConnectionMetadataResult = Result<
+  GovalMetadata,
+  Error | FetchConnectionMetadataError
+>;
 
 export interface ConnectOptions<Ctx> {
   fetchConnectionMetadata: (abortSignal: AbortSignal) => Promise<FetchConnectionMetadataResult>;
