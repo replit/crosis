@@ -46,12 +46,33 @@ export interface GovalMetadata {
   conmanURL: string;
 }
 
+export enum FetchConnectionMetadataResult {
+  /**
+   * Fetch was successful.
+   */
+  Ok = 'Ok',
+
+  /**
+   * Fetch was aborted.
+   */
+  Aborted = 'Aborted',
+
+  /**
+   * The fetch failed due to a recoverable error (mostly a transient network
+   * condition).
+   */
+  RetriableError = 'RetriableError',
+}
+
 export interface ConnectOptions<Ctx> {
   fetchConnectionMetadata: (
     abortSignal: AbortSignal,
   ) => Promise<
-    | { connectionMetadata: null; aborted: true }
-    | { connectionMetadata: GovalMetadata; aborted: false }
+    | {
+        connectionMetadata: null;
+        result: Exclude<FetchConnectionMetadataResult, FetchConnectionMetadataResult.Ok>;
+      }
+    | { connectionMetadata: GovalMetadata; result: FetchConnectionMetadataResult.Ok }
   >;
   timeout: number | null;
   WebSocketClass?: typeof WebSocket;
