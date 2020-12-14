@@ -460,7 +460,7 @@ export class Client<Ctx extends unknown = null> {
       // Make sure to save this value as the user can call closeChannel within openChannelCb
       // we want to avoid making the call to requestCloseChannel twice, once from within
       // openChannelCb and once here.
-      const closeRequested = channelRequest.closeRequested;
+      const { closeRequested } = channelRequest;
 
       (channelRequest as ChannelRequest<Ctx>).cleanupCb = openChannelCb({
         channel,
