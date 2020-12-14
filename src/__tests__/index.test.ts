@@ -306,7 +306,55 @@ test('channel open and close', (done) => {
 
     setTimeout(() => {
       close();
-    })
+    });
+
+    expect(channel?.status).toBe('closing');
+
+    return ({ willReconnect }) => {
+      expect(willReconnect).toBeFalsy();
+      expect(channel?.status).toBe('closed');
+
+      channelClose();
+      client.close();
+    };
+  });
+});
+
+test('channel open and close from within openChannelCb synchornously', (done) => {
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(done);
+
+  const channelClose = jest.fn();
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          connectionMetadata: genConnectionMetadata(),
+          result: FetchConnectionMetadataResult.Ok,
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(error).toEqual(null);
+      expect(channel?.status).toBe('open');
+
+      return () => {
+        expect(channelClose).toHaveBeenCalled();
+
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
+        done();
+      };
+    },
+  );
+
+  const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
+    expect(channel?.status).toBe('open');
+    expect(error).toBe(null);
+
+    close();
 
     expect(channel?.status).toBe('closing');
 
@@ -515,7 +563,6 @@ test('closing maintains openChannel requests', (done) => {
 test('client rejects opening same channel twice', () => {
   const client = new Client();
   client.setUnrecoverableErrorHandler(() => {});
-
 
   const name = Math.random().toString();
   client.openChannel({ name, service: 'exec' }, () => {});
