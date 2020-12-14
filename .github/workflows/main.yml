@@ -29,5 +29,6 @@ jobs:
         run: yarn run lint
 
       - name: Test
-        continue-on-error: true # Don't have a way of providing the token right now.
+        env:
+          TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}
         run: yarn run test
