@@ -510,38 +510,17 @@ test('closing maintains openChannel requests', (done) => {
   );
 });
 
-test.skip('client rejects opening same channel twice', (done) => {
+test('client rejects opening same channel twice', () => {
   const client = new Client();
-  client.setUnrecoverableErrorHandler(done);
+  client.setUnrecoverableErrorHandler(() => {});
 
-  client.open(
-    {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
-        }),
-      WebSocketClass: WebSocket,
-      context: null,
-    },
-    ({ error }) => {
-      // expect(channel?.status).toBe('open');
-      expect(error).toEqual(null);
 
-      const name = Math.random().toString();
-      client.openChannel({ name, service: 'exec' }, () => {});
+  const name = Math.random().toString();
+  client.openChannel({ name, service: 'exec' }, () => {});
 
-      expect(() => {
-        client.openChannel({ name, service: 'exec' }, () => {});
-      }).toThrow();
-
-      client.close();
-
-      return () => {
-        done();
-      };
-    },
-  );
+  expect(() => {
+    client.openChannel({ name, service: 'exec' }, () => {});
+  }).toThrow();
 });
 
 test('client reconnects unexpected disconnects', (done) => {
