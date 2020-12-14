@@ -214,7 +214,7 @@ export class Client<Ctx extends unknown = null> {
    * is called. The cleanup function is also called any time a disconnect happens
    * with a boolean indicating whether the client will reconnect or not
    */
-  public open = (options: ConnectArgs<Ctx>, cb: OpenChannelCb<Ctx>) => {
+  public open = (options: ConnectArgs<Ctx>, cb: OpenChannelCb<Ctx>): void => {
     if (this.chan0Cb) {
       const error = new Error('You must call `close` before opening the client again');
       this.onUnrecoverableError(error);
@@ -299,7 +299,7 @@ export class Client<Ctx extends unknown = null> {
    * the channel will reconnect or not.
    *
    */
-  public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>) => {
+  public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>): (() => void) => {
     if (options.name && this.channelRequests.some((cr) => cr.options.name === options.name)) {
       const error = new Error(`Channel with name ${options.name} already opened`);
       this.onUnrecoverableError(error);
@@ -577,7 +577,7 @@ export class Client<Ctx extends unknown = null> {
    *   - If a channel never opened, its openChannel callback will be called with an error
    *   - Otherwise returned cleanup callback is called
    */
-  public close = () => {
+  public close = (): void => {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
     if (!this.chan0Cb || !this.connectOptions) {
@@ -601,7 +601,7 @@ export class Client<Ctx extends unknown = null> {
    * The only difference is that `destroy` renders the client unsuable afterwards
    * and frees up some resources protecting against potential leaks
    */
-  public destroy = () => {
+  public destroy = (): void => {
     this.destroyed = true;
     this.debug({ type: 'breadcrumb', message: 'destroy' });
 
@@ -647,7 +647,7 @@ export class Client<Ctx extends unknown = null> {
    * Unrecoverable errors are internal errors or invariance errors
    * caused by the user mis-using the client.
    */
-  public setUnrecoverableErrorHandler(onUnrecoverableError: (e: Error) => void) {
+  public setUnrecoverableErrorHandler(onUnrecoverableError: (e: Error) => void): void {
     this.userUnrecoverableErrorHandler = onUnrecoverableError;
   }
 
