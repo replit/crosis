@@ -309,7 +309,6 @@ test('channel open and close', (done) => {
       expect(channel?.status).toBe('closing');
     });
 
-
     return ({ willReconnect }) => {
       expect(willReconnect).toBeFalsy();
       expect(channel?.status).toBe('closed');
