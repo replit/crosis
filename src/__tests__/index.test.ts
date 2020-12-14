@@ -1,7 +1,7 @@
 /* eslint-env jest */
 
 import * as crypto from 'crypto';
-import { Client, FetchConnectionMetadataResult } from '..';
+import { Client, FetchConnectionMetadataError } from '..';
 
 // eslint-disable-next-line
 const WebSocket = require('ws');
@@ -72,8 +72,8 @@ test('client connect', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: ctx,
@@ -107,14 +107,13 @@ test('client connect with connection metadata retry', (done) => {
 
         if (tryCount === 1) {
           return Promise.resolve({
-            connectionMetadata: null,
-            result: FetchConnectionMetadataResult.RetriableError,
+            error: FetchConnectionMetadataError.Retriable,
           });
         }
 
         return Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         });
       },
       WebSocketClass: WebSocket,
@@ -174,18 +173,16 @@ test('client retries', (done) => {
 
         if (tryCount === 1) {
           return Promise.resolve({
-            connectionMetadata: {
-              token: 'test - bad connection metadata retries',
-              gurl: 'ws://invalid.example.com',
-              conmanURL: 'http://invalid.example.com',
-            },
-            result: FetchConnectionMetadataResult.Ok,
+            token: 'test - bad connection metadata retries',
+            gurl: 'ws://invalid.example.com',
+            conmanURL: 'http://invalid.example.com',
+            error: null,
           });
         }
 
         return Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         });
       },
       WebSocketClass: WebSocket,
@@ -217,8 +214,8 @@ test('channel closing itself when client willReconnect', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: null,
@@ -280,8 +277,8 @@ test('channel open and close', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: null,
@@ -330,8 +327,8 @@ test('channel skips opening', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: ctx,
@@ -374,8 +371,8 @@ test('channel skips opening conditionally', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: null,
@@ -444,8 +441,8 @@ test('openChannel before open', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: null,
@@ -476,8 +473,8 @@ test('closing maintains openChannel requests', (done) => {
           {
             fetchConnectionMetadata: () =>
               Promise.resolve({
-                connectionMetadata: genConnectionMetadata(),
-                result: FetchConnectionMetadataResult.Ok,
+                ...genConnectionMetadata(),
+                error: null,
               }),
             WebSocketClass: WebSocket,
             context: null,
@@ -495,8 +492,8 @@ test('closing maintains openChannel requests', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: null,
@@ -517,8 +514,8 @@ test('client rejects opening same channel twice', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: null,
@@ -557,8 +554,8 @@ test('client reconnects unexpected disconnects', (done) => {
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: null,
@@ -626,8 +623,8 @@ test('client is closed while reconnecting', (done) => {
     }
 
     return Promise.resolve({
-      connectionMetadata: genConnectionMetadata(),
-      result: FetchConnectionMetadataResult.Ok,
+      ...genConnectionMetadata(),
+      error: null,
     } as const);
   };
 
@@ -675,8 +672,8 @@ test('closing before ever connecting', (done) => {
         }, 0);
 
         return Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         });
       },
       WebSocketClass: WebSocket,
@@ -734,7 +731,7 @@ test('closing before ever connecting', (done) => {
 
 //   client.open(
 //     {
-//       fetchConnectionMetadata: () => Promise.resolve({ connectionMetadata: { token: 'bad token', gurl: '', conmanURL: '' }, result: FetchConnectionMetadataResult.Ok }),
+//       fetchConnectionMetadata: () => Promise.resolve({ token: 'bad token', gurl: '', conmanURL: '', error: null }),
 //       WebSocketClass: WebSocket,
 //       timeout: 0,
 //     },
@@ -755,9 +752,10 @@ test('fetch token fail', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => {
-        throw new Error('fail');
-      },
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          error: new Error('fail'),
+        }),
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -781,8 +779,7 @@ test('fetch abort signal works as expected', (done) => {
           abortSignal.onabort = () => {
             onAbort();
             r({
-              result: FetchConnectionMetadataResult.Aborted,
-              connectionMetadata: null,
+              error: FetchConnectionMetadataError.Aborted,
             });
           };
 
@@ -840,7 +837,7 @@ test('can close and open in synchronously without aborting fetch token', (done) 
   expect(resolveFetchToken).toBeTruthy();
   // resolving the first fetch token later shouldn't casue any errors
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  resolveFetchToken!({ result: FetchConnectionMetadataResult.Aborted, token: null });
+  resolveFetchToken!({ error: FetchConnectionMetadataError.Aborted });
   expect(onAbort).toHaveBeenCalledTimes(1);
   expect(firstChan0Cb).toHaveBeenCalledTimes(1);
   expect(firstChan0Cb).toHaveBeenLastCalledWith(
@@ -857,8 +854,8 @@ test('can close and open in synchronously without aborting fetch token', (done) 
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          connectionMetadata: genConnectionMetadata(),
-          result: FetchConnectionMetadataResult.Ok,
+          ...genConnectionMetadata(),
+          error: null,
         }),
       WebSocketClass: WebSocket,
       context: null,

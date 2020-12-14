@@ -7,5 +7,6 @@ export {
   ChannelCloseReason,
   ChannelOptions,
   ClientCloseReason,
+  FetchConnectionMetadataError,
   FetchConnectionMetadataResult,
 } from './types';
