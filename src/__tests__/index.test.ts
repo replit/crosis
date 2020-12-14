@@ -270,7 +270,7 @@ test('channel closing itself when client willReconnect', (done) => {
   });
 });
 
-test.skip('channel open and close', (done) => {
+test('channel open and close', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
   client.setUnrecoverableErrorHandler(done);
@@ -304,7 +304,9 @@ test.skip('channel open and close', (done) => {
     expect(channel?.status).toBe('open');
     expect(error).toBe(null);
 
-    close();
+    setTimeout(() => {
+      close();
+    })
 
     expect(channel?.status).toBe('closing');
 
