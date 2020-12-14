@@ -320,7 +320,7 @@ test('channel open and close', (done) => {
   });
 });
 
-test.skip('channel skips opening', (done) => {
+test('channel skips opening', (done) => {
   const client = new Client<{ username: string }>();
   client.setUnrecoverableErrorHandler(done);
 
