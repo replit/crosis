@@ -17,11 +17,12 @@ app.use(
   }),
 );
 
+app.get('/token', (req, res) => {
+  res.json(genConnectionMetadata());
+});
+
 app.get('/', (req, res) => {
-  res.send(`
-  <script>window.connectionMetadata = ${JSON.stringify(genConnectionMetadata())}</script>
-  <script src="debug.js"></script>
-  `);
+  res.send(`<script src="debug.js"></script>`);
 });
 
 app.listen(port, () => {

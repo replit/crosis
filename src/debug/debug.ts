@@ -1,18 +1,11 @@
-/* eslint-disable no-console, no-debugger */
+/* eslint-disable no-console, no-debugger, @typescript-eslint/ban-ts-comment */
 import { Client } from '../index';
 
 declare global {
   interface Window {
-    connectionMetadata: {
-      token: string;
-      gurl: string;
-      conmanURL: string;
-    };
     client: Client;
   }
 }
-
-const { connectionMetadata } = window;
 
 const client = new Client();
 
@@ -23,11 +16,8 @@ client.setUnrecoverableErrorHandler((error) => {
 
 client.open(
   {
-    fetchConnectionMetadata: () =>
-      Promise.resolve({
-        ...connectionMetadata,
-        error: null,
-      }),
+    // @ts-ignore
+    fetchConnectionMetadata: () => fetch('/token').then((response) => response.json()),
     WebSocketClass: WebSocket,
     context: null,
   },
