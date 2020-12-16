@@ -64,4 +64,24 @@ const disposeChannel = client.openChannel({
     // Client was closed and might reconnect if it was closed unexpectedly
   }
 });
+
+```
+### Delevoping
+
+To run tests run
+
+```sh
+TOKEN_SECRET=XXXXXXXXXX yarn test
+```
+
+To interact with a connected client in the borwser run
+
+```sh
+TOKEN_SECRET=XXXXXXXXXX yarn debug
+```
+
+You can then access the client from the console an send messages like:
+
+```js
+window.client.send({ exec: { args: ["kill", "1"] } })
 ```
