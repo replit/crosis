@@ -74,7 +74,7 @@ To run tests run
 TOKEN_SECRET=XXXXXXXXXX yarn test
 ```
 
-To interact with a connected client in the borwser run
+To interact with a connected client in the browser run
 
 ```sh
 TOKEN_SECRET=XXXXXXXXXX yarn debug
