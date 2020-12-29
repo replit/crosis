@@ -225,7 +225,104 @@ test('channel closing itself when client willReconnect', (done) => {
   });
 });
 
-test.skip('channel open and close', (done) => {
+test('channel open and close', (done) => {
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(done);
+
+  const channelClose = jest.fn();
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(error).toEqual(null);
+      expect(channel?.status).toBe('open');
+
+      return () => {
+        expect(channelClose).toHaveBeenCalled();
+
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
+        done();
+      };
+    },
+  );
+
+  const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
+    expect(channel?.status).toBe('open');
+    expect(error).toBe(null);
+
+    setTimeout(() => {
+      close();
+      expect(channel?.status).toBe('closing');
+    });
+
+    return ({ willReconnect }) => {
+      expect(willReconnect).toBeFalsy();
+      expect(channel?.status).toBe('closed');
+
+      channelClose();
+      client.close();
+    };
+  });
+});
+
+test('channel open and close from within openChannelCb synchornously', (done) => {
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(done);
+
+  const channelClose = jest.fn();
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(error).toEqual(null);
+      expect(channel?.status).toBe('open');
+
+      return () => {
+        expect(channelClose).toHaveBeenCalled();
+
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
+        done();
+      };
+    },
+  );
+
+  const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
+    expect(channel?.status).toBe('open');
+    expect(error).toBe(null);
+
+    close();
+
+    expect(channel?.status).toBe('closing');
+
+    return ({ willReconnect }) => {
+      expect(willReconnect).toBeFalsy();
+      expect(channel?.status).toBe('closed');
+
+      channelClose();
+      client.close();
+    };
+  });
+});
+
+test('channel open and close from within openChannelCb synchornously', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
   client.setUnrecoverableErrorHandler(done);
@@ -465,38 +562,16 @@ test('closing maintains openChannel requests', (done) => {
   );
 });
 
-test.skip('client rejects opening same channel twice', (done) => {
+test('client rejects opening same channel twice', () => {
   const client = new Client();
-  client.setUnrecoverableErrorHandler(done);
+  client.setUnrecoverableErrorHandler(() => {});
 
-  client.open(
-    {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
-      WebSocketClass: WebSocket,
-      context: null,
-    },
-    ({ error }) => {
-      // expect(channel?.status).toBe('open');
-      expect(error).toEqual(null);
+  const name = Math.random().toString();
+  client.openChannel({ name, service: 'exec' }, () => {});
 
-      const name = Math.random().toString();
-      client.openChannel({ name, service: 'exec' }, () => {});
-
-      expect(() => {
-        client.openChannel({ name, service: 'exec' }, () => {});
-      }).toThrow();
-
-      client.close();
-
-      return () => {
-        done();
-      };
-    },
-  );
+  expect(() => {
+    client.openChannel({ name, service: 'exec' }, () => {});
+  }).toThrow();
 });
 
 test('client reconnects unexpected disconnects', (done) => {
@@ -691,10 +766,12 @@ test('closing before ever connecting', (done) => {
 //   client.open(
 //     {
 //       fetchConnectionMetadata: () => Promise.resolve({
-//         token: 'bad token',
-//         gurl: '',
-//         conmanURL: '',
-//         error: null,
+//         connectionMetadata: {
+//           token: 'bad token',
+//           gurl: '',
+//           conmanURL: '',
+//         },
+//         result: FetchConnectionMetadataResult.Ok,
 //       }),
 //       WebSocketClass: WebSocket,
 //       timeout: 0,

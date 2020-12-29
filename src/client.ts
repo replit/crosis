@@ -460,13 +460,19 @@ export class Client<Ctx extends unknown = null> {
       // TODO we should stop relying on mutating the same channelrequest
       (channelRequest as ChannelRequest<Ctx>).channelId = id;
       (channelRequest as ChannelRequest<Ctx>).isOpen = true;
+
+      // Make sure to save this value as the user can call closeChannel within openChannelCb
+      // we want to avoid making the call to requestCloseChannel twice, once from within
+      // openChannelCb and once here.
+      const { closeRequested } = channelRequest;
+
       (channelRequest as ChannelRequest<Ctx>).cleanupCb = openChannelCb({
         channel,
         error: null,
         context: this.connectOptions.context,
       });
 
-      if (channelRequest.closeRequested) {
+      if (closeRequested) {
         // While we're opening the channel, we got a request to close this channel
         // let's take care of that and request a close
         this.requestCloseChannel(channelRequest);
@@ -581,7 +587,7 @@ export class Client<Ctx extends unknown = null> {
     this.debug({ type: 'breadcrumb', message: 'user close' });
 
     if (!this.chan0Cb || !this.connectOptions) {
-      const error = new Error('Must call client.connect before closing');
+      const error = new Error('Must call client.open before closing');
       this.onUnrecoverableError(error);
 
       // throw to stop the execution of the caller
