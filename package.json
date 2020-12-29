@@ -55,6 +55,6 @@
     "ws": "^7.3.0"
   },
   "peerDependencies": {
-    "@replit/protocol": "0.x.x"
+    "@replit/protocol": ">=0.2.15"
   }
 }
