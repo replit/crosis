@@ -131,6 +131,6 @@ window.client.send({ exec: { args: ['kill', '1'] } });
 
 ### Releasing
 
-To release, just upgrade the version using yarn https://classic.yarnpkg.com/en/docs/cli/version/
+To release, just run `TOKEN_SECRET=XXXXXXXXXX yarn version`
 
 To update documentation, go to https://crosisdoc.util.repl.co/__repl and run `. ./updatedocs.sh`

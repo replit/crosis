@@ -4,7 +4,7 @@ import type { FetchConnectionMetadataResult } from '../types';
 import { Client, FetchConnectionMetadataError } from '..';
 
 // eslint-disable-next-line
-const genConnectionMetadata = require('../debug/genConnectionMetadata');
+const genConnectionMetadata = require('../../debug/genConnectionMetadata');
 
 // eslint-disable-next-line
 const WebSocket = require('ws');
