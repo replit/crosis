@@ -15,7 +15,7 @@
     "debug": "node src/debug/server.js",
     "prepublishOnly": "yarn clean && yarn build",
     "clean": "rm -rf dist dist.browser",
-    "docs": "typedoc --out docs --name crosis --includeDeclarations --excludeExternals src/channel.ts src/client.ts src/types.ts node_modules/@replit/protocol/index.d.ts",
+    "docs": "typedoc --out docs --name crosis src/index.ts node_modules/@replit/protocol/index.d.ts",
     "test": "jest --no-cache"
   },
   "author": "faris@repl.it",
@@ -46,7 +46,7 @@
     "prettier": "^2.0.5",
     "ts-jest": "^26.0.0",
     "ts-loader": "^8.0.12",
-    "typedoc": "^0.17.6",
+    "typedoc": "^0.20.1",
     "typescript": "^3.9.2",
     "webpack": "^5.10.3",
     "webpack-cli": "^4.2.0",

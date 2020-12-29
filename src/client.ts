@@ -1,28 +1,22 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
-import {
-  ConnectOptions,
-  ClientCloseReason,
-  FetchConnectionMetadataError,
-  ChannelCloseReason,
-  ChannelOptions,
-  UrlOptions,
-} from './types';
+import { FetchConnectionMetadataError, ConnectionState } from './types';
+import type { ConnectOptions, OpenChannelCb, ChannelOptions, DebugLog, OpenOptions } from './types';
 
-/**
- * The only required option is `fetchConnectionMetadata` (falling back to
- * `fetchToken`), all others are optional and will use defaults.
- *
- * TODO(lhchavez): Once the migration is done, drop `fetchToken` and only use
- * `fetchConnectionMetadata`.
- */
-interface ConnectArgs<Ctx> extends Partial<ConnectOptions<Ctx>> {
-  fetchToken?: (
-    abortSignal: AbortSignal,
-  ) => Promise<{ token: null; aborted: true } | { token: string; aborted: false }>;
-  urlOptions?: UrlOptions;
-  context: Ctx;
+enum ClientCloseReason {
+  /**
+   * called `client.close`
+   */
+  Intentional = 'Intentional',
+  /**
+   * The websocket connection died
+   */
+  Disconnected = 'Disconnected',
+  /**
+   * The client encountered an unrecoverable/invariant error
+   */
+  Error = 'Error',
 }
 
 type CloseResult =
@@ -37,38 +31,6 @@ type CloseResult =
       closeReason: ClientCloseReason.Error;
       error: Error;
     };
-
-enum ConnectionState {
-  CONNECTING = 0,
-  CONNECTED = 1,
-  DISCONNECTED = 2,
-}
-
-interface TxRx {
-  direction: 'in' | 'out';
-  cmd: api.Command;
-}
-
-type DebugLog =
-  | {
-      type: 'breadcrumb';
-      message: string;
-      data?: unknown;
-    }
-  | {
-      type: 'log';
-      log: TxRx;
-    };
-
-type DebugFunc = (log: DebugLog) => void;
-
-type OnCloseFn = void | ((reason: ChannelCloseReason) => void);
-
-type OpenChannelRes<Ctx> =
-  | { error: null; channel: Channel; context: Ctx }
-  | { error: Error; channel: null; context: Ctx };
-
-type OpenChannelCb<Ctx> = (res: OpenChannelRes<Ctx>) => OnCloseFn;
 
 type ChannelRequest<Ctx> =
   | {
@@ -105,12 +67,16 @@ export class Client<Ctx extends unknown = null> {
 
   /**
    * The websocket used for communication with the container.
+   *
+   * @hidden
    */
   private ws: WebSocket | null;
 
   /**
    * Supplied to us as the first argument when calling `client.open`.
    * The most important option is the connection metadata getter
+   *
+   * @hidden
    */
   private connectOptions: ConnectOptions<Ctx> | null;
 
@@ -121,6 +87,8 @@ export class Client<Ctx extends unknown = null> {
    * i.e. user called `client.close` or an unrecoverable error occured,
    * we will call this function with an error.
    * This has the same api as the second argument to openChannel.
+   *
+   * @hidden
    */
   private chan0Cb: OpenChannelCb<Ctx> | null;
 
@@ -129,12 +97,16 @@ export class Client<Ctx extends unknown = null> {
    * haven't connected. Once connected, we call this anytime a connection ends
    * it will be passed a `willReconnect` boolean indicating whether we're reconnecting or
    * not, depending on the closure reason
+   *
+   * @hidden
    */
   private chan0CleanupCb: ReturnType<OpenChannelCb<Ctx>> | null;
 
   /**
    * Anytime `openChannel` is called, we throw the request in here. This is used to maintain
    * the `openChannel` calls accross reconnects and use to orchestrate channel opening and closing
+   *
+   * @hidden
    */
   private channelRequests: Array<ChannelRequest<Ctx>>;
 
@@ -143,6 +115,8 @@ export class Client<Ctx extends unknown = null> {
    * array to find the channel everytime. Instead we pull it out quickly from this map.
    * Any channel here (except for channel 0) should have a corresponding `channelRequest`
    * and the request should be in an `isOpen` true state with a corresponding channel id
+   *
+   * @hidden
    */
   private channels: {
     [id: number]: Channel;
@@ -150,12 +124,16 @@ export class Client<Ctx extends unknown = null> {
 
   /**
    * Called for breadcrumbs and other debug reasons
+   *
+   * @hidden
    */
-  private debug: DebugFunc;
+  private debug: (log: DebugLog) => void;
 
   /**
    * A function supplied to us by the user of the client. Will be called
    * any time we have an unrecoverable error, usually an invariance
+   *
+   * @hidden
    */
   private userUnrecoverableErrorHandler: ((e: Error) => void) | null;
 
@@ -164,6 +142,8 @@ export class Client<Ctx extends unknown = null> {
    * Anytime we need to retry, we should also add an incremental backoff,
    * we do that using `setTimeout`. When the client closes before our
    * retry is initiated, we clear this timeout.
+   *
+   * @hidden
    */
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
@@ -172,15 +152,22 @@ export class Client<Ctx extends unknown = null> {
    * we're fetching connection metadata, we can be sure that we don't have a
    * `connect` call lingering around waiting for connection metadata and
    * eventually continue on as if we still want to connect
+   *
+   * @hidden
    */
   private fetchTokenAbortController: AbortController | null;
 
   /**
    * Was the client destroyed? A destroyed client is a client that cannot
-   * be used ever again
+   * be used ever again.
+   *
+   * @hidden
    */
   private destroyed: boolean;
 
+  /**
+   * @typeParam Ctx  context, passed to various callbacks, specified when calling {@link Client.open | open}
+   */
   constructor() {
     this.ws = null;
     this.channels = {};
@@ -203,18 +190,39 @@ export class Client<Ctx extends unknown = null> {
    *
    * See https://protodoc.turbio.repl.co/protov2 from more protocol specific info.
    *
-   * Every client connected automatically "has" channel 0 listen to global events.
+   * Every client connected automatically "has" {@link Channel | channel} 0 listen to global events.
    * Any time the client connects it will call callback with channel 0 so you can use it.
-   * Please refrain from using channel 0 to open channels and use `client.openChannel` instead.
+   * Please refrain from using channel 0 to open channels and use [[Client.openChannel]] instead.
    *
-   * If we disconnect before ever connecting and calling the callback
-   * (i.e. `client.close` is called or we encountered a major error)
-   * the callback is called with an error. Otherwise, if we did connect
-   * and we're disconnecting the cleanup function returned from the callback
-   * is called. The cleanup function is also called any time a disconnect happens
-   * with a boolean indicating whether the client will reconnect or not
+   * This function follows similar semantics to [[Client.openChannel]]. The only
+   * difference is the first parameter which specifies options around the connection
+   * in addition to a context that is passed to various callbacks. It also does not
+   * return a close function, instead you can use [[Client.close]].
+   *
+   * Usage:
+   * ```typescript
+   * client.open({ context, fetchConnectionMetadata }, function onOpen({
+   *   channel,
+   *   context,
+   * }) {
+   *   if (!channel) {
+   *     // Closed before ever connecting. Due to `client.close` being called
+   *     // or an unrecoverable, that can be handled by setting `client.setUnrecoverableError`
+   *     return;
+   *   }
+   *
+   *   //  The client is now connected (or reconnected in the event that it encountered an unexpected disconnect)
+   *   // `channel` here is channel0 (more info at http://protodoc.turbio.repl.co/protov2)
+   *   // - send commands using `channel.send`
+   *   // - listen for commands using `channel.onCommand(cmd => ...)`
+   *
+   *   return function cleanup({ willReconnect }) {
+   *     // The client was closed and might reconnect if it was closed unexpectedly
+   *   };
+   * });
+   * ```
    */
-  public open = (options: ConnectArgs<Ctx>, cb: OpenChannelCb<Ctx>): void => {
+  public open = (options: OpenOptions<Ctx>, cb: OpenChannelCb<Ctx>): void => {
     if (this.chan0Cb) {
       const error = new Error('You must call `close` before opening the client again');
       this.onUnrecoverableError(error);
@@ -281,23 +289,66 @@ export class Client<Ctx extends unknown = null> {
 
   /**
    *
-   * See https://protodoc.turbio.repl.co/protov2#opening-channels from more protocol specific info.
+   * Opens a {@link Channel | channel} for a [service](https://protodoc.turbio.repl.co/services)
+   * and returns a function to close the channel.
    *
-   * Opens a channel and returns a callback to close the channel, the returned
-   * calback can be called at any point in the life cycle of channel opening.
+   * Read [opening channels](https://protodoc.turbio.repl.co/protov2#opening-channels)
+   * section in the protocol documentation for protocol specific information.
    *
-   * The api for this is very similar to the API of `client.open`. When the channel
-   * opens the callback is called with the channel so it can be used to send commands
-   * and listen to commands on the channel (see Channel).
+   * When the client connects, and the channel opens, the open callback is called with the channel.
+   * As you should already know, you can use the channel to {@link Channel.send | send commands}
+   * and {@link Channel.onCommand | listen on incoming commands}. Once the client disconnects
+   * the channel is closed and is rendered un-usable (using it will throw an error) and you must
+   * wait for a new channel to be passed to the callback upon reconnection.
    *
-   * If we disconnect before ever opening the channel and calling the callback
-   * (i.e. `client.close` is called, the returned close function is called
-   * or we encountered a major error) the callback is called with an error.
-   * Otherwise, if we did connect and we're disconnecting the cleanup function
-   * returned from the supplied callback is called. The cleanup function is also
-   * called any time a disconnect happens with a boolean indicating whether
-   * the channel will reconnect or not.
+   * The channel will keep reopening upon client reconnects so long as you don't call the close
+   * channel function.
    *
+   * You can return an optional clean up function from the open callback to be used as a signal
+   * for the channel closing, regardless of whether it is going to reconnect or not. The cleanup
+   * function will be called with [[ChannelCloseReason]] which contians some useful information
+   * about reconnection and why we closed.
+   *
+   * If [[Client.close]] is called, it will close all channels and they won't reconnect. However,
+   * if you [[Client.open]] again in the future, all previously opened channels will re-open, unless
+   * the returned close channel function was called. [[Client.destroy]] will free up all `openChannel`
+   * calls but the client is unusable going forward.
+   *
+   * @param options  Options for the channel
+   * @param cb  The open callback
+   *
+   * @returns A function to close the channel
+   *
+   * Usage:
+   * ```typescript
+   * // See docs for exec service here https://protodoc.turbio.repl.co/services#exec
+   * const closeChannel = client.openChannel({ service: 'exec' }, function open({
+   *   error,
+   *   channel,
+   *   context,
+   * }) {
+   *   if (error) {
+   *     return;
+   *   }
+   *
+   *   channel.onCommand((cmd) => {
+   *     if (cmd.output) {
+   *       terminal.write(cmd.output);
+   *     }
+   *   });
+   *
+   *   const intervalId = setInterval(() => {
+   *     channel.send({
+   *       exec: { args: ['echo', 'hello', context.user.name] }
+   *       blocking: true,
+   *     });
+   *   }, 100);
+   *
+   *   return function cleanup() {
+   *     clearInterval(intervalId);
+   *   };
+   * });
+   *```
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>): (() => void) => {
     if (options.name && this.channelRequests.some((cr) => cr.options.name === options.name)) {
@@ -309,7 +360,7 @@ export class Client<Ctx extends unknown = null> {
     }
 
     if (this.destroyed) {
-      const error = new Error('Client has been destroyed and is');
+      const error = new Error('Client has been destroyed and is unusable');
       this.onUnrecoverableError(error);
 
       // throw to stop the execution of the caller
@@ -356,6 +407,7 @@ export class Client<Ctx extends unknown = null> {
     return closeChannel;
   };
 
+  /** @hidden */
   private requestOpenChannel = (channelRequest: ChannelRequest<Ctx>) => {
     const { options, openChannelCb } = channelRequest;
 
@@ -480,6 +532,7 @@ export class Client<Ctx extends unknown = null> {
     });
   };
 
+  /** @hidden */
   private requestCloseChannel = async (channelRequest: ChannelRequest<Ctx>) => {
     if (!channelRequest.isOpen) {
       this.onUnrecoverableError(new Error('Tried to request a channel close before opening'));
@@ -580,7 +633,8 @@ export class Client<Ctx extends unknown = null> {
    * - If there's an open WebSocket connection it will be closed
    * - Any open channels will be closed
    *   - Does not clear openChannel requests
-   *   - If a channel never opened, its openChannel callback will be called with an error
+   *   - If a channel never opened, its {@link OpenChannelCb | open channel callback}
+   *     will be called with an error
    *   - Otherwise returned cleanup callback is called
    */
   public close = (): void => {
@@ -604,8 +658,9 @@ export class Client<Ctx extends unknown = null> {
 
   /**
    * Destroy closes the connection, so all the rules of `close` apply here.
-   * The only difference is that `destroy` renders the client unsuable afterwards
-   * and frees up some resources protecting against potential leaks
+   * The only difference is that `destroy` renders the client unsuable afterwards.
+   * It will also cleanup all saved `openChannel` calls freeing the callbacks and
+   * avoiding leaks.
    */
   public destroy = (): void => {
     this.destroyed = true;
@@ -621,8 +676,11 @@ export class Client<Ctx extends unknown = null> {
     this.destroyed = true;
   };
 
-  /** Gets a channel by Id */
-  public getChannel(id: number): Channel {
+  /**
+   * @hidden
+   * Gets a channel by Id
+   * */
+  public getChannel = (id: number): Channel => {
     const chan = this.channels[id];
 
     this.debug({
@@ -642,21 +700,24 @@ export class Client<Ctx extends unknown = null> {
     }
 
     return chan;
-  }
+  };
 
   /** Sets a logging/debugging function */
-  public setDebugFunc(debugFunc: DebugFunc): void {
+  public setDebugFunc = (debugFunc: (log: DebugLog) => void): void => {
     this.debug = debugFunc;
-  }
+  };
 
-  /** Set a function to handle unrecoverable error
+  /**
+   * Set a function to handle unrecoverable error
+   *
    * Unrecoverable errors are internal errors or invariance errors
    * caused by the user mis-using the client.
    */
-  public setUnrecoverableErrorHandler(onUnrecoverableError: (e: Error) => void): void {
+  public setUnrecoverableErrorHandler = (onUnrecoverableError: (e: Error) => void): void => {
     this.userUnrecoverableErrorHandler = onUnrecoverableError;
-  }
+  };
 
+  /** @hidden */
   private connect = async (n = 0) => {
     this.debug({
       type: 'breadcrumb',
@@ -871,7 +932,8 @@ export class Client<Ctx extends unknown = null> {
       };
     }
 
-    /** Listen to incoming commands
+    /**
+     * Listen to incoming commands
      * Every time we get a message we reset the connection timeout (if it exists)
      * this is because it signifies that the connection will eventually work.
      *
@@ -981,6 +1043,8 @@ export class Client<Ctx extends unknown = null> {
 
   /**
    * Attempt to reconnect after a short delay.
+   *
+   * @hidden
    */
   private retryConnect = (tryCount: number, chan0: Channel, error: Error) => {
     if (this.retryTimeoutId) {
@@ -1022,6 +1086,7 @@ export class Client<Ctx extends unknown = null> {
     }, getNextRetryDelay(tryCount));
   };
 
+  /** @hidden */
   private send = (cmd: api.Command) => {
     this.debug({ type: 'log', log: { direction: 'out', cmd } });
 
@@ -1037,6 +1102,7 @@ export class Client<Ctx extends unknown = null> {
     this.ws.send(buffer);
   };
 
+  /** @hidden */
   private onSocketMessage = ({ data }: MessageEvent) => {
     const d = new Uint8Array(data);
     const cmd = api.Command.decode(d);
@@ -1049,6 +1115,8 @@ export class Client<Ctx extends unknown = null> {
 
   /**
    * Called when chan0 connects. Opens all other required channels
+   *
+   * @hidden
    */
   private handleConnect = () => {
     this.connectionState = ConnectionState.CONNECTED;
@@ -1097,6 +1165,7 @@ export class Client<Ctx extends unknown = null> {
     });
   };
 
+  /** @hidden */
   private handleClose = (closeResult: CloseResult) => {
     if (closeResult.closeReason !== ClientCloseReason.Error) {
       // If we got here as a result of an error we'll ignore these assertions to avoid
@@ -1236,6 +1305,7 @@ export class Client<Ctx extends unknown = null> {
     this.connect();
   };
 
+  /** @hidden */
   private cleanupSocket = () => {
     const { ws } = this;
 
@@ -1273,6 +1343,7 @@ export class Client<Ctx extends unknown = null> {
     }
   };
 
+  /** @hidden */
   private onUnrecoverableError = (e: Error) => {
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       try {

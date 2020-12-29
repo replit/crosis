@@ -1,42 +1,5 @@
 import { api } from '@replit/protocol';
-import { ChannelCloseReason } from './types';
-
-interface RequestResult extends api.Command {
-  channelClosed?: ChannelCloseReason;
-}
-
-/**
- * This function gets called when a channel opens or there is an error opening.
- * It can return a function that can be used to cleanup an logic when the channle closes.
- * If there is an error opening the channel the cleanup function is not called. You can
- * think of it as a stream of values that terminates if/when there is an error. A `skip`
- * function may be provided to skip opening the channel conditionally on every reconnection.
- *
- * Example:
- *
- * const closeChannel = client.openChannel({
- *   service: 'shell',
- *   skip: () => !something.supportsShell(),
- * }, ({ channel, error }) => {
- *   if (error) {
- *     // Bail, channel had an error connecting or reconnecting
- *     // Tihs callback will no longer be called
- *     return
- *   }
- *
- *   // Channel is open, setup `channel` logic
- *   // This could be the result of initial connection or a subsequent reconnect
- *
- *   return (reason) => {
- *     // Channel closed, cleanup relevant logic
- *     // We might reconnect after this
- *   }
- * })
- *
- * // Eventually when done using the channel you can close it
- * closeChannel() // Will call potential returned cleanup function
- *
- */
+import type { ChannelCloseReason, RequestResult } from './types';
 
 export class Channel {
   /**
@@ -48,11 +11,14 @@ export class Channel {
    * The current connection status of the channel.
    * When the channel is open or closing you can potentially
    * receive commands on the channel.
+   * You can only send to the channel when it's open
    */
   public status: 'open' | 'closed' | 'closing';
 
   /**
    * Sends the command to the container
+   *
+   * @hidden
    */
   private sendToContainer: (cmd: api.Command) => void;
 
@@ -61,6 +27,8 @@ export class Channel {
    * when `channel.request` is called.
    * Once we receive a response with the same reference id
    * we look up this map and resolve the request.
+   *
+   * @hidden
    */
   private requestMap: { [ref: string]: (res: RequestResult) => void };
 
@@ -69,14 +37,21 @@ export class Channel {
    * is called we push the callback into this array.
    * When we receive a command from the client through
    * `handleCommand` we call all the callbakcs in this array
+   *
+   * @hidden
    */
   private onCommandListeners: Array<(cmd: api.Command) => void>;
 
   /**
    * Supplied to us by the client to call when something wonky happens.
+   *
+   * @hidden
    */
   private onUnrecoverableError: (e: Error) => void;
 
+  /**
+   * @hidden should only be called by [[Client]]
+   */
   constructor({
     id,
     send,
@@ -98,7 +73,9 @@ export class Channel {
    * To listen to commands received by this channel, supply a
    * a callback to this function and the callback will be called
    * any time we receive a command on this channel.
+   *
    * @param listener the command listener
+   * @returns a function to stop listening
    */
   public onCommand = (listener: (cmd: api.Command) => void): (() => void) => {
     if (this.status === 'closed') {
@@ -116,8 +93,8 @@ export class Channel {
   };
 
   /**
-   * Receives a command and sends it over the wire
-   * along with the channel id.
+   * Sends a command on the channel
+   *
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
   public send = (cmdJson: api.ICommand): void => {
@@ -140,8 +117,12 @@ export class Channel {
   };
 
   /**
-   * Sends a command to the channel and returns a promise
+   * Sends a command on the channel and returns a promise
    * that is resolved when we get a response.
+   *
+   * Be ware, not all messages can have a result, so the promise
+   * might never resolve.
+   *
    * @param cmdJson shape of a command see [[api.ICommand]]
    */
   public request = async (cmdJson: api.ICommand): Promise<RequestResult> => {
