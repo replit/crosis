@@ -15,7 +15,9 @@
     "prepublishOnly": "yarn clean && yarn build",
     "clean": "rm -rf dist dist.browser",
     "docs": "typedoc --out docs --name crosis src/index.ts node_modules/@replit/protocol/index.d.ts",
-    "test": "jest --no-cache"
+    "test": "jest --no-cache",
+    "preversion": "yarn test",
+    "postversion": "git push --tags && yarn publish . --tag $npm_package_version && git push && echo \"Successfully released version $npm_package_version!\""
   },
   "author": "faris@repl.it",
   "license": "UNLICENSED",

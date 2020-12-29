@@ -1,5 +1,5 @@
 /* eslint-disable no-console, no-debugger, @typescript-eslint/ban-ts-comment */
-import { Client } from '../index';
+import { Client } from '../src';
 
 declare global {
   interface Window {

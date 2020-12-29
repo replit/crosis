@@ -113,20 +113,24 @@ const closeChannel = client.openChannel({ service: 'exec' }, function open({ cha
 
 To run tests run
 
-```sh
+```bash
 TOKEN_SECRET=XXXXXXXXXX yarn test
 ```
 
 To interact with a connected client in the browser run
 
-```sh
+```bash
 TOKEN_SECRET=XXXXXXXXXX yarn debug
 ```
 
 You can then access the client from the console an send messages like:
 
-```js
+```javascript
 window.client.send({ exec: { args: ['kill', '1'] } });
 ```
+
+### Releasing
+
+To release, just upgrade the version using yarn https://classic.yarnpkg.com/en/docs/cli/version/
 
 To update documentation, go to https://crosisdoc.util.repl.co/__repl and run `. ./updatedocs.sh`
