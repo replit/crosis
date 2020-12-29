@@ -683,13 +683,13 @@ export class Client<Ctx extends unknown = null> {
   public getChannel = (id: number): Channel => {
     const chan = this.channels[id];
 
-    this.debug({
-      type: 'breadcrumb',
-      message: 'getChannel',
-      data: {
-        id,
-      },
-    });
+    // this.debug({
+    //   type: 'breadcrumb',
+    //   message: 'getChannel',
+    //   data: {
+    //     id,
+    //   },
+    // });
 
     if (!chan) {
       const error = new Error(`No channel with number ${id}`);
@@ -911,10 +911,16 @@ export class Client<Ctx extends unknown = null> {
     if (timeout !== null) {
       let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
 
-      cancelTimeout = () => clearTimeout(timeoutId);
+      cancelTimeout = () => {
+        this.debug({ type: 'breadcrumb', message: 'cancel timeout' });
+
+        clearTimeout(timeoutId);
+      };
 
       resetTimeout = () => {
-        cancelTimeout();
+        this.debug({ type: 'breadcrumb', message: 'reset timeout' });
+
+        clearTimeout(timeoutId);
 
         timeoutId = setTimeout(() => {
           this.debug({ type: 'breadcrumb', message: 'connect timeout' });
@@ -1345,6 +1351,14 @@ export class Client<Ctx extends unknown = null> {
 
   /** @hidden */
   private onUnrecoverableError = (e: Error) => {
+    this.debug({
+      type: 'breadcrumb',
+      message: 'unrecoverable error',
+      data: {
+        message: e.message,
+      },
+    });
+
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       try {
         this.handleClose({
