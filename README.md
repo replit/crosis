@@ -14,7 +14,7 @@ Read about the protocol here http://protodoc.turbio.repl.co
 
 The central concept is a "channel" that you can send commands to and receive commands from. Communicating with channels requires a network connection. The goal of this client is to provide an API to manage the connection (including disconnects and reconnects), opening channels, and a way to send a receive messages/commands on channels. How you handle this is up to you and depends on the desired UX. In some cases you'll want to disable UI to prevent any new messages being sent when offline and then re-enable once connected agian. In other cases you might want to give the user the illusion that they are connected and queue message locally while disconnected and send them once reconnected.
 
-Here is an example usage, for more details on usage please refer to the API docs at https://crosis-docs.util.repl.co
+Here is an example usage, for more details on usage please refer to the API docs at https://crosisdoc.util.repl.co/
 
 ```typescript
 import { Client } from '@replit/crosis';
@@ -128,3 +128,5 @@ You can then access the client from the console an send messages like:
 ```js
 window.client.send({ exec: { args: ['kill', '1'] } });
 ```
+
+To update documentation, go to https://crosisdoc.util.repl.co/__repl and run `. ./updatedocs.sh`
