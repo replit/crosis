@@ -1,29 +1,21 @@
 /* eslint-disable */
 const express = require('express');
-
-const webpack = require('webpack');
-const webpackDevMiddleware = require('webpack-dev-middleware');
-const config = require('./webpack.config.js');
+const path = require('path');
+const Bundler = require('parcel');
 const genConnectionMetadata = require('./genConnectionMetadata');
 
+const bundler = new Bundler(path.join(__dirname, 'index.html'), {
+  outDir: path.resolve(__dirname, '..', '..', 'dist.debug'),
+});
+
 const app = express();
-const port = process.env.PORT || 5000;
-
-const compiler = webpack(config);
-
-app.use(
-  webpackDevMiddleware(compiler, {
-    publicPath: config.output.publicPath,
-  }),
-);
+const port = process.env.PORT || 8080;
 
 app.get('/token', (req, res) => {
   res.json(genConnectionMetadata());
 });
 
-app.get('/', (req, res) => {
-  res.send(`<script src="debug.js"></script>`);
-});
+app.use(bundler.middleware());
 
 app.listen(port, () => {
   console.log(`Server started on port:${port}`);

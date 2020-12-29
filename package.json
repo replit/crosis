@@ -11,7 +11,6 @@
     "lint": "eslint --ext .js,.ts src/ src.browser/",
     "build": "tsc",
     "build:browser": "yarn clean && yarn build && parcel build src.browser/index.js -d dist.browser --out-file crosis.js",
-    "dev": "yarn build && (yarn build -- -w & parcel src.browser/index.html)",
     "debug": "node src/debug/server.js",
     "prepublishOnly": "yarn clean && yarn build",
     "clean": "rm -rf dist dist.browser",
@@ -45,13 +44,8 @@
     "parcel": "^1.12.4",
     "prettier": "^2.0.5",
     "ts-jest": "^26.0.0",
-    "ts-loader": "^8.0.12",
     "typedoc": "^0.20.1",
     "typescript": "^3.9.2",
-    "webpack": "^5.10.3",
-    "webpack-cli": "^4.2.0",
-    "webpack-dev-middleware": "^4.0.2",
-    "webpack-dev-server": "^3.11.0",
     "ws": "^7.3.0"
   },
   "peerDependencies": {

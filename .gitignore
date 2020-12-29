@@ -3,6 +3,7 @@ node_modules/
 docs/
 dist/
 dist.browser/
+dist.debug/
 
 yarn-error.log
 yarn-debug.log*
