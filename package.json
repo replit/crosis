@@ -1,6 +1,6 @@
 {
   "name": "@replit/crosis",
-  "version": "6.0.0-beta.35",
+  "version": "6.0.0-beta.36",
   "description": "Goval connection and channel manager",
   "files": [
     "/dist"
@@ -12,6 +12,7 @@
     "build": "tsc",
     "build:browser": "yarn clean && yarn build && parcel build src.browser/index.js -d dist.browser --out-file crosis.js",
     "dev": "yarn build && (yarn build -- -w & parcel src.browser/index.html)",
+    "debug": "node src/debug/server.js",
     "prepublishOnly": "yarn clean && yarn build",
     "clean": "rm -rf dist dist.browser",
     "docs": "typedoc --out docs --name crosis --includeDeclarations --excludeExternals src/channel.ts src/client.ts src/types.ts node_modules/@replit/protocol/index.d.ts",
@@ -39,12 +40,18 @@
     "eslint-plugin-jsx-a11y": "^6.2.3",
     "eslint-plugin-prettier": "^3.2.0",
     "eslint-plugin-react": "^7.14.3",
+    "express": "^4.17.1",
     "jest": "^26.0.1",
     "parcel": "^1.12.4",
     "prettier": "^2.0.5",
     "ts-jest": "^26.0.0",
+    "ts-loader": "^8.0.12",
     "typedoc": "^0.17.6",
     "typescript": "^3.9.2",
+    "webpack": "^5.10.3",
+    "webpack-cli": "^4.2.0",
+    "webpack-dev-middleware": "^4.0.2",
+    "webpack-dev-server": "^3.11.0",
     "ws": "^7.3.0"
   },
   "peerDependencies": {
