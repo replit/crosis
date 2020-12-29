@@ -20,7 +20,7 @@
     "postversion": "git push --tags && yarn publish . --tag $npm_package_version && git push && echo \"Successfully released version $npm_package_version!\""
   },
   "author": "faris@repl.it",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "dependencies": {
     "abortcontroller-polyfill": "^1.5.0",
     "engine.io-client": "^3.4.0"
