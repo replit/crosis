@@ -1,4 +1,4 @@
-#### v6.0.0
+#### v6.0.0 [BREAKING]
 
 The client has been reworked to handle reconnection internally. The API is drastically different but the general concepts
 are the same. Please refer to updated docs for usage information.
