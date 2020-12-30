@@ -23,7 +23,7 @@ jobs:
       - uses: bahmutov/npm-install@v1
 
       - name: Build
-        run: yarn run build --noEmit
+        run: yarn run build
 
       - name: Lint
         run: yarn run lint
