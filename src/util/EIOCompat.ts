@@ -30,6 +30,42 @@ const readyStateStringToValue = new Map([
   ['closed', 3],
 ]);
 
+function createMessageEvent(data: ArrayBuffer): MessageEvent {
+  if (typeof window !== 'undefined') {
+    return new MessageEvent('message', { data });
+  }
+
+  // There's missing information but we don't use it
+  return {
+    type: 'message',
+    data,
+  } as MessageEvent;
+}
+
+function createCloseEvent(info: CloseEventInit): CloseEvent {
+  if (typeof window !== 'undefined') {
+    return new CloseEvent('close', info);
+  }
+
+  // There's missing information but we don't use it
+  return {
+    type: 'close',
+    ...info,
+  } as CloseEvent;
+}
+
+function createEvent(type: string, info?: EventInit): Event {
+  if (typeof window !== 'undefined') {
+    return new Event(type, info);
+  }
+
+  // There's missing information but we don't use it
+  return {
+    type,
+    ...info,
+  } as Event;
+}
+
 export class EIOCompat implements WebSocket {
   public onclose: ((ev: CloseEvent) => unknown) | null;
 
@@ -47,8 +83,6 @@ export class EIOCompat implements WebSocket {
 
   public bufferedAmount: number;
 
-  public binaryType: BinaryType;
-
   public readyState: number;
 
   public incomingSequence: number;
@@ -56,6 +90,14 @@ export class EIOCompat implements WebSocket {
   public outOfOrderQueue: { [sequence: number]: ArrayBuffer };
 
   public outgoingSequence: number;
+
+  static readonly CLOSED = 3;
+
+  static readonly CLOSING = 2;
+
+  static readonly OPEN = 1;
+
+  static readonly CONNECTING = 0;
 
   readonly CLOSED = 3;
 
@@ -83,7 +125,6 @@ export class EIOCompat implements WebSocket {
     this.extensions = '';
     this.protocol = '';
     this.bufferedAmount = 0;
-    this.binaryType = 'blob';
     this.readyState = 0;
     this.incomingSequence = 0;
     this.outOfOrderQueue = {};
@@ -94,7 +135,7 @@ export class EIOCompat implements WebSocket {
     this.eioSocket.on('open', () => {
       this.setReadyState();
       if (this.onopen != null) {
-        const event = new Event('open');
+        const event = createEvent('open');
         this.onopen.call(this, event);
       }
     });
@@ -102,7 +143,7 @@ export class EIOCompat implements WebSocket {
     this.eioSocket.on('close', (reason) => {
       this.setReadyState();
       if (this.onclose != null) {
-        const event = new CloseEvent('close', {
+        const event = createCloseEvent({
           reason,
           code: 1001,
           wasClean: false,
@@ -124,20 +165,19 @@ export class EIOCompat implements WebSocket {
 
       const view = new DataView(data);
       const sequence = view.getUint32(0);
+      const commandData = data.slice(sequenceBytesCount);
 
       if (this.incomingSequence !== sequence) {
         // We didn't get the message we expected
         // put it in the queue until we get the expected message
-        this.outOfOrderQueue[sequence] = data.slice(sequenceBytesCount);
+        this.outOfOrderQueue[sequence] = commandData;
 
         return;
       }
 
       this.incomingSequence = sequence + 1;
 
-      const message = new MessageEvent('message', {
-        data: data.slice(sequenceBytesCount),
-      });
+      const message = createMessageEvent(commandData);
 
       const onmessage = this.onmessage.bind(this);
 
@@ -148,11 +188,7 @@ export class EIOCompat implements WebSocket {
         // We got the message we expected but we have other messages
         // that were out of order and queued up
         queuedSequences.sort().forEach((seq) => {
-          onmessage(
-            new MessageEvent('message', {
-              data: this.outOfOrderQueue[+seq],
-            }),
-          );
+          onmessage(createMessageEvent(this.outOfOrderQueue[+seq]));
 
           this.incomingSequence = +seq + 1;
         });
@@ -164,7 +200,7 @@ export class EIOCompat implements WebSocket {
     this.eioSocket.on('error', () => {
       this.setReadyState();
       if (this.onerror != null) {
-        const event = new Event('error');
+        const event = createEvent('error');
         this.onerror.call(this, event);
       }
     });
@@ -207,5 +243,13 @@ export class EIOCompat implements WebSocket {
   // eslint-disable-next-line class-methods-use-this
   dispatchEvent(): boolean {
     throw new Error('Not Implemented');
+  }
+
+  set binaryType(value: BinaryType) {
+    this.eioSocket.binaryType = value;
+  }
+
+  get binaryType(): BinaryType {
+    return this.eioSocket.binaryType || 'blob';
   }
 }
