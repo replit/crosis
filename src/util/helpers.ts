@@ -1,3 +1,4 @@
+import * as urllib from 'url';
 import type { ConnectOptions, GovalMetadata } from '../types';
 
 const BACKOFF_FACTOR = 1.7;
@@ -28,13 +29,15 @@ function isWebSocket(w: unknown): w is WebSocket {
 /**
  * Gets a websocket class from the global scope, or asserts if the supplied websocket follows the standard
  */
-export function getWebSocketClass(options: ConnectOptions<unknown>): typeof WebSocket {
-  if (options.WebSocketClass) {
-    if (!isWebSocket(options.WebSocketClass)) {
+export function getWebSocketClass(
+  WebSocketClass: ConnectOptions<unknown>['WebSocketClass'],
+): typeof WebSocket {
+  if (WebSocketClass) {
+    if (!isWebSocket(WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');
     }
 
-    return options.WebSocketClass;
+    return WebSocketClass;
   }
 
   if (typeof WebSocket !== 'undefined') {
@@ -51,6 +54,17 @@ export function getWebSocketClass(options: ConnectOptions<unknown>): typeof WebS
 /**
  * Given connection metadata, creates a websocket connection string
  */
-export function getConnectionStr(connectionMetadata: GovalMetadata): string {
-  return new URL(`/wsv2/${connectionMetadata.token}`, connectionMetadata.gurl).toString();
+export function getConnectionStr(connectionMetadata: GovalMetadata, isPolling: boolean): string {
+  const gurl = urllib.parse(connectionMetadata.gurl);
+  if (isPolling) {
+    gurl.hostname = 'gp-v2.herokuapp.com';
+    gurl.host = 'gp-v2.herokuapp.com';
+    gurl.pathname = `/wsv2/${connectionMetadata.token}/${encodeURIComponent(
+      connectionMetadata.gurl,
+    )}`;
+  } else {
+    gurl.pathname = `/wsv2/${connectionMetadata.token}`;
+  }
+
+  return urllib.format(gurl);
 }

@@ -1,6 +1,7 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
+import { EIOCompat } from './util/EIOCompat';
 import { FetchConnectionMetadataError, ConnectionState } from './types';
 import type { ConnectOptions, OpenChannelCb, ChannelOptions, DebugLog, OpenOptions } from './types';
 
@@ -25,7 +26,7 @@ type CloseResult =
     }
   | {
       closeReason: ClientCloseReason.Disconnected;
-      wsEvent: CloseEvent | ErrorEvent;
+      wsEvent: CloseEvent | Event;
     }
   | {
       closeReason: ClientCloseReason.Error;
@@ -284,7 +285,7 @@ export class Client<Ctx extends unknown = null> {
     });
 
     this.chan0Cb = cb;
-    this.connect();
+    this.connect({ tryCount: 0, websocketFailureCount: 0 });
   };
 
   /**
@@ -718,13 +719,20 @@ export class Client<Ctx extends unknown = null> {
   };
 
   /** @hidden */
-  private connect = async (n = 0) => {
+  private connect = async ({
+    tryCount,
+    websocketFailureCount,
+  }: {
+    tryCount: number;
+    websocketFailureCount: number;
+  }) => {
     this.debug({
       type: 'breadcrumb',
       message: 'connecting',
       data: {
         connectionState: this.connectionState,
-        connectTries: n,
+        connectTries: tryCount,
+        websocketFailureCount,
         readyState: this.ws ? this.ws.readyState : undefined,
         chan0CbExists: Boolean(this.chan0Cb),
       },
@@ -775,7 +783,6 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const tryCount = n + 1;
     this.connectionState = ConnectionState.CONNECTING;
 
     const chan0 = new Channel({
@@ -784,8 +791,6 @@ export class Client<Ctx extends unknown = null> {
       send: this.send,
     });
     this.channels[0] = chan0;
-
-    const WebSocketClass = getWebSocketClass(this.connectOptions);
 
     if (this.fetchTokenAbortController) {
       this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
@@ -842,7 +847,13 @@ export class Client<Ctx extends unknown = null> {
     }
 
     if (connectionMetadata.error === FetchConnectionMetadataError.Retriable) {
-      this.retryConnect(tryCount, chan0, new Error('Retriable error'));
+      this.retryConnect({
+        tryCount: tryCount + 1,
+        websocketFailureCount,
+        chan0,
+        error: new Error('Retriable error'),
+      });
+
       return;
     }
 
@@ -858,7 +869,19 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
-    const connStr = getConnectionStr(connectionMetadata);
+    if (websocketFailureCount === 3) {
+      // Report that we fellback to polling
+      this.debug({
+        type: 'breadcrumb',
+        message: 'polling fallback',
+      });
+    }
+
+    const isPolling = websocketFailureCount >= 3;
+    const WebSocketClass = isPolling
+      ? EIOCompat
+      : getWebSocketClass(this.connectOptions.WebSocketClass);
+    const connStr = getConnectionStr(connectionMetadata, isPolling);
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
@@ -936,7 +959,14 @@ export class Client<Ctx extends unknown = null> {
           onFailed(new Error('timeout'));
         }, timeout);
       };
+
+      resetTimeout();
     }
+
+    // We'll use this to determine whether or not we should consider the next
+    // failure a websocket failure and fallback to polling. If we were able to
+    // receive any messages on channel 0, then websockets work fine.
+    let didReceiveAnyCommand = false;
 
     /**
      * Listen to incoming commands
@@ -950,6 +980,7 @@ export class Client<Ctx extends unknown = null> {
      * and connection should be dropped
      */
     const unlistenChan0 = chan0.onCommand((cmd: api.Command) => {
+      didReceiveAnyCommand = true;
       // Everytime we get a message on channel0
       // we will reset the timeout
       resetTimeout();
@@ -1043,7 +1074,12 @@ export class Client<Ctx extends unknown = null> {
       cancelTimeout();
       unlistenChan0();
 
-      this.retryConnect(tryCount, chan0, error);
+      this.retryConnect({
+        tryCount: tryCount + 1,
+        websocketFailureCount: didReceiveAnyCommand ? 0 : websocketFailureCount + 1,
+        chan0,
+        error,
+      });
     };
   };
 
@@ -1052,7 +1088,17 @@ export class Client<Ctx extends unknown = null> {
    *
    * @hidden
    */
-  private retryConnect = (tryCount: number, chan0: Channel, error: Error) => {
+  private retryConnect = ({
+    tryCount,
+    websocketFailureCount,
+    chan0,
+    error,
+  }: {
+    tryCount: number;
+    websocketFailureCount: number;
+    chan0: Channel;
+    error: Error;
+  }) => {
     if (this.retryTimeoutId) {
       this.onUnrecoverableError(new Error('unexpected existing retryTimeoutId'));
 
@@ -1081,6 +1127,7 @@ export class Client<Ctx extends unknown = null> {
         data: {
           connectionState: this.connectionState,
           connectTries: tryCount,
+          websocketFailureCount,
           error,
           wsReadyState: this.ws ? this.ws.readyState : undefined,
         },
@@ -1088,7 +1135,7 @@ export class Client<Ctx extends unknown = null> {
       chan0.handleClose({ initiator: 'client', willReconnect: true });
       delete this.channels[0];
       this.connectionState = ConnectionState.DISCONNECTED;
-      this.connect(tryCount);
+      this.connect({ tryCount, websocketFailureCount });
     }, getNextRetryDelay(tryCount));
   };
 
@@ -1136,7 +1183,7 @@ export class Client<Ctx extends unknown = null> {
     }
 
     // Update socket closure to do something else
-    const onClose = (event: CloseEvent | ErrorEvent) => {
+    const onClose = (event: CloseEvent | Event) => {
       if (this.connectionState === ConnectionState.DISCONNECTED) {
         this.onUnrecoverableError(
           new Error('Got a close event on socket but client is in disconnected state'),
@@ -1308,7 +1355,7 @@ export class Client<Ctx extends unknown = null> {
       message: 'reconnecting',
     });
 
-    this.connect();
+    this.connect({ tryCount: 0, websocketFailureCount: 0 });
   };
 
   /** @hidden */

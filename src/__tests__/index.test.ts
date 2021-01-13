@@ -2,6 +2,7 @@
 
 import type { FetchConnectionMetadataResult } from '../types';
 import { Client, FetchConnectionMetadataError } from '..';
+import { getWebSocketClass } from '../util/helpers';
 
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
@@ -731,54 +732,52 @@ test('closing before ever connecting', (done) => {
   );
 });
 
-// // re-add once we add polling
-// test.skip('falling back to polling', (done) => {
-//   const onUnrecoverableError = jest.fn<void, [Error]>();
-//   const client = new Client();
-//   client.setUnrecoverErrorHandler(onUnrecoverableError);
+test('fallback to polling', (done) => {
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(onUnrecoverableError);
 
-//   const maxConnectRetries = 1;
-//   const open = jest.fn();
+  class WebsocketThatNeverConnects {
+    static OPEN = 1;
+  }
 
-//   client.setDebugFunc((log) => {
-//     if (log.type === 'breadcrumb' && log.message === 'falling back to polling') {
-//       // eslint-disable-next-line
-//       const data = log.data as any;
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  expect(() => getWebSocketClass(WebsocketThatNeverConnects)).not.toThrow();
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  expect(getWebSocketClass(WebsocketThatNeverConnects)).toEqual(WebsocketThatNeverConnects);
 
-//       expect(data.connectTries).toEqual(maxConnectRetries + 1);
-//       expect(data.error).toBeDefined();
-//       expect(data.wsReadyState).toBeUndefined();
+  let didLogFallback = false;
+  client.setDebugFunc((log) => {
+    if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
+      didLogFallback = true;
+    }
+  });
 
-//       // eslint-disable-next-line
-//       // @ts-ignore need to reach in and grab some private fields real quick...
-//       const { urlOptions, polling } = client.connectOptions;
-
-//       expect(urlOptions.host).toEqual('gp-v2.herokuapp.com');
-//       expect(polling).toBe(true);
-
-//       expect(open).not.toHaveBeenCalled();
-
-//       expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
-//       done();
-//     }
-//   });
-
-//   client.open(
-//     {
-//       fetchConnectionMetadata: () => Promise.resolve({
-//         connectionMetadata: {
-//           token: 'bad token',
-//           gurl: '',
-//           conmanURL: '',
-//         },
-//         result: FetchConnectionMetadataResult.Ok,
-//       }),
-//       WebSocketClass: WebSocket,
-//       timeout: 0,
-//     },
-//     open,
-//   );
-// });
+  client.open(
+    {
+      timeout: 2000,
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      WebSocketClass: WebsocketThatNeverConnects,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(error).toBeNull();
+      expect(channel).not.toBeNull();
+      expect(didLogFallback).toBe(true);
+      expect(onUnrecoverableError).not.toHaveBeenCalled();
+      client.close();
+      done();
+    },
+  );
+}, 30000);
 
 test('fetch token fail', (done) => {
   const chan0Cb = jest.fn();
