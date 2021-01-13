@@ -768,9 +768,10 @@ test('fallback to polling', (done) => {
       WebSocketClass: WebsocketThatNeverConnects,
       context: null,
     },
-    ({ channel }) => {
-      expect(channel).toBeTruthy();
-      expect(didLogFallback).toBeTruthy();
+    ({ channel, error }) => {
+      expect(error).toBeNull();
+      expect(channel).not.toBeNull();
+      expect(didLogFallback).toBe(true);
       expect(onUnrecoverableError).not.toHaveBeenCalled();
       client.close();
       done();
