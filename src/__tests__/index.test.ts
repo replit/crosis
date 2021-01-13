@@ -774,7 +774,10 @@ test('fallback to polling', (done) => {
       expect(didLogFallback).toBe(true);
       expect(onUnrecoverableError).not.toHaveBeenCalled();
       client.close();
-      done();
+
+      return () => {
+        done();
+      };
     },
   );
 }, 30000);
