@@ -3,7 +3,14 @@ import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
 import { EIOCompat } from './util/EIOCompat';
 import { FetchConnectionMetadataError, ConnectionState } from './types';
-import type { ConnectOptions, OpenChannelCb, ChannelOptions, DebugLog, OpenOptions } from './types';
+import type {
+  ConnectOptions,
+  GovalMetadata,
+  OpenChannelCb,
+  ChannelOptions,
+  DebugLog,
+  OpenOptions,
+} from './types';
 
 enum ClientCloseReason {
   /**
@@ -167,6 +174,13 @@ export class Client<Ctx extends unknown = null> {
   private destroyed: boolean;
 
   /**
+   * The metadata for the current connection.
+   *
+   * @hidden
+   */
+  private connectionMetadata: GovalMetadata | null;
+
+  /**
    * @typeParam Ctx  context, passed to various callbacks, specified when calling {@link Client.open | open}
    */
   constructor() {
@@ -182,6 +196,7 @@ export class Client<Ctx extends unknown = null> {
     this.retryTimeoutId = null;
     this.fetchTokenAbortController = null;
     this.destroyed = false;
+    this.connectionMetadata = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -718,6 +733,12 @@ export class Client<Ctx extends unknown = null> {
     this.userUnrecoverableErrorHandler = onUnrecoverableError;
   };
 
+  /**
+   * Gets the current connection metadata used by the WebSocket, or null if the
+   * WebSocket is not present.
+   */
+  public getConnectionMetadata = (): GovalMetadata | null => this.connectionMetadata;
+
   /** @hidden */
   private connect = async ({
     tryCount,
@@ -887,6 +908,7 @@ export class Client<Ctx extends unknown = null> {
     ws.binaryType = 'arraybuffer';
     ws.onmessage = this.onSocketMessage;
     this.ws = ws;
+    this.connectionMetadata = connectionMetadata;
 
     /**
      * Failure can happen due to a number of reasons
@@ -1377,6 +1399,7 @@ export class Client<Ctx extends unknown = null> {
     }
 
     this.ws = null;
+    this.connectionMetadata = null;
 
     ws.onmessage = null;
     ws.onclose = null;
