@@ -109,12 +109,16 @@ export type ChannelCloseReason =
       willReconnect: false;
     };
 
+interface ServiceThunk<Ctx> {
+  (context: Ctx): string;
+}
+
 /**
  * See [[Client.openChannel]]
  */
 export interface ChannelOptions<Ctx> {
   name?: string;
-  service: string;
+  service: string | ServiceThunk<Ctx>;
   action?: api.OpenChannel.Action;
   skip?: (context: Ctx) => boolean;
 }

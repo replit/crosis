@@ -452,12 +452,17 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
+    const service =
+      typeof options.service === 'string'
+        ? options.service
+        : options.service(this.connectOptions.context);
+
     this.debug({
       type: 'breadcrumb',
       message: 'handleOpenChannel',
       data: {
         name: options.name,
-        service: options.service,
+        service,
         action,
       },
     });
@@ -477,7 +482,7 @@ export class Client<Ctx extends unknown = null> {
       ref,
       openChan: {
         name: options.name,
-        service: options.service,
+        service,
         action,
       },
     });
