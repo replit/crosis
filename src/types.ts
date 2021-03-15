@@ -109,6 +109,12 @@ export type ChannelCloseReason =
       willReconnect: false;
     };
 
+/**
+ * When opening a channel, the service parameter
+ * accepts passing in a function that returns a
+ * service name. Use this when you need to use context
+ * to determine which service to use.
+ */
 interface ServiceThunk<Ctx> {
   (context: Ctx): string;
 }
