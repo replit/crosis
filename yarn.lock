@@ -1302,7 +1302,7 @@
   resolved "https://registry.yarnpkg.com/@protobufjs/utf8/-/utf8-1.1.0.tgz#a777360b5b39a1a2e5106f8e858f2fd2d060c570"
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
-"@replit/protocol@^0.2.18":
+"@replit/protocol@0.x.x":
   version "0.2.18"
   resolved "https://registry.yarnpkg.com/@replit/protocol/-/protocol-0.2.18.tgz#ac57637d9616699ac3b2250cecd9a1cd7214edb0"
   integrity sha512-AtQvBtncBXQ1+ow7sI6H/HqJeZvwVu4pHFxDN2Z70yw20f9pP+ctd7L1qMKF9zGvM0+D2T4Tk8rvh8AvN24mrA==
