@@ -11,7 +11,7 @@
     "lint": "eslint --ext .js,.ts src/ src.browser/",
     "build": "tsc",
     "build:browser": "yarn clean && yarn build && parcel build src.browser/index.js -d dist.browser --out-file crosis.js",
-    "debug": "node src/debug/server.js",
+    "debug": "node debug/server.js",
     "clean": "rm -rf dist dist.browser",
     "docs": "typedoc --out docs --name crosis src/index.ts node_modules/@replit/protocol/index.d.ts",
     "test": "jest --no-cache",

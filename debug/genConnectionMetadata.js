@@ -1,53 +1,59 @@
 /* eslint-disable  @typescript-eslint/no-var-requires */
-const crypto = require('crypto');
+const { api } = require('@replit/protocol');
+const paseto = require('./paseto');
 
-const { TOKEN_SECRET } = process.env;
+const keyId = process.env.USER_KEY_ID;
+const govalPrivateKey = process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/, '\n');
+const govalPublicKey = process.env.USER_PUBLIC_KEY_PEM.replace(/\\n/, '\n');
 
-if (!TOKEN_SECRET) {
-  throw new Error('TOKEN_SECRET env variable is required to run tests');
+if (!keyId || !govalPrivateKey || !govalPublicKey) {
+  throw new Error('expected all token keys to be present');
 }
 
 function genConnectionMetadata() {
-  const opts = {
-    id: `testing-crosis-${Math.random().toString(36).split('.')[1]}`,
-    mem: 1024 * 1024 * 512,
-    thread: 0.5,
-    share: 0.5,
-    net: true,
-    attach: true,
-    bucket: 'test-replit-repls',
-    ephemeral: true,
-    nostore: true,
-    language: 'bash',
-    owner: true,
-    path: Math.random().toString(36).split('.')[1],
-    disk: 1024 * 1024 * 1024,
-    bearerName: 'crosistest',
-    bearerId: 2,
-    presenced: true,
-    user: 'crosistest',
-    pullFiles: true,
-    polygott: false,
-    format: 'pbuf',
-  };
-  const encodedOpts = Buffer.from(
-    JSON.stringify({
-      created: Date.now(),
-      salt: Math.random().toString(36).split('.')[1],
-      ...opts,
-    }),
-  ).toString('base64');
+  const now = Date.now();
 
-  const hmac = crypto.createHmac('sha256', TOKEN_SECRET);
-  hmac.update(encodedOpts);
-  const msgMac = hmac.digest('base64');
+  const token = api.ReplToken.create({
+    iat: {
+      seconds: Math.floor(now / 1000) - 15, // Account for some amount of clock drift.
+    },
+    exp: {
+      seconds: Math.floor(now / 1000) + 60 * 60,
+    },
+    cluster: 'global',
+    persistence: api.ReplToken.Persistence.NONE,
+    format: api.ReplToken.WireFormat.PROTOBUF,
+    repl: {
+      id: `testing-crosis-${Math.random().toString(36).split('.')[1]}`,
+      language: 'bash',
+      slug: Math.random().toString(36).slice(2),
+      user: 'crosistest',
+      bucket: 'test-replit-repls',
+    },
+    resourceLimits: {
+      memory: 1024 * 1024 * 512,
+      threads: 0.5,
+      shares: 0.5,
+      disk: 1024 * 1024 * 1024,
+      net: true,
+    },
+  });
 
-  const token = Buffer.from(`${encodedOpts}:${msgMac}`);
+  const encodedOpts = api.ReplToken.encode(token).finish().toString('base64');
+  const encodedToken = paseto.sign(
+    govalPrivateKey,
+    Buffer.from(encodedOpts),
+    Buffer.from(
+      api.GovalTokenMetadata.encode(api.GovalTokenMetadata.create({ keyId }))
+        .finish()
+        .toString('base64'),
+    ),
+  );
 
   return {
-    token: token.toString('base64'),
-    gurl: 'ws://eval.repl.it',
-    conmanURL: 'http://eval.repl.it',
+    token: encodedToken,
+    gurl: 'wss://eval.global.replit.com',
+    conmanURL: 'https://eval.global.replit.com',
   };
 }
 
