@@ -269,6 +269,65 @@ test('channel open and close', (done) => {
   });
 });
 
+test('channel accepts a thunk for service', (done) => {
+  const onUnrecoverableError = jest.fn<void, [Error]>();
+  const context = { username: 'aghanim' };
+  const client = new Client<typeof context>();
+  client.setUnrecoverableErrorHandler(done);
+
+  const channelClose = jest.fn();
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context,
+    },
+    ({ channel, error }) => {
+      expect(error).toEqual(null);
+      expect(channel?.status).toBe('open');
+
+      return () => {
+        expect(channelClose).toHaveBeenCalled();
+
+        expect(onUnrecoverableError).toHaveBeenCalledTimes(0);
+        done();
+      };
+    },
+  );
+
+  const close = client.openChannel(
+    {
+      service: (ctx) => {
+        expect(ctx.username).toEqual('aghanim');
+
+        return 'exec';
+      },
+    },
+    ({ channel, error }) => {
+      expect(channel?.status).toBe('open');
+      expect(error).toBe(null);
+
+      setTimeout(() => {
+        close();
+        expect(channel?.status).toBe('closing');
+      });
+
+      return ({ willReconnect }) => {
+        expect(willReconnect).toBeFalsy();
+        expect(channel?.status).toBe('closed');
+
+        channelClose();
+        client.close();
+      };
+    },
+  );
+});
+
 test('channel open and close from within openChannelCb synchornously', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
