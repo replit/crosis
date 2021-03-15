@@ -3,8 +3,8 @@ const { api } = require('@replit/protocol');
 const paseto = require('./paseto');
 
 const keyId = process.env.USER_KEY_ID;
-const govalPrivateKey = process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/, '\n');
-const govalPublicKey = process.env.USER_PUBLIC_KEY_PEM.replace(/\\n/, '\n');
+const govalPrivateKey = crypto.createPrivateKey(process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/, '\n'));
+const govalPublicKey = crypto.createPublicKey(process.env.USER_PUBLIC_KEY_PEM.replace(/\\n/, '\n'));
 
 if (!keyId || !govalPrivateKey || !govalPublicKey) {
   throw new Error('expected all token keys to be present');
