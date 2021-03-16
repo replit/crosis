@@ -9,7 +9,7 @@ if (!(process.env.USER_KEY_ID || process.env.USER_PRIVATE_KEY_PEM)) {
 
 const keyId = process.env.USER_KEY_ID;
 const govalPrivateKey = crypto.createPrivateKey(
-  process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/, '\n'),
+  process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/g, '\n'),
 );
 
 function genConnectionMetadata() {
