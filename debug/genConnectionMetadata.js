@@ -1,9 +1,12 @@
 /* eslint-disable  @typescript-eslint/no-var-requires */
+const crypto = require('crypto');
 const { api } = require('@replit/protocol');
 const paseto = require('./paseto');
 
 const keyId = process.env.USER_KEY_ID;
-const govalPrivateKey = crypto.createPrivateKey(process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/, '\n'));
+const govalPrivateKey = crypto.createPrivateKey(
+  process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/, '\n'),
+);
 const govalPublicKey = crypto.createPublicKey(process.env.USER_PUBLIC_KEY_PEM.replace(/\\n/, '\n'));
 
 if (!keyId || !govalPrivateKey || !govalPublicKey) {
