@@ -10,12 +10,6 @@ const genConnectionMetadata = require('../../debug/genConnectionMetadata');
 // eslint-disable-next-line
 const WebSocket = require('ws');
 
-const TOKEN_SECRET = process.env.TOKEN_SECRET as string;
-
-if (!TOKEN_SECRET) {
-  throw new Error('TOKEN_SECRET env variable is required to run tests');
-}
-
 function genToken() {
   return genConnectionMetadata().token;
 }

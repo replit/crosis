@@ -53,7 +53,7 @@ type ChannelRequest<Ctx> =
 
 const defaultUrlOptions = {
   secure: true,
-  host: 'eval.repl.it',
+  host: 'eval.global.replit.com',
   port: '443',
 };
 

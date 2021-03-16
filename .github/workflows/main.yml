@@ -30,5 +30,6 @@ jobs:
 
       - name: Test
         env:
-          TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}
+          USER_KEY_ID: ${{ secrets.USER_KEY_ID }}
+          USER_PRIVATE_KEY_PEM: ${{ secrets.USER_PRIVATE_KEY_PEM }}
         run: yarn run test
