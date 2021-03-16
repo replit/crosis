@@ -110,11 +110,21 @@ export type ChannelCloseReason =
     };
 
 /**
+ * When opening a channel, the service parameter
+ * accepts passing in a function that returns a
+ * service name. Use this when you need to use context
+ * to determine which service to use.
+ */
+interface ServiceThunk<Ctx> {
+  (context: Ctx): string;
+}
+
+/**
  * See [[Client.openChannel]]
  */
 export interface ChannelOptions<Ctx> {
   name?: string;
-  service: string;
+  service: string | ServiceThunk<Ctx>;
   action?: api.OpenChannel.Action;
   skip?: (context: Ctx) => boolean;
 }
