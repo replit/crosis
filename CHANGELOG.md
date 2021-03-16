@@ -1,3 +1,15 @@
+#### v6.2.0
+Added Client.getConnectionMetadata() This change adds a way of obtaining the connection metadata for the WebSocket. This allows obtaining the connection's token, among other things.
+
+Allow passing a thunk (function) to the `service` property of `openChannel` this function expects a string returned for the service name. The function is passed the context.
+
+Default url changed to the global cluster, `eval.repl.it` is no longer supported by the backend.
+
+For tests and debug mode new environment variables are needed. See README
+
+#### v6.1.0
+Added long polling support. If the websocket connection fails 3 times in a row we now fallback to using polling using Engine-io and a proxy that talks to the backend.
+
 #### v6.0.0 [BREAKING]
 
 The client has been reworked to handle reconnection internally. The API is drastically different but the general concepts
