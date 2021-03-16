@@ -3,15 +3,14 @@ const crypto = require('crypto');
 const { api } = require('@replit/protocol');
 const paseto = require('./paseto');
 
+if (!(process.env.USER_KEY_ID || process.env.USER_PRIVATE_KEY_PEM)) {
+  throw new Error('Expected USER_KEY_ID and USER_PRIVATE_KEY_PEM in ENV');
+}
+
 const keyId = process.env.USER_KEY_ID;
 const govalPrivateKey = crypto.createPrivateKey(
   process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/, '\n'),
 );
-const govalPublicKey = crypto.createPublicKey(process.env.USER_PUBLIC_KEY_PEM.replace(/\\n/, '\n'));
-
-if (!keyId || !govalPrivateKey || !govalPublicKey) {
-  throw new Error('expected all token keys to be present');
-}
 
 function genConnectionMetadata() {
   const now = Date.now();
