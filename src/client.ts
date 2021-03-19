@@ -367,7 +367,13 @@ export class Client<Ctx extends unknown = null> {
    *```
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>): (() => void) => {
-    if (options.name && this.channelRequests.some((cr) => cr.options.name === options.name)) {
+    if (
+      options.name &&
+      this.channelRequests.some((cr) => !cr.closeRequested && cr.options.name === options.name)
+    ) {
+      // The protocol forbids opening a channel with the same name, so we're gonna prevent that early
+      // so that we can give the caller a good stack trace to work with. If the channel is queued for
+      // closure then we allow it.
       const error = new Error(`Channel with name ${options.name} already opened`);
       this.onUnrecoverableError(error);
 
