@@ -628,6 +628,39 @@ test('client rejects opening same channel twice', () => {
   }).toThrow();
 });
 
+test('allows opening channel with the same name while if others are closing', (done) => {
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(done);
+
+  const name = Math.random().toString();
+
+  const close = client.openChannel({ name, service: 'exec' }, () => {
+    setTimeout(() => {
+      close();
+      // open same name synchronously
+      client.openChannel({ name, service: 'exec' }, ({ channel }) => {
+        expect(channel).toBeTruthy();
+        client.close();
+
+        done();
+      });
+    });
+  });
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    () => {},
+  );
+});
+
 test('client reconnects unexpected disconnects', (done) => {
   const onUnrecoverableError = jest.fn<void, [Error]>();
   const client = new Client();
