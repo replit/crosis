@@ -58,12 +58,6 @@ type ChannelRequest<Ctx> =
       cleanupCb: null;
     };
 
-const defaultUrlOptions = {
-  secure: true,
-  host: 'eval.global.replit.com',
-  port: '443',
-};
-
 export class Client<Ctx extends unknown = null> {
   /**
    * Indicates the current state of the connection with the container.
@@ -247,38 +241,6 @@ export class Client<Ctx extends unknown = null> {
       throw error;
     }
 
-    let { fetchConnectionMetadata } = options;
-    if (!fetchConnectionMetadata || typeof fetchConnectionMetadata !== 'function') {
-      const { fetchToken } = options;
-      if (!fetchToken || typeof fetchToken !== 'function') {
-        const error = new Error('You must provide a fetchConnectionMetadata/fetchToken function');
-        this.onUnrecoverableError(error);
-
-        // throw to stop the execution of the caller
-        throw error;
-      }
-      const { secure, host, port } = options.urlOptions || defaultUrlOptions;
-
-      fetchConnectionMetadata = async (abortSignal: AbortSignal) => {
-        try {
-          const { token, aborted } = await fetchToken(abortSignal);
-          if (aborted || !token) {
-            return { error: FetchConnectionMetadataError.Aborted };
-          }
-          return {
-            token,
-            gurl: `ws${secure ? 's' : ''}://${host}:${port}`,
-            conmanURL: `http${secure ? 's' : ''}://${host}:${port}`,
-            error: null,
-          };
-        } catch (e) {
-          return {
-            error: e,
-          };
-        }
-      };
-    }
-
     if (this.destroyed) {
       const error = new Error('Client has been destroyed and cannot be re-used');
       this.onUnrecoverableError(error);
@@ -288,7 +250,6 @@ export class Client<Ctx extends unknown = null> {
     }
 
     this.connectOptions = {
-      fetchConnectionMetadata,
       timeout: 10000,
       ...options,
     };

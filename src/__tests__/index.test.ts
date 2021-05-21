@@ -10,10 +10,6 @@ const genConnectionMetadata = require('../../debug/genConnectionMetadata');
 // eslint-disable-next-line
 const WebSocket = require('ws');
 
-function genToken() {
-  return genConnectionMetadata().token;
-}
-
 jest.setTimeout(10 * 1000);
 
 test('client connect', (done) => {
@@ -75,32 +71,6 @@ test('client connect with connection metadata retry', (done) => {
     },
     ({ channel, error, context }) => {
       expect(tryCount).toBe(2);
-      expect(channel?.status).toBe('open');
-      expect(context).toBe(ctx);
-      expect(error).toEqual(null);
-
-      client.close();
-
-      return () => {
-        done();
-      };
-    },
-  );
-});
-
-test('client connect (fetchToken)', (done) => {
-  const client = new Client<{ username: string }>();
-  client.setUnrecoverableErrorHandler(done);
-
-  const ctx = { username: 'zyzz' };
-
-  client.open(
-    {
-      fetchToken: () => Promise.resolve({ token: genToken(), aborted: false }),
-      WebSocketClass: WebSocket,
-      context: ctx,
-    },
-    ({ channel, error, context }) => {
       expect(channel?.status).toBe('open');
       expect(context).toBe(ctx);
       expect(error).toEqual(null);
