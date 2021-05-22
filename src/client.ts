@@ -882,6 +882,11 @@ export class Client<Ctx extends unknown = null> {
     this.ws = ws;
     this.connectionMetadata = connectionMetadata;
 
+    // We'll use this to determine whether or not we should consider the next
+    // failure a websocket failure and fallback to polling. If we were able to
+    // pass the handshake phase at some point, then websockets work fine.
+    let didWebsocketsWork = false;
+
     /**
      * Failure can happen due to a number of reasons
      * 1- Abrupt socket closure
@@ -912,6 +917,15 @@ export class Client<Ctx extends unknown = null> {
       }
 
       onFailed(new Error('WebSocket closed before we got READY'));
+    };
+
+    ws.onopen = () => {
+      if (WebSocketClass === EIOCompat) {
+        return;
+      }
+
+      // From this point on, we count this connection as successful.
+      didWebsocketsWork = true;
     };
 
     /**
@@ -957,11 +971,6 @@ export class Client<Ctx extends unknown = null> {
       resetTimeout();
     }
 
-    // We'll use this to determine whether or not we should consider the next
-    // failure a websocket failure and fallback to polling. If we were able to
-    // receive any messages on channel 0, then websockets work fine.
-    let didReceiveAnyCommand = false;
-
     /**
      * Listen to incoming commands
      * Every time we get a message we reset the connection timeout (if it exists)
@@ -974,7 +983,6 @@ export class Client<Ctx extends unknown = null> {
      * and connection should be dropped
      */
     const unlistenChan0 = chan0.onCommand((cmd: api.Command) => {
-      didReceiveAnyCommand = true;
       // Everytime we get a message on channel0
       // we will reset the timeout
       resetTimeout();
@@ -1070,7 +1078,7 @@ export class Client<Ctx extends unknown = null> {
 
       this.retryConnect({
         tryCount: tryCount + 1,
-        websocketFailureCount: didReceiveAnyCommand ? 0 : websocketFailureCount + 1,
+        websocketFailureCount: didWebsocketsWork ? 0 : websocketFailureCount + 1,
         chan0,
         error,
       });
@@ -1375,6 +1383,7 @@ export class Client<Ctx extends unknown = null> {
 
     ws.onmessage = null;
     ws.onclose = null;
+    ws.onopen = null;
 
     // Replace exististing error handler so an error doesn't get thrown.
     // We got here after either `handleClose` so it is safe to ignore
