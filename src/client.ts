@@ -3,7 +3,14 @@ import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
 import { EIOCompat } from './util/EIOCompat';
 import { FetchConnectionMetadataError, ConnectionState } from './types';
-import type { ConnectOptions, OpenChannelCb, ChannelOptions, DebugLog, OpenOptions } from './types';
+import type {
+  ConnectOptions,
+  GovalMetadata,
+  OpenChannelCb,
+  ChannelOptions,
+  DebugLog,
+  OpenOptions,
+} from './types';
 
 enum ClientCloseReason {
   /**
@@ -50,12 +57,6 @@ type ChannelRequest<Ctx> =
       channelId: null;
       cleanupCb: null;
     };
-
-const defaultUrlOptions = {
-  secure: true,
-  host: 'eval.repl.it',
-  port: '443',
-};
 
 export class Client<Ctx extends unknown = null> {
   /**
@@ -167,6 +168,13 @@ export class Client<Ctx extends unknown = null> {
   private destroyed: boolean;
 
   /**
+   * The metadata for the current connection.
+   *
+   * @hidden
+   */
+  private connectionMetadata: GovalMetadata | null;
+
+  /**
    * @typeParam Ctx  context, passed to various callbacks, specified when calling {@link Client.open | open}
    */
   constructor() {
@@ -182,6 +190,7 @@ export class Client<Ctx extends unknown = null> {
     this.retryTimeoutId = null;
     this.fetchTokenAbortController = null;
     this.destroyed = false;
+    this.connectionMetadata = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -232,38 +241,6 @@ export class Client<Ctx extends unknown = null> {
       throw error;
     }
 
-    let { fetchConnectionMetadata } = options;
-    if (!fetchConnectionMetadata || typeof fetchConnectionMetadata !== 'function') {
-      const { fetchToken } = options;
-      if (!fetchToken || typeof fetchToken !== 'function') {
-        const error = new Error('You must provide a fetchConnectionMetadata/fetchToken function');
-        this.onUnrecoverableError(error);
-
-        // throw to stop the execution of the caller
-        throw error;
-      }
-      const { secure, host, port } = options.urlOptions || defaultUrlOptions;
-
-      fetchConnectionMetadata = async (abortSignal: AbortSignal) => {
-        try {
-          const { token, aborted } = await fetchToken(abortSignal);
-          if (aborted || !token) {
-            return { error: FetchConnectionMetadataError.Aborted };
-          }
-          return {
-            token,
-            gurl: `ws${secure ? 's' : ''}://${host}:${port}`,
-            conmanURL: `http${secure ? 's' : ''}://${host}:${port}`,
-            error: null,
-          };
-        } catch (e) {
-          return {
-            error: e,
-          };
-        }
-      };
-    }
-
     if (this.destroyed) {
       const error = new Error('Client has been destroyed and cannot be re-used');
       this.onUnrecoverableError(error);
@@ -273,7 +250,6 @@ export class Client<Ctx extends unknown = null> {
     }
 
     this.connectOptions = {
-      fetchConnectionMetadata,
       timeout: 10000,
       ...options,
     };
@@ -352,7 +328,13 @@ export class Client<Ctx extends unknown = null> {
    *```
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>): (() => void) => {
-    if (options.name && this.channelRequests.some((cr) => cr.options.name === options.name)) {
+    if (
+      options.name &&
+      this.channelRequests.some((cr) => !cr.closeRequested && cr.options.name === options.name)
+    ) {
+      // The protocol forbids opening a channel with the same name, so we're gonna prevent that early
+      // so that we can give the caller a good stack trace to work with. If the channel is queued for
+      // closure then we allow it.
       const error = new Error(`Channel with name ${options.name} already opened`);
       this.onUnrecoverableError(error);
 
@@ -437,12 +419,17 @@ export class Client<Ctx extends unknown = null> {
       return;
     }
 
+    const service =
+      typeof options.service === 'string'
+        ? options.service
+        : options.service(this.connectOptions.context);
+
     this.debug({
       type: 'breadcrumb',
       message: 'handleOpenChannel',
       data: {
         name: options.name,
-        service: options.service,
+        service,
         action,
       },
     });
@@ -462,7 +449,7 @@ export class Client<Ctx extends unknown = null> {
       ref,
       openChan: {
         name: options.name,
-        service: options.service,
+        service,
         action,
       },
     });
@@ -718,6 +705,12 @@ export class Client<Ctx extends unknown = null> {
     this.userUnrecoverableErrorHandler = onUnrecoverableError;
   };
 
+  /**
+   * Gets the current connection metadata used by the WebSocket, or null if the
+   * WebSocket is not present.
+   */
+  public getConnectionMetadata = (): GovalMetadata | null => this.connectionMetadata;
+
   /** @hidden */
   private connect = async ({
     tryCount,
@@ -792,81 +785,85 @@ export class Client<Ctx extends unknown = null> {
     });
     this.channels[0] = chan0;
 
-    if (this.fetchTokenAbortController) {
-      this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
+    if (this.connectionMetadata === null) {
+      if (this.fetchTokenAbortController) {
+        this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
 
-      return;
-    }
+        return;
+      }
 
-    const abortController = new AbortController();
-    this.fetchTokenAbortController = abortController;
+      const abortController = new AbortController();
+      this.fetchTokenAbortController = abortController;
 
-    let connectionMetadataFetchResult;
-    try {
-      connectionMetadataFetchResult = await this.connectOptions.fetchConnectionMetadata(
-        abortController.signal,
-      );
-    } catch (e) {
-      this.onUnrecoverableError(e);
+      let connectionMetadataFetchResult;
+      try {
+        connectionMetadataFetchResult = await this.connectOptions.fetchConnectionMetadata(
+          abortController.signal,
+        );
+      } catch (e) {
+        this.onUnrecoverableError(e);
 
-      return;
-    }
+        return;
+      }
 
-    this.fetchTokenAbortController = null;
+      this.fetchTokenAbortController = null;
 
-    const connectionMetadata = connectionMetadataFetchResult;
-    const aborted = connectionMetadata.error === FetchConnectionMetadataError.Aborted;
+      const connectionMetadata = connectionMetadataFetchResult;
+      const aborted = connectionMetadata.error === FetchConnectionMetadataError.Aborted;
 
-    if (abortController.signal.aborted !== aborted) {
-      // the aborted return value and the abort signal should be equivalent
-      if (abortController.signal.aborted) {
-        // In cases where our abort signal has been called means `client.close` was called
-        // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
+      if (abortController.signal.aborted !== aborted) {
+        // the aborted return value and the abort signal should be equivalent
+        if (abortController.signal.aborted) {
+          // In cases where our abort signal has been called means `client.close` was called
+          // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
+          this.onUnrecoverableError(
+            new Error(
+              'Expected abort returned from fetchConnectionMetadata to be truthy when the controller aborts',
+            ),
+          );
+
+          return;
+        }
+
+        // the user shouldn't return abort without the abort signal being called, if aborting is desired
+        // client.close should be called
         this.onUnrecoverableError(
-          new Error(
-            'Expected abort returned from fetchConnectionMetadata to be truthy when the controller aborts',
-          ),
+          new Error('Abort should only be truthy returned when the abort signal is triggered'),
         );
 
         return;
       }
 
-      // the user shouldn't return abort without the abort signal being called, if aborting is desired
-      // client.close should be called
-      this.onUnrecoverableError(
-        new Error('Abort should only be truthy returned when the abort signal is triggered'),
-      );
+      if (connectionMetadata.error === FetchConnectionMetadataError.Aborted) {
+        // Just return. The user called `client.close leading to a connectionMetadata abort
+        // chan0Cb will be called with with an error Channel close, no need to do anything here.
+        return;
+      }
 
-      return;
-    }
+      if (connectionMetadata.error === FetchConnectionMetadataError.Retriable) {
+        this.retryConnect({
+          tryCount: tryCount + 1,
+          websocketFailureCount,
+          chan0,
+          error: new Error('Retriable error'),
+        });
 
-    if (connectionMetadata.error === FetchConnectionMetadataError.Aborted) {
-      // Just return. The user called `client.close leading to a connectionMetadata abort
-      // chan0Cb will be called with with an error Channel close, no need to do anything here.
-      return;
-    }
+        return;
+      }
 
-    if (connectionMetadata.error === FetchConnectionMetadataError.Retriable) {
-      this.retryConnect({
-        tryCount: tryCount + 1,
-        websocketFailureCount,
-        chan0,
-        error: new Error('Retriable error'),
-      });
+      if (this.connectionState !== ConnectionState.CONNECTING) {
+        this.onUnrecoverableError(new Error('Client was closed before connecting'));
 
-      return;
-    }
+        return;
+      }
 
-    if (this.connectionState !== ConnectionState.CONNECTING) {
-      this.onUnrecoverableError(new Error('Client was closed before connecting'));
+      if (connectionMetadata.error) {
+        this.onUnrecoverableError(connectionMetadata.error);
 
-      return;
-    }
+        return;
+      }
 
-    if (connectionMetadata.error) {
-      this.onUnrecoverableError(connectionMetadata.error);
-
-      return;
+      this.connectionMetadata = connectionMetadata;
     }
 
     if (websocketFailureCount === 3) {
@@ -881,12 +878,23 @@ export class Client<Ctx extends unknown = null> {
     const WebSocketClass = isPolling
       ? EIOCompat
       : getWebSocketClass(this.connectOptions.WebSocketClass);
-    const connStr = getConnectionStr(connectionMetadata, isPolling);
+    const connStr = getConnectionStr(this.connectionMetadata, isPolling);
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
     ws.onmessage = this.onSocketMessage;
     this.ws = ws;
+
+    // We'll use this to determine whether or not we should consider the next
+    // failure a websocket failure and fallback to polling. If we were able to
+    // pass the handshake phase at some point, then websockets work fine.
+    let didWebsocketsWork = false;
+
+    // We'll use this to determine whether or not we should consider the next
+    // polling implementation failure to require a fresh metadata. If we were
+    // able to receive any messages on channel 0, then the current metadata
+    // should still be valid.
+    let didReceiveAnyCommand = false;
 
     /**
      * Failure can happen due to a number of reasons
@@ -910,14 +918,38 @@ export class Client<Ctx extends unknown = null> {
     /**
      * Abrupt socket closures should report failed
      */
-    ws.onclose = () => {
+    ws.onclose = (event: CloseEvent | Event) => {
       if (!onFailed) {
         this.onUnrecoverableError(new Error('Got websocket closure but no `onFailed` cb'));
 
         return;
       }
 
+      if (WebSocketClass === EIOCompat) {
+        if (!didReceiveAnyCommand) {
+          // The polling implementation doesn't convey the Websocket close
+          // event. Let's assume that we need to request a new token.
+          this.connectionMetadata = null;
+        }
+      } else if ('code' in event) {
+        const closeEvent = <CloseEvent>event;
+        const closeCodePolicyViolation = 1008;
+        if (closeEvent.code === closeCodePolicyViolation) {
+          // This means that the token was rejected. We need to fetch another one.
+          this.connectionMetadata = null;
+        }
+      }
+
       onFailed(new Error('WebSocket closed before we got READY'));
+    };
+
+    ws.onopen = () => {
+      if (WebSocketClass === EIOCompat) {
+        return;
+      }
+
+      // From this point on, we count this connection as successful.
+      didWebsocketsWork = true;
     };
 
     /**
@@ -962,11 +994,6 @@ export class Client<Ctx extends unknown = null> {
 
       resetTimeout();
     }
-
-    // We'll use this to determine whether or not we should consider the next
-    // failure a websocket failure and fallback to polling. If we were able to
-    // receive any messages on channel 0, then websockets work fine.
-    let didReceiveAnyCommand = false;
 
     /**
      * Listen to incoming commands
@@ -1076,7 +1103,7 @@ export class Client<Ctx extends unknown = null> {
 
       this.retryConnect({
         tryCount: tryCount + 1,
-        websocketFailureCount: didReceiveAnyCommand ? 0 : websocketFailureCount + 1,
+        websocketFailureCount: didWebsocketsWork ? 0 : websocketFailureCount + 1,
         chan0,
         error,
       });
@@ -1380,6 +1407,7 @@ export class Client<Ctx extends unknown = null> {
 
     ws.onmessage = null;
     ws.onclose = null;
+    ws.onopen = null;
 
     // Replace exististing error handler so an error doesn't get thrown.
     // We got here after either `handleClose` so it is safe to ignore

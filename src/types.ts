@@ -53,16 +53,11 @@ export interface UrlOptions {
 /**
  * Connection options supplied to [[Client.open]]
  *
- * The only required option is `fetchConnectionMetadata` (falling back to
- * `fetchToken`), all others are optional and will use defaults.
- *
- * TODO(lhchavez): Once the migration is done, drop `fetchToken` and only use
- * `fetchConnectionMetadata`.
+ * The only required option is `fetchConnectionMetadata`, all others are
+ * optional and will use defaults.
  */
 export interface OpenOptions<Ctx> extends Partial<ConnectOptions<Ctx>> {
-  fetchToken?: (
-    abortSignal: AbortSignal,
-  ) => Promise<{ token: null; aborted: true } | { token: string; aborted: false }>;
+  fetchConnectionMetadata: (abortSignal: AbortSignal) => Promise<FetchConnectionMetadataResult>;
   urlOptions?: UrlOptions;
   context: Ctx;
 }
@@ -110,11 +105,21 @@ export type ChannelCloseReason =
     };
 
 /**
+ * When opening a channel, the service parameter
+ * accepts passing in a function that returns a
+ * service name. Use this when you need to use context
+ * to determine which service to use.
+ */
+interface ServiceThunk<Ctx> {
+  (context: Ctx): string;
+}
+
+/**
  * See [[Client.openChannel]]
  */
 export interface ChannelOptions<Ctx> {
   name?: string;
-  service: string;
+  service: string | ServiceThunk<Ctx>;
   action?: api.OpenChannel.Action;
   skip?: (context: Ctx) => boolean;
 }

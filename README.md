@@ -12,7 +12,7 @@ Read about the protocol here http://protodoc.turbio.repl.co
 
 ### Usage and concepts
 
-The central concept is a "channel" that you can send commands to and receive commands from. Communicating with channels requires a network connection. The goal of this client is to provide an API to manage the connection (including disconnects and reconnects), opening channels, and a way to send a receive messages/commands on channels. How you handle this is up to you and depends on the desired UX. In some cases you'll want to disable UI to prevent any new messages being sent when offline and then re-enable once connected agian. In other cases you might want to give the user the illusion that they are connected and queue message locally while disconnected and send them once reconnected.
+The central concept is a "channel" that you can send commands to and receive commands from. Communicating with channels requires a network connection. The goal of this client is to provide an API to manage the connection (including disconnects and reconnects), opening channels, and a way to send a receive messages/commands on channels. How you handle this is up to you and depends on the desired UX. In some cases you'll want to disable UI to prevent any new messages from being sent when offline and then re-enable once connected again. In other cases you might want to give the user the illusion that they are connected and queue messages locally while disconnected and send them once reconnected.
 
 Here is an example usage, for more details on usage please refer to the API docs at https://crosisdoc.util.repl.co/
 
@@ -114,13 +114,13 @@ const closeChannel = client.openChannel({ service: 'exec' }, function open({ cha
 To run tests run
 
 ```bash
-TOKEN_SECRET=XXXXXXXXXX yarn test
+USER_KEY_ID=XXXX USER_PRIVATE_KEY_PEM=XXXX yarn test
 ```
 
 To interact with a connected client in the browser run
 
 ```bash
-TOKEN_SECRET=XXXXXXXXXX yarn debug
+USER_KEY_ID=XXXX USER_PRIVATE_KEY_PEM=XXXX yarn debug
 ```
 
 You can then access the client from the console an send messages like:
@@ -131,6 +131,6 @@ window.client.send({ exec: { args: ['kill', '1'] } });
 
 ### Releasing
 
-To release, just run `TOKEN_SECRET=XXXXXXXXXX yarn version`, it will prompt you for a version, then it will push to github and release to npm.
+To release, just run `USER_KEY_ID=XXXX USER_PRIVATE_KEY_PEM=XXXX yarn version`, it will prompt you for a version, then it will push to github and release to npm.
 
 To update documentation, go to https://crosisdoc.util.repl.co/__repl and run `. ./updatedocs.sh`

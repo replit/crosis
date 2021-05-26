@@ -1303,9 +1303,9 @@
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
 "@replit/protocol@0.x.x":
-  version "0.2.16"
-  resolved "https://registry.yarnpkg.com/@replit/protocol/-/protocol-0.2.16.tgz#7d39b30db7549388af88b6c07bf0ce0b6ae90076"
-  integrity sha512-3RWXkEB6sur5fCC1puAmKrXIQhwQEgPt/Mzy6oCCWdR4fFPpbmlkyby5Dnk50As5nyhx7mySPOYLeDG295Hi4w==
+  version "0.2.18"
+  resolved "https://registry.yarnpkg.com/@replit/protocol/-/protocol-0.2.18.tgz#ac57637d9616699ac3b2250cecd9a1cd7214edb0"
+  integrity sha512-AtQvBtncBXQ1+ow7sI6H/HqJeZvwVu4pHFxDN2Z70yw20f9pP+ctd7L1qMKF9zGvM0+D2T4Tk8rvh8AvN24mrA==
   dependencies:
     protobufjs "^6.10.2"
 
