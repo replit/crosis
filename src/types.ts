@@ -53,16 +53,11 @@ export interface UrlOptions {
 /**
  * Connection options supplied to [[Client.open]]
  *
- * The only required option is `fetchConnectionMetadata` (falling back to
- * `fetchToken`), all others are optional and will use defaults.
- *
- * TODO(lhchavez): Once the migration is done, drop `fetchToken` and only use
- * `fetchConnectionMetadata`.
+ * The only required option is `fetchConnectionMetadata`, all others are
+ * optional and will use defaults.
  */
 export interface OpenOptions<Ctx> extends Partial<ConnectOptions<Ctx>> {
-  fetchToken?: (
-    abortSignal: AbortSignal,
-  ) => Promise<{ token: null; aborted: true } | { token: string; aborted: false }>;
+  fetchConnectionMetadata: (abortSignal: AbortSignal) => Promise<FetchConnectionMetadataResult>;
   urlOptions?: UrlOptions;
   context: Ctx;
 }
