@@ -629,9 +629,9 @@ export class Client<Ctx extends unknown = null> {
     // Next up: we will check if there are any channels with the same name
     // that are queued up for opening. We have defered the opening of the channel
     // until after the current open one closes (see `openChannel`) because the
-    // protocol doesn't allow opening multiple channels with the same name.
+    // protocol doesn't allow opening multiple channels with the same name
 
-    if (!channelRequest.options.name || this.connectionState === ConnectionState.CONNECTED) {
+    if (!channelRequest.options.name || this.connectionState !== ConnectionState.CONNECTED) {
       return;
     }
 
