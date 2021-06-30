@@ -130,7 +130,7 @@ export interface ChannelOptions<Ctx> {
 export type OpenChannelCb<Ctx> = (
   res:
     | { error: null; channel: Channel; context: Ctx }
-    | { error: Error; channel: null; context: Ctx },
+    | { error: Error; channel: null; context: Ctx | null },
 ) => void | ((reason: ChannelCloseReason) => void);
 
 export interface RequestResult extends api.Command {

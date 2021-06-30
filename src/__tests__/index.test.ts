@@ -3,6 +3,7 @@
 import type { FetchConnectionMetadataResult } from '../types';
 import { Client, FetchConnectionMetadataError } from '..';
 import { getWebSocketClass } from '../util/helpers';
+import { Channel } from '../channel';
 
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
@@ -564,7 +565,7 @@ test('openChannel before open', (done) => {
   );
 });
 
-test('closing maintains openChannel requests', (done) => {
+test('closing client maintains openChannel requests', (done) => {
   const client = new Client();
 
   let first = true;
@@ -617,7 +618,6 @@ test('closing maintains openChannel requests', (done) => {
 
 test('client rejects opening same channel twice', () => {
   const client = new Client();
-  client.setUnrecoverableErrorHandler(() => {});
 
   const name = Math.random().toString();
   client.openChannel({ name, service: 'exec' }, () => {});
@@ -627,20 +627,24 @@ test('client rejects opening same channel twice', () => {
   }).toThrow();
 });
 
-test('allows opening channel with the same name while if others are closing', (done) => {
+test('allows opening channel with the same name after closing others and client is disconnected', (done) => {
   const client = new Client();
 
   const name = Math.random().toString();
 
-  const close = client.openChannel({ name, service: 'exec' }, () => {
-    setTimeout(() => {
-      close();
-      // open same name synchronously
-      client.openChannel({ name, service: 'exec' }, ({ channel }) => {
-        expect(channel).toBeTruthy();
-        client.close();
-      });
-    });
+  let calledFirstWithError = false;
+  const close = client.openChannel({ name, service: 'exec' }, ({ error }) => {
+    calledFirstWithError = Boolean(error);
+  });
+
+  close();
+  // open same name synchronously
+  client.openChannel({ name, service: 'exec' }, ({ channel }) => {
+    expect(channel).toBeTruthy();
+    expect(calledFirstWithError).toBeTruthy();
+    client.close();
+
+    done();
   });
 
   client.open(
@@ -653,8 +657,141 @@ test('allows opening channel with the same name while if others are closing', (d
       WebSocketClass: WebSocket,
       context: null,
     },
-    () => {
-      done();
+    () => {},
+  );
+});
+
+test('allows opening channel with the same name after others are closing others and client is connected', (done) => {
+  const client = new Client();
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ error }) => {
+      if (error) {
+        done(error);
+
+        return () => {};
+      }
+
+      const name = Math.random().toString();
+
+      let firstChannel: Channel;
+      const close = client.openChannel({ name, service: 'exec' }, ({ channel }) => {
+        expect(channel).toBeTruthy();
+
+        if (!channel) {
+          throw new Error('apease typescript');
+        }
+
+        firstChannel = channel;
+
+        expect(firstChannel.status).toEqual('closing');
+      });
+
+      // Close immediately
+      close();
+
+      // open same name synchronously
+      const close2 = client.openChannel({ name, service: 'exec' }, ({ channel: secondChannel }) => {
+        // ensure first channel opens
+        expect(firstChannel).toBeTruthy();
+        expect(secondChannel).toBeTruthy();
+        expect(secondChannel?.status).toEqual('open');
+        expect(secondChannel).not.toEqual(firstChannel);
+
+        // After the channel is opened close the current channel and open a new one
+        close2();
+        expect(secondChannel?.status).toEqual('closing');
+        const close3 = client.openChannel(
+          { name, service: 'exec' },
+          ({ channel: finalChannel }) => {
+            expect(finalChannel).toBeTruthy();
+            expect(finalChannel?.status).toEqual('open');
+            expect(finalChannel).not.toEqual(firstChannel);
+            expect(finalChannel).not.toEqual(secondChannel);
+
+            close3();
+
+            client.close();
+            done();
+          },
+        );
+      });
+
+      return () => {};
+    },
+  );
+});
+
+test('opens multiple anonymous channels while client is connected', (done) => {
+  const client = new Client();
+
+  let didDone = false;
+  const doneOnce = (e?: Error) => {
+    if (didDone) {
+      return;
+    }
+
+    didDone = true;
+    client.close();
+    done(e);
+  };
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel: chan0 }) => {
+      expect(chan0).toBeTruthy();
+
+      let firstOpened = false;
+      let secondOpened = false;
+
+      client.openChannel({ service: 'exec' }, ({ channel }) => {
+        if (firstOpened) {
+          doneOnce(new Error('exepected channel to open only once'));
+
+          return;
+        }
+
+        expect(channel).toBeTruthy();
+        firstOpened = true;
+
+        if (secondOpened) {
+          doneOnce();
+        }
+      });
+
+      client.openChannel({ service: 'exec' }, ({ channel }) => {
+        if (secondOpened) {
+          doneOnce(new Error('exepected channel to open only once'));
+
+          return;
+        }
+
+        expect(channel).toBeTruthy();
+        secondOpened = true;
+
+        if (firstOpened) {
+          doneOnce();
+        }
+      });
+
+      return () => {};
     },
   );
 });
