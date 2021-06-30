@@ -328,13 +328,14 @@ export class Client<Ctx extends unknown = null> {
    *```
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>): (() => void) => {
-    if (
-      options.name &&
-      this.channelRequests.some((cr) => !cr.closeRequested && cr.options.name === options.name)
-    ) {
+    const sameNameChanRequests = this.channelRequests.filter(
+      (cr) => cr.options.name === options.name,
+    );
+
+    if (options.name && sameNameChanRequests.some((cr) => !cr.closeRequested)) {
       // The protocol forbids opening a channel with the same name, so we're gonna prevent that early
-      // so that we can give the caller a good stack trace to work with. If the channel is queued for
-      // closure then we allow it.
+      // so that we can give the caller a good stack trace to work with.
+      // If the channel is queued for closure or is closing then we allow it.
       const error = new Error(`Channel with name ${options.name} already opened`);
       this.onUnrecoverableError(error);
 
@@ -363,23 +364,36 @@ export class Client<Ctx extends unknown = null> {
 
     if (this.connectionState === ConnectionState.CONNECTED) {
       // We're connected, open channel. Otherwise we'll open the channel once we connect
-      this.requestOpenChannel(channelRequest);
+      if (!sameNameChanRequests.length) {
+        // There are no channels queued for closure we have to open it here
+        // otherwise, after existing channels are done closing
+        this.requestOpenChannel(channelRequest);
+      }
     }
 
-    let calledClose = false;
     const closeChannel = () => {
-      if (calledClose) {
+      if (channelRequest.closeRequested) {
         return;
       }
 
-      calledClose = true;
       channelRequest.closeRequested = true;
 
       if (!channelRequest.isOpen) {
-        // Channel is not open, let's just remove it from our list.
-        // If there's an inflight open request then we'll be sending a close
-        // request right after it's done opening
-        this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
+        // Channel is not open and we're not connected, let's just remove it from our list.
+        // If we're connected, it means there's an inflight open request
+        // then we'll be sending a close request right after it's done opening
+        // so that we can use the channel ID when closing
+        if (this.connectionState !== ConnectionState.CONNECTED) {
+          this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
+
+          if (this.connectOptions) {
+            channelRequest.openChannelCb({
+              error: new Error('Channel closed before opening'),
+              channel: null,
+              context: this.connectOptions.context,
+            });
+          }
+        }
 
         return;
       }
@@ -426,7 +440,7 @@ export class Client<Ctx extends unknown = null> {
 
     this.debug({
       type: 'breadcrumb',
-      message: 'handleOpenChannel',
+      message: 'requestOpenChannel',
       data: {
         name: options.name,
         service,
@@ -506,17 +520,20 @@ export class Client<Ctx extends unknown = null> {
       // openChannelCb and once here.
       const { closeRequested } = channelRequest;
 
+      if (closeRequested) {
+        // While we're opening the channel, we got a request to close this channel
+        // let's take care of that and request a close.
+        // The reason we call it before `openChannelCb`
+        // is just to make sure that channel has a status
+        // of `closing`
+        this.requestCloseChannel(channelRequest);
+      }
+
       (channelRequest as ChannelRequest<Ctx>).cleanupCb = openChannelCb({
         channel,
         error: null,
         context: this.connectOptions.context,
       });
-
-      if (closeRequested) {
-        // While we're opening the channel, we got a request to close this channel
-        // let's take care of that and request a close
-        this.requestCloseChannel(channelRequest);
-      }
     });
   };
 
@@ -612,6 +629,20 @@ export class Client<Ctx extends unknown = null> {
     if (channelRequest.cleanupCb) {
       channelRequest.cleanupCb({ initiator: 'channel', willReconnect: false });
     }
+
+    if (!channelRequest.options.name) {
+      return;
+    }
+
+    const nextRequest = this.channelRequests.find(
+      (cr) => cr.options.name === channelRequest.options.name,
+    );
+
+    if (!nextRequest) {
+      return;
+    }
+
+    this.requestOpenChannel(nextRequest);
   };
 
   /**
@@ -1305,7 +1336,7 @@ export class Client<Ctx extends unknown = null> {
         }
       }
 
-      const { cleanupCb } = channelRequest;
+      const { cleanupCb, closeRequested } = channelRequest;
 
       // Re-set the channel request's state
       // TODO we should stop relying on mutating the same channelrequest
@@ -1322,6 +1353,12 @@ export class Client<Ctx extends unknown = null> {
           initiator: 'client',
           willReconnect: willChannelReconnect,
         });
+      }
+
+      if (closeRequested || channelRequest.closeRequested) {
+        // Channel closed earlier but we couldn't process the close request
+        // or closed during cleanupCb that we just called
+        this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
       }
     });
 
