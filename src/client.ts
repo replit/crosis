@@ -362,13 +362,11 @@ export class Client<Ctx extends unknown = null> {
 
     this.channelRequests.push(channelRequest);
 
-    if (this.connectionState === ConnectionState.CONNECTED) {
-      // We're connected, open channel. Otherwise we'll open the channel once we connect
-      if (!sameNameChanRequests.length) {
-        // There are no channels queued for closure we have to open it here
-        // otherwise, after existing channels are done closing
-        this.requestOpenChannel(channelRequest);
-      }
+    if (this.connectionState === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
+      // If we're not connected, then the request to open will go out once we're connected.
+      // If there are channels with the same name then this request is queued after the other
+      // channel(s) with the same name is done closing
+      this.requestOpenChannel(channelRequest);
     }
 
     const closeChannel = () => {
@@ -628,7 +626,12 @@ export class Client<Ctx extends unknown = null> {
       channelRequest.cleanupCb({ initiator: 'channel', willReconnect: false });
     }
 
-    if (!channelRequest.options.name) {
+    // Next up: we will check if there are any channels with the same name
+    // that are queued up for opening. We have defered the opening of the channel
+    // until after the current open one closes (see `openChannel`) because the
+    // protocol doesn't allow opening multiple channels with the same name.
+
+    if (!channelRequest.options.name || this.connectionState === ConnectionState.CONNECTED) {
       return;
     }
 
