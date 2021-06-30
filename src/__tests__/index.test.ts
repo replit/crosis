@@ -734,6 +734,71 @@ test('allows opening channel with the same name after others are closing others 
   );
 });
 
+test('opens multiple anonymous channels while client is connected', (done) => {
+  const client = new Client();
+
+  let didDone = false;
+  const doneOnce = (e?: Error) => {
+    if (didDone) {
+      return;
+    }
+
+    didDone = true;
+    client.close();
+    done(e);
+  };
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel: chan0 }) => {
+      expect(chan0).toBeTruthy();
+
+      let firstOpened = false;
+      let secondOpened = false;
+
+      client.openChannel({ service: 'exec' }, ({ channel }) => {
+        if (firstOpened) {
+          doneOnce(new Error('exepected channel to open only once'));
+
+          return;
+        }
+
+        expect(channel).toBeTruthy();
+        firstOpened = true;
+
+        if (secondOpened) {
+          doneOnce();
+        }
+      });
+
+      client.openChannel({ service: 'exec' }, ({ channel }) => {
+        if (secondOpened) {
+          doneOnce(new Error('exepected channel to open only once'));
+
+          return;
+        }
+
+        expect(channel).toBeTruthy();
+        secondOpened = true;
+
+        if (firstOpened) {
+          doneOnce();
+        }
+      });
+
+      return () => {};
+    },
+  );
+});
+
 test('client reconnects unexpected disconnects', (done) => {
   const client = new Client();
 

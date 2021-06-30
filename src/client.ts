@@ -328,11 +328,11 @@ export class Client<Ctx extends unknown = null> {
    *```
    */
   public openChannel = (options: ChannelOptions<Ctx>, cb: OpenChannelCb<Ctx>): (() => void) => {
-    const sameNameChanRequests = this.channelRequests.filter(
-      (cr) => cr.options.name === options.name,
-    );
+    const sameNameChanRequests = options.name
+      ? this.channelRequests.filter((cr) => cr.options.name === options.name)
+      : [];
 
-    if (options.name && sameNameChanRequests.some((cr) => !cr.closeRequested)) {
+    if (sameNameChanRequests.some((cr) => !cr.closeRequested)) {
       // The protocol forbids opening a channel with the same name, so we're gonna prevent that early
       // so that we can give the caller a good stack trace to work with.
       // If the channel is queued for closure or is closing then we allow it.
