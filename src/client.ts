@@ -386,13 +386,11 @@ export class Client<Ctx extends unknown = null> {
         if (this.connectionState !== ConnectionState.CONNECTED) {
           this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
 
-          if (this.connectOptions) {
-            channelRequest.openChannelCb({
-              error: new Error('Channel closed before opening'),
-              channel: null,
-              context: this.connectOptions.context,
-            });
-          }
+          channelRequest.openChannelCb({
+            error: new Error('Channel closed before opening'),
+            channel: null,
+            context: this.connectOptions ? this.connectOptions.context : null,
+          });
         }
 
         return;
@@ -1323,17 +1321,11 @@ export class Client<Ctx extends unknown = null> {
       } else if (!willChannelReconnect) {
         // channel won't reconnect and was never opened
         // we'll call the open channel callback with an error
-        if (this.connectOptions) {
-          channelRequest.openChannelCb({
-            channel: null,
-            error: new Error('Failed to open'),
-            context: this.connectOptions.context,
-          });
-        } else if (closeResult.closeReason !== ClientCloseReason.Error) {
-          this.onUnrecoverableError(new Error('Expected connectionOptions'));
-
-          return;
-        }
+        channelRequest.openChannelCb({
+          channel: null,
+          error: new Error('Failed to open'),
+          context: this.connectOptions ? this.connectOptions.context : null,
+        });
       }
 
       const { cleanupCb, closeRequested } = channelRequest;
@@ -1390,11 +1382,11 @@ export class Client<Ctx extends unknown = null> {
       });
       this.chan0CleanupCb = null;
     } else if (!willClientReconnect) {
-      if (this.chan0Cb && this.connectOptions) {
+      if (this.chan0Cb) {
         this.chan0Cb({
           channel: null,
           error: new Error('Failed to open'),
-          context: this.connectOptions.context,
+          context: this.connectOptions ? this.connectOptions.context : null,
         });
       } else if (closeResult.closeReason !== ClientCloseReason.Error) {
         // if we got here as a result of an error we're not gonna call onUnrecoverableError again

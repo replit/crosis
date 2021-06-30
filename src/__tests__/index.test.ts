@@ -634,12 +634,16 @@ test('allows opening channel with the same name after closing others and client 
 
   const name = Math.random().toString();
 
-  const close = client.openChannel({ name, service: 'exec' }, () => {});
+  let calledFirstWithError = false;
+  const close = client.openChannel({ name, service: 'exec' }, ({ error }) => {
+    calledFirstWithError = Boolean(error);
+  });
 
   close();
   // open same name synchronously
   client.openChannel({ name, service: 'exec' }, ({ channel }) => {
     expect(channel).toBeTruthy();
+    expect(calledFirstWithError).toBeTruthy();
     client.close();
 
     done();
