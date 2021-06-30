@@ -618,7 +618,6 @@ test('closing client maintains openChannel requests', (done) => {
 
 test('client rejects opening same channel twice', () => {
   const client = new Client();
-  client.setUnrecoverableErrorHandler(() => {});
 
   const name = Math.random().toString();
   client.openChannel({ name, service: 'exec' }, () => {});
@@ -630,7 +629,6 @@ test('client rejects opening same channel twice', () => {
 
 test('allows opening channel with the same name after closing others and client is disconnected', (done) => {
   const client = new Client();
-  client.setUnrecoverableErrorHandler(done);
 
   const name = Math.random().toString();
 
@@ -665,7 +663,6 @@ test('allows opening channel with the same name after closing others and client 
 
 test('allows opening channel with the same name after others are closing others and client is connected', (done) => {
   const client = new Client();
-  client.setUnrecoverableErrorHandler(done);
 
   client.open(
     {
