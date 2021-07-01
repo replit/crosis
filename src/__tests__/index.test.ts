@@ -641,7 +641,9 @@ test('closing client maintains openChannel requests', (done) => {
             WebSocketClass: WebSocket,
             context: null,
           },
-          () => {},
+          () => () => {
+            done();
+          },
         );
       }, 200);
     } else {
@@ -662,15 +664,14 @@ test('closing client maintains openChannel requests', (done) => {
     ({ channel }) => {
       expect(channel).toBeTruthy();
 
-      return () => {
-        done();
-      };
+      return () => {};
     },
   );
 });
 
 test('client rejects opening same channel twice', () => {
   const client = new Client();
+  client.setUnrecoverableErrorHandler(() => {});
 
   const name = Math.random().toString();
   client.openChannel({ name, service: 'exec' }, () => {});
