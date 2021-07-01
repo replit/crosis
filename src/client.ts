@@ -673,6 +673,10 @@ export class Client<Ctx extends unknown = null> {
       this.fetchTokenAbortController = null;
     }
 
+    // If the close is intentional, let's unset the metadata, the client
+    // may be re-used to connect to another repl
+    this.connectionMetadata = null;
+
     this.handleClose({ closeReason: ClientCloseReason.Intentional });
   };
 

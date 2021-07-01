@@ -171,6 +171,59 @@ test('client retries and caches tokens', (done) => {
   );
 });
 
+test('client requests new connection metadata after intentional close', (done) => {
+  const client = new Client();
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(channel?.status).toBe('open');
+      expect(error).toEqual(null);
+
+      client.close();
+
+      return () => {
+        // Gotta open in a timeout, opening in a tight loop makes it loop forever
+        setTimeout(() => {
+          let didCallFetchConnectionMetadata = false;
+          client.open(
+            {
+              fetchConnectionMetadata: () => {
+                didCallFetchConnectionMetadata = true;
+                return Promise.resolve({
+                  ...genConnectionMetadata(),
+                  error: null,
+                });
+              },
+              WebSocketClass: WebSocket,
+              context: null,
+            },
+            ({ channel: c2, error: e2 }) => {
+              expect(c2?.status).toBe('open');
+              expect(e2).toEqual(null);
+              expect(didCallFetchConnectionMetadata).toBeTruthy();
+
+              client.close();
+
+              return () => {
+                done();
+              };
+            },
+          );
+        });
+      };
+    },
+  );
+});
+
 test('channel closing itself when client willReconnect', (done) => {
   let disconnectTriggered = false;
   let clientOpenCount = 0;
@@ -588,7 +641,9 @@ test('closing client maintains openChannel requests', (done) => {
             WebSocketClass: WebSocket,
             context: null,
           },
-          () => {},
+          () => () => {
+            done();
+          },
         );
       }, 200);
     } else {
@@ -609,15 +664,14 @@ test('closing client maintains openChannel requests', (done) => {
     ({ channel }) => {
       expect(channel).toBeTruthy();
 
-      return () => {
-        done();
-      };
+      return () => {};
     },
   );
 });
 
 test('client rejects opening same channel twice', () => {
   const client = new Client();
+  client.setUnrecoverableErrorHandler(() => {});
 
   const name = Math.random().toString();
   client.openChannel({ name, service: 'exec' }, () => {});
