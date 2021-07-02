@@ -125,11 +125,19 @@ export class Client<Ctx extends unknown = null> {
   };
 
   /**
-   * Called for breadcrumbs and other debug reasons
+   * Called for breadcrumbs and other debug reasons. Use addDebugFunc
+   * instead
    *
    * @hidden
    */
-  private debug: (log: DebugLog) => void;
+  private legacyDebugFunc: undefined | ((log: DebugLog) => void);
+
+  /**
+   * Listeners to be called for breadcrumbs and other debug reasons
+   *
+   * @hidden
+   */
+  private debugFuncs: Array<(log: DebugLog) => void>;
 
   /**
    * A function supplied to us by the user of the client. Will be called
@@ -184,7 +192,7 @@ export class Client<Ctx extends unknown = null> {
     this.chan0Cb = null;
     this.chan0CleanupCb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
-    this.debug = () => {};
+    this.debugFuncs = [];
     this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
     this.retryTimeoutId = null;
@@ -726,9 +734,40 @@ export class Client<Ctx extends unknown = null> {
     return chan;
   };
 
-  /** Sets a logging/debugging function */
+  /**
+   * Calls all the registered logging/debugging functions
+   *
+   * @hidden
+   */
+  private debug = (log: DebugLog): void => {
+    if (this.legacyDebugFunc) {
+      this.legacyDebugFunc(log);
+    }
+    this.debugFuncs.forEach((func) => func(log));
+  };
+
+  /**
+   * Sets a logging/debugging function
+   *
+   * @deprecated use addDebugFunc instead
+   */
   public setDebugFunc = (debugFunc: (log: DebugLog) => void): void => {
-    this.debug = debugFunc;
+    this.legacyDebugFunc = debugFunc;
+  };
+
+  /**
+   * Adds a logging/debugging function. Returns a function that will remove
+   * the callback
+   */
+  public addDebugFunc = (debugFunc: (log: DebugLog) => void): (() => void) => {
+    this.debugFuncs.push(debugFunc);
+
+    return () => {
+      const idx = this.debugFuncs.indexOf(debugFunc);
+      if (idx > -1) {
+        this.debugFuncs.splice(idx, 1);
+      }
+    };
   };
 
   /**
