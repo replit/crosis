@@ -1,3 +1,7 @@
+#### v7.1.0
+
+Reverted changes from v7.0.0 which caused issues in Replit. The client now always gets a new token when it reconnects and downgrades to polling if it didn't receive a valid api command.
+
 #### v7.0.0 [BREAKING]
 
 The only breaking change is dropping support for `fetchToken` https://github.com/replit/crosis/pull/93/files
@@ -5,6 +9,8 @@ The only breaking change is dropping support for `fetchToken` https://github.com
 Client downgrades to polling less aggressively. Previously it would downgrade after not receiving any valid api command. Now, it relies on the websocket opening as a heuristic for websockets not working.
 
 While the client is trying to connect or during unintentional reconnects, the client will call `fetchTokenMetadata` only once. The client will keep the metadata cached until the user calls `client.close` explicitly.
+
+Fixed a bug with opening channels with the same name.
 
 #### v6.3.0
 
