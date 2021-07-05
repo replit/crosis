@@ -95,9 +95,10 @@ test('client retries', (done) => {
 
         if (tryCount === 1) {
           return Promise.resolve({
-            ...genConnectionMetadata(),
-            error: null,
             token: 'test - bad connection metadata retries',
+            gurl: 'ws://invalid.example.com',
+            conmanURL: 'http://invalid.example.com',
+            error: null,
           });
         }
 
@@ -123,7 +124,8 @@ test('client retries', (done) => {
   );
 });
 
-test('client retries and caches tokens', (done) => {
+// reverted caching change, see git history for context
+test.skip('client retries and caches tokens', (done) => {
   const client = new Client();
 
   const fetchConnectionMetadata = jest.fn();
@@ -228,16 +230,20 @@ test('channel closing itself when client willReconnect', (done) => {
   let disconnectTriggered = false;
   let clientOpenCount = 0;
   let channelOpenCount = 0;
+  let connectionMetadataCount = 0;
 
   const client = new Client();
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
+      fetchConnectionMetadata: () => {
+        connectionMetadataCount += 1;
+
+        return Promise.resolve({
           ...genConnectionMetadata(),
           error: null,
-        }),
+        });
+      },
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -262,6 +268,7 @@ test('channel closing itself when client willReconnect', (done) => {
           return;
         }
 
+        expect(connectionMetadataCount).toEqual(2);
         expect(clientOpenCount).toEqual(2);
         expect(channelOpenCount).toEqual(1);
 
