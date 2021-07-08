@@ -1,3 +1,7 @@
+#### v7.1.1
+
+Added Client.addDebugFunc that makes it possible to have more than one debug callback.
+
 #### v7.1.0
 
 Reverted changes from v7.0.0 which caused issues in Replit. The client now always gets a new token when it reconnects and downgrades to polling if it didn't receive a valid api command.

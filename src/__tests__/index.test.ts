@@ -131,7 +131,7 @@ test.skip('client retries and caches tokens', (done) => {
   const fetchConnectionMetadata = jest.fn();
 
   let reconnectCount = 0;
-  client.setDebugFunc((log) => {
+  client.addDebugFunc((log) => {
     if (log.type !== 'breadcrumb' || log.message !== 'retrying') {
       return;
     }
@@ -918,7 +918,7 @@ test('client is closed while reconnecting', (done) => {
   const onOpen = jest.fn();
 
   const client = new Client();
-  client.setDebugFunc((log) => {
+  client.addDebugFunc((log) => {
     if (log.type === 'breadcrumb' && log.message === 'reconnecting') {
       setTimeout(() => {
         client.close();
@@ -958,7 +958,7 @@ test('client is closed while reconnecting', (done) => {
 
 test('closing before ever connecting', (done) => {
   const client = new Client();
-  client.setDebugFunc((log) => {
+  client.addDebugFunc((log) => {
     if (log.type === 'breadcrumb' && log.message === 'connecting') {
       setTimeout(() => {
         client.close();
@@ -1016,7 +1016,7 @@ test('fallback to polling', (done) => {
   expect(getWebSocketClass(WebsocketThatNeverConnects)).toEqual(WebsocketThatNeverConnects);
 
   let didLogFallback = false;
-  client.setDebugFunc((log) => {
+  client.addDebugFunc((log) => {
     if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
       didLogFallback = true;
     }
