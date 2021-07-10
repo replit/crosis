@@ -95,10 +95,9 @@ test('client retries', (done) => {
 
         if (tryCount === 1) {
           return Promise.resolve({
-            token: 'test - bad connection metadata retries',
-            gurl: 'ws://invalid.example.com',
-            conmanURL: 'http://invalid.example.com',
+            ...genConnectionMetadata(),
             error: null,
+            token: 'test - bad connection metadata retries',
           });
         }
 
@@ -124,8 +123,56 @@ test('client retries', (done) => {
   );
 });
 
-// reverted caching change, see git history for context
-test.skip('client retries and caches tokens', (done) => {
+test('client retries and caches tokens', (done) => {
+  const client = new Client();
+
+  const fetchConnectionMetadata = jest.fn();
+
+  let reconnectCount = 0;
+  client.addDebugFunc((log) => {
+    if (log.type !== 'breadcrumb' || log.message !== 'retrying') {
+      return;
+    }
+    reconnectCount += 1;
+    if (reconnectCount >= 2) {
+      setTimeout(() => {
+        client.close();
+      });
+    }
+  });
+
+  client.open(
+    {
+      timeout: 1,
+      reuseConnectionMetadata: true,
+      fetchConnectionMetadata: () => {
+        fetchConnectionMetadata();
+        return Promise.resolve({
+          token: 'test - bad connection metadata retries',
+          gurl: 'ws://invalid.example.com',
+          conmanURL: 'http://invalid.example.com',
+          error: null,
+        });
+      },
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    ({ error }) => {
+      expect(fetchConnectionMetadata).toHaveBeenCalledTimes(1);
+
+      expect(error).toBeTruthy();
+      expect(error?.message).toBe('Failed to open');
+
+      // the client will not ever successfully connect, so this cannot be
+      // called in the callback.
+      done();
+
+      return () => {};
+    },
+  );
+});
+
+test('client retries but does not cache tokens', (done) => {
   const client = new Client();
 
   const fetchConnectionMetadata = jest.fn();
@@ -159,7 +206,7 @@ test.skip('client retries and caches tokens', (done) => {
       context: null,
     },
     ({ error }) => {
-      expect(fetchConnectionMetadata).toHaveBeenCalledTimes(1);
+      expect(fetchConnectionMetadata.mock.calls.length).toBeGreaterThan(1);
 
       expect(error).toBeTruthy();
       expect(error?.message).toBe('Failed to open');
