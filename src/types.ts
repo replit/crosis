@@ -42,6 +42,7 @@ export interface ConnectOptions<Ctx> {
   timeout: number | null;
   WebSocketClass?: typeof WebSocket;
   context: Ctx;
+  reuseConnectionMetadata: boolean;
 }
 
 export interface UrlOptions {
