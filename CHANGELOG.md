@@ -1,3 +1,7 @@
+#### v7.2.0
+
+Reintroduced the change that allows the client to try to call `fetchTokenMetadata` only once when it tries to connect or during unintentional reconnects. The client will keep the metadata cached until the user calls `client.close` explicitly, if the `reuseTokenMetadata` connection option is passed.
+
 #### v7.1.1
 
 Added Client.addDebugFunc that makes it possible to have more than one debug callback.
