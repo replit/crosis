@@ -57,7 +57,7 @@ export function getWebSocketClass(
 export function getConnectionStr(
   connectionMetadata: GovalMetadata,
   isPolling: boolean,
-  pollingHost: string | null,
+  pollingHost?: string,
 ): string {
   const gurl = urllib.parse(connectionMetadata.gurl);
   if (isPolling) {
