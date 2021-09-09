@@ -57,8 +57,8 @@ export function getWebSocketClass(
 export function getConnectionStr(connectionMetadata: GovalMetadata, isPolling: boolean): string {
   const gurl = urllib.parse(connectionMetadata.gurl);
   if (isPolling) {
-    gurl.hostname = 'gp-v2.herokuapp.com';
-    gurl.host = 'gp-v2.herokuapp.com';
+    gurl.hostname = 'gp-v2.replit.com';
+    gurl.host = 'gp-v2.replit.com';
     gurl.pathname = `/wsv2/${connectionMetadata.token}/${encodeURIComponent(
       connectionMetadata.gurl,
     )}`;
