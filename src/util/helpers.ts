@@ -54,11 +54,16 @@ export function getWebSocketClass(
 /**
  * Given connection metadata, creates a websocket connection string
  */
-export function getConnectionStr(connectionMetadata: GovalMetadata, isPolling: boolean): string {
+export function getConnectionStr(
+  connectionMetadata: GovalMetadata,
+  isPolling: boolean,
+  pollingHost: string | null,
+): string {
   const gurl = urllib.parse(connectionMetadata.gurl);
   if (isPolling) {
-    gurl.hostname = 'gp-v2.replit.com';
-    gurl.host = 'gp-v2.replit.com';
+    const host = pollingHost || 'gp-v2.replit.com';
+    gurl.hostname = host;
+    gurl.host = host;
     gurl.pathname = `/wsv2/${connectionMetadata.token}/${encodeURIComponent(
       connectionMetadata.gurl,
     )}`;
