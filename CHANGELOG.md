@@ -1,3 +1,7 @@
+#### v7.3.0
+
+Added an optional `pollingHost` field to `ConnectOptions`. This allows callers to override the polling host from gp-v2.herokuapp.com to something else when the polling fallback is used.
+
 #### v7.2.0
 
 Reintroduced the change that allows the client to try to call `fetchTokenMetadata` only once when it tries to connect or during unintentional reconnects. The client will keep the metadata cached until the user calls `client.close` explicitly, if the `reuseTokenMetadata` connection option is passed.
