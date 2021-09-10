@@ -954,7 +954,7 @@ export class Client<Ctx extends unknown = null> {
     const WebSocketClass = isPolling
       ? EIOCompat
       : getWebSocketClass(this.connectOptions.WebSocketClass);
-    const connStr = getConnectionStr(this.connectionMetadata, isPolling);
+    const connStr = getConnectionStr(this.connectionMetadata, isPolling, this.connectOptions.pollingHost);
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';

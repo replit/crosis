@@ -43,6 +43,7 @@ export interface ConnectOptions<Ctx> {
   WebSocketClass?: typeof WebSocket;
   context: Ctx;
   reuseConnectionMetadata: boolean;
+  pollingHost?: string;
 }
 
 export interface UrlOptions {
