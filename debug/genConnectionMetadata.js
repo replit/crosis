@@ -3,14 +3,22 @@ const crypto = require('crypto');
 const { api } = require('@replit/protocol');
 const paseto = require('./paseto');
 
-if (!(process.env.USER_KEY_ID || process.env.USER_PRIVATE_KEY_PEM)) {
-  throw new Error('Expected USER_KEY_ID and USER_PRIVATE_KEY_PEM in ENV');
+if (!process.env.USER_KEY_ID || !process.env.USER_PRIVATE_KEY) {
+  throw new Error('Expected USER_KEY_ID and USER_PRIVATE_KEY in ENV');
 }
 
 const keyId = process.env.USER_KEY_ID;
-const govalPrivateKey = crypto.createPrivateKey(
-  process.env.USER_PRIVATE_KEY_PEM.replace(/\\n/g, '\n'),
-);
+const govalPrivateKey = (() => {
+  const ed25519AsnPrivateKeyHeader = Buffer.from('302e020100300506032b657004220420', 'hex');
+  const keyData = Buffer.concat([
+    ed25519AsnPrivateKeyHeader,
+    // The last 32 bytes of the private key is the public key.
+    Buffer.from(process.env.USER_PRIVATE_KEY, 'base64').slice(0, 32),
+  ]);
+  return crypto.createPrivateKey(`-----BEGIN PRIVATE KEY-----
+${keyData.toString('base64')}
+-----END PRIVATE KEY-----`);
+})();
 
 function genConnectionMetadata() {
   const now = Date.now();
@@ -46,7 +54,12 @@ function genConnectionMetadata() {
     govalPrivateKey,
     Buffer.from(encodedOpts),
     Buffer.from(
-      api.GovalTokenMetadata.encode(api.GovalTokenMetadata.create({ keyId }))
+      api.GovalSigningAuthority.encode(
+        api.GovalSigningAuthority.create({
+          keyId,
+          issuer: 'crosis-ci',
+        }),
+      )
         .finish()
         .toString('base64'),
     ),
