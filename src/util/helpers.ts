@@ -61,7 +61,7 @@ export function getConnectionStr(
 ): string {
   const gurl = urllib.parse(connectionMetadata.gurl);
   if (isPolling) {
-    const host = pollingHost ?? 'gp-v2.herokuapp.com';
+    const host = pollingHost ?? 'gp-v2.replit.com';
     gurl.hostname = host;
     gurl.host = host;
     gurl.pathname = `/wsv2/${connectionMetadata.token}/${encodeURIComponent(

@@ -1,3 +1,7 @@
+#### v7.3.1
+
+Changed the default polling host to gp-v2.replit.com.
+
 #### v7.3.0
 
 Added an optional `pollingHost` field to `ConnectOptions`. This allows callers to override the polling host from gp-v2.herokuapp.com to something else when the polling fallback is used.
