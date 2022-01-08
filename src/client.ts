@@ -942,7 +942,7 @@ export class Client<Ctx extends unknown = null> {
       this.connectionMetadata = connectionMetadata;
     }
 
-    if (websocketFailureCount === 3) {
+    if (websocketFailureCount === 3 && this.connectOptions.pollingHost) {
       // Report that we fellback to polling
       this.debug({
         type: 'breadcrumb',
@@ -950,11 +950,14 @@ export class Client<Ctx extends unknown = null> {
       });
     }
 
-    const isPolling = websocketFailureCount >= 3;
+    const isPolling =
+        websocketFailureCount >= 3 && this.connectOptions.pollingHost;
     const WebSocketClass = isPolling
       ? EIOCompat
       : getWebSocketClass(this.connectOptions.WebSocketClass);
-    const connStr = getConnectionStr(this.connectionMetadata, isPolling, this.connectOptions.pollingHost);
+    const connStr = getConnectionStr(this.connectionMetadata,
+                                     isPolling ? this.connectOptions.pollingHost
+                                               : undefined);
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';

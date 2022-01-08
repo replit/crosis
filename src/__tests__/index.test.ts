@@ -1081,6 +1081,7 @@ test('fallback to polling', (done) => {
       // @ts-ignore
       WebSocketClass: WebsocketThatNeverConnects,
       context: null,
+      pollingHost: 'gp-v2.replit.com',
     },
     ({ channel, error }) => {
       expect(error).toBeNull();
@@ -1091,6 +1092,58 @@ test('fallback to polling', (done) => {
       return () => {
         done();
       };
+    },
+  );
+}, 40000);
+
+test('does not fallback to polling if host is unset', (done) => {
+  const client = new Client();
+  client.setUnrecoverableErrorHandler(() => {});
+
+  class WebsocketThatNeverConnects {
+    static OPEN = 1;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  expect(() => getWebSocketClass(WebsocketThatNeverConnects)).not.toThrow();
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  expect(getWebSocketClass(WebsocketThatNeverConnects)).toEqual(WebsocketThatNeverConnects);
+
+  let didLogFallback = false;
+  client.addDebugFunc((log) => {
+    if (log.type === 'breadcrumb' && log.message === 'connecting' &&
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (log.data as Record<string, any>)?.connectTries === 4) {
+      setTimeout(() => {
+        client.destroy();
+      });
+    }
+    if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
+      didLogFallback = true;
+    }
+  });
+
+  client.open(
+    {
+      timeout: 500,
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      WebSocketClass: WebsocketThatNeverConnects,
+      context: null,
+    },
+    ({ channel, error }) => {
+      expect(didLogFallback).toBe(false);
+      expect(channel).toBeNull();
+      expect(error).not.toBeNull();
+
+      done();
     },
   );
 }, 40000);
