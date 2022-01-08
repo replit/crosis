@@ -52,18 +52,17 @@ export function getWebSocketClass(
 }
 
 /**
- * Given connection metadata, creates a websocket connection string
+ * Given connection metadata, creates a websocket connection string. Will
+ * fallback to polling if `pollingHost` is provided.
  */
 export function getConnectionStr(
   connectionMetadata: GovalMetadata,
-  isPolling: boolean,
   pollingHost?: string,
 ): string {
   const gurl = urllib.parse(connectionMetadata.gurl);
-  if (isPolling) {
-    const host = pollingHost ?? 'gp-v2.replit.com';
-    gurl.hostname = host;
-    gurl.host = host;
+  if (pollingHost) {
+    gurl.hostname = pollingHost;
+    gurl.host = pollingHost;
     gurl.pathname = `/wsv2/${connectionMetadata.token}/${encodeURIComponent(
       connectionMetadata.gurl,
     )}`;
