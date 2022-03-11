@@ -78,6 +78,8 @@ export type DebugLog =
       log: {
         direction: 'in' | 'out';
         cmd: api.Command;
+        channel?: string;
+        service: string;
       };
     };
 

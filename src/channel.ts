@@ -8,6 +8,16 @@ export class Channel {
   public id: number;
 
   /**
+   * The channel's name, specified at creation time.
+   */
+  public name: string | undefined;
+
+  /**
+   * The name of the service the channel is connected to.
+   */
+  public service: string;
+
+  /**
    * The current connection status of the channel.
    * When the channel is open or closing you can potentially
    * receive commands on the channel.
@@ -20,7 +30,7 @@ export class Channel {
    *
    * @hidden
    */
-  private sendToContainer: (cmd: api.Command) => void;
+  private sendToContainer: (channel: string | undefined, service: string, cmd: api.Command) => void;
 
   /**
    * A map of request reference id to resolver function generated
@@ -54,14 +64,20 @@ export class Channel {
    */
   constructor({
     id,
+    name,
+    service,
     send,
     onUnrecoverableError,
   }: {
     id: number;
-    send: (cmd: api.Command) => void;
+    name: string | undefined;
+    service: string;
+    send: (channel: string | undefined, service: string, cmd: api.Command) => void;
     onUnrecoverableError: (e: Error) => void;
   }) {
     this.id = id;
+    this.name = name;
+    this.service = service;
     this.sendToContainer = send;
     this.onUnrecoverableError = onUnrecoverableError;
     this.status = 'open';
@@ -113,7 +129,7 @@ export class Channel {
     }
 
     cmdJson.channel = this.id;
-    this.sendToContainer(api.Command.create(cmdJson));
+    this.sendToContainer(this.name, this.service, api.Command.create(cmdJson));
   };
 
   /**
