@@ -73,7 +73,7 @@ client.open({ context, fetchConnectionMetadata }, function onOpen({ channel, con
   }
 
   //  The client is now connected (or reconnected in the event that it encountered an unexpected disconnect)
-  // `channel` here is channel0 (more info at https://crosis-doc.util.repl.co//protov2)
+  // `channel` here is channel0 (more info at https://crosis-doc.util.repl.co/protov2)
   // - send commands using `channel.send`
   // - listen for commands using `channel.onCommand(cmd => ...)`
 
