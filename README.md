@@ -8,7 +8,7 @@ Crosis relies on the `@replit/protocol` package as a peer dependency. https://gi
 
 You should probably familiarize yourself with the protocol before trying to use it. Crosis is just a client that helps you connect and communicate with the container using the protocol.
 
-Read about the protocol here http://protodoc.turbio.repl.co
+Read about the protocol here https://crosis-doc.util.repl.co/
 
 ### Usage and concepts
 
@@ -73,7 +73,7 @@ client.open({ context, fetchConnectionMetadata }, function onOpen({ channel, con
   }
 
   //  The client is now connected (or reconnected in the event that it encountered an unexpected disconnect)
-  // `channel` here is channel0 (more info at http://protodoc.turbio.repl.co/protov2)
+  // `channel` here is channel0 (more info at https://crosis-doc.util.repl.co/protov2)
   // - send commands using `channel.send`
   // - listen for commands using `channel.onCommand(cmd => ...)`
 
@@ -82,7 +82,7 @@ client.open({ context, fetchConnectionMetadata }, function onOpen({ channel, con
   };
 });
 
-// See docs for exec service here https://protodoc.turbio.repl.co/services#exec
+// See docs for exec service here https://crosis-doc.util.repl.co/services#exec
 const closeChannel = client.openChannel({ service: 'exec' }, function open({ channel, context }) {
   if (!channel) {
     // Closed before ever connecting. Due to `client.close` being called, `closeChannel` being called
