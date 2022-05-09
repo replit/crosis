@@ -512,6 +512,8 @@ export class Client<Ctx extends unknown = null> {
 
       const channel = new Channel({
         id,
+        name: channelRequest.options.name,
+        service,
         onUnrecoverableError: this.onUnrecoverableError,
         send: this.send,
       });
@@ -856,6 +858,7 @@ export class Client<Ctx extends unknown = null> {
 
     const chan0 = new Channel({
       id: 0,
+      name: 'chan0',
       onUnrecoverableError: this.onUnrecoverableError,
       send: this.send,
     });
@@ -950,14 +953,14 @@ export class Client<Ctx extends unknown = null> {
       });
     }
 
-    const isPolling =
-        websocketFailureCount >= 3 && this.connectOptions.pollingHost;
+    const isPolling = websocketFailureCount >= 3 && this.connectOptions.pollingHost;
     const WebSocketClass = isPolling
       ? EIOCompat
       : getWebSocketClass(this.connectOptions.WebSocketClass);
-    const connStr = getConnectionStr(this.connectionMetadata,
-                                     isPolling ? this.connectOptions.pollingHost
-                                               : undefined);
+    const connStr = getConnectionStr(
+      this.connectionMetadata,
+      isPolling ? this.connectOptions.pollingHost : undefined,
+    );
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
@@ -1247,7 +1250,19 @@ export class Client<Ctx extends unknown = null> {
 
   /** @hidden */
   private send = (cmd: api.Command) => {
-    this.debug({ type: 'log', log: { direction: 'out', cmd } });
+    const channel = this.getChannel(cmd.channel);
+    this.debug({
+      type: 'log',
+      log: {
+        direction: 'out',
+        channel: {
+          id: cmd.channel,
+          name: channel.name,
+          service: channel.service,
+        },
+        cmd,
+      },
+    });
 
     const cmdBuf = api.Command.encode(cmd).finish();
     const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
@@ -1265,11 +1280,23 @@ export class Client<Ctx extends unknown = null> {
   private onSocketMessage = ({ data }: MessageEvent) => {
     const d = new Uint8Array(data);
     const cmd = api.Command.decode(d);
+    const channel = this.getChannel(cmd.channel);
 
-    this.debug({ type: 'log', log: { direction: 'in', cmd } });
+    this.debug({
+      type: 'log',
+      log: {
+        direction: 'in',
+        channel: {
+          id: cmd.channel,
+          name: channel.name,
+          service: channel.service,
+        },
+        cmd,
+      },
+    });
 
     // Pass it to the right channel
-    this.getChannel(cmd.channel).handleCommand(cmd);
+    channel.handleCommand(cmd);
   };
 
   /**
