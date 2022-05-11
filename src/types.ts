@@ -87,7 +87,7 @@ export interface ConnectOptions<Ctx> {
   context: Ctx;
   reuseConnectionMetadata: boolean;
   pollingHost?: string;
-  retryCallback?: RetryCb;
+  retryCallback: RetryCb;
 }
 
 export interface UrlOptions {

@@ -1,8 +1,8 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
-import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
+import { getWebSocketClass, getConnectionStr, createDefaultRetryCallback } from './util/helpers';
 import { EIOCompat } from './util/EIOCompat';
-import { FetchConnectionMetadataError, ConnectionState } from './types';
+import { FetchConnectionMetadataError, ConnectionState, ConnectionError } from './types';
 import type {
   ConnectOptions,
   GovalMetadata,
@@ -271,6 +271,7 @@ export class Client<Ctx = null> {
     this.connectOptions = {
       timeout: 10000,
       reuseConnectionMetadata: false,
+      retryCallback: createDefaultRetryCallback(),
       ...options,
     };
 
@@ -1239,7 +1240,7 @@ export class Client<Ctx = null> {
    *
    * @hidden
    */
-  private retryConnect = ({
+  private retryConnect = async ({
     tryCount,
     websocketFailureCount,
     chan0,
@@ -1251,13 +1252,44 @@ export class Client<Ctx = null> {
     error: Error;
   }) => {
     if (this.retryTimeoutId) {
-      this.onUnrecoverableError(new Error('Unexpected existing retryTimeoutId'));
+      // Multiple connection tries at the same time?!
+      this.onUnrecoverableError(new Error('unexpected existing retryTimeoutId'));
 
       return;
     }
 
     if (!this.chan0Cb) {
       this.onUnrecoverableError(new Error('Expected chan0Cb when scheduling a retry'));
+
+      return;
+    }
+
+    if (!this.connectOptions) {
+      this.onUnrecoverableError(new Error('expected connectOptions'));
+
+      return;
+    }
+
+    // Setting this synchronously before we defer to the user for 2 reasons.
+    // First it makes sure that the invariant check above is primed before anything happens.
+    // Second we will use this function to check whether this retry is still current.
+    // In Node it returns a referential value, in browsers it's a unique never repeating number.
+    this.retryTimeoutId = setTimeout(() => {}, 0);
+    const currentTimeoutId = this.retryTimeoutId;
+
+    const retryInfo = await this.connectOptions.retryCallback({
+      count: tryCount,
+      retryReason: ConnectionError.SocketClosure,
+      websocketErrorCode: 0,
+    });
+
+    if (currentTimeoutId !== this.retryTimeoutId) {
+      // This retry is no longer relevant
+      return;
+    }
+
+    if (retryInfo.shouldAbort) {
+      this.close();
 
       return;
     }
@@ -1286,7 +1318,7 @@ export class Client<Ctx = null> {
       delete this.channels[0];
       this.connectionState = ConnectionState.DISCONNECTED;
       this.connect({ tryCount, websocketFailureCount });
-    }, getNextRetryDelay(tryCount));
+    }, retryInfo.backOffMs);
   };
 
   /** @hidden */
