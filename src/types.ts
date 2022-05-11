@@ -20,6 +20,49 @@ export enum FetchConnectionMetadataError {
   Retriable = 'Retriable',
 }
 
+export enum ConnectionError {
+  /**
+   * The websocket closed (or errored) abruptly while connecting
+   */
+  SocketClosure = 'SocketClosure',
+  /**
+   * Time taken to connect exceeded timeout specified in the connection options
+   */
+  Timeout = 'Timeout',
+  /**
+   * We got a ContainerState.Sleep message which means the container died
+   * while we're connecting
+   */
+  ContainerSleep = 'ContainerSleep',
+  /**
+   * We recieved a retriable error when fetching connection metadata
+   */
+  MetadataRequestFailed = 'MetadataRequestFailed',
+}
+
+/**
+ * This is an optional callback passed alongside connection options
+ * that can be used to configure the details of retries. Returning
+ * an abort is equivalent of calling client.close().
+ */
+export type RetryCb = (retryDetails: {
+  /**
+   * The number of times we retried, with the first retry being 1
+   */
+  count: number;
+  /**
+   * The reason that triggered the retry
+   */
+  retryReason: ConnectionError;
+  /**
+   * Websocket error code. This only makes sense when retry reason
+   * is a websocket closure
+   */
+  websocketErrorCode: number;
+}) => Promise<
+  { shouldAbort: true } | { shouldAbort: false; shouldPoll: boolean; backOffMs: number }
+>;
+
 export interface GovalMetadata {
   token: string;
   gurl: string;
@@ -44,6 +87,7 @@ export interface ConnectOptions<Ctx> {
   context: Ctx;
   reuseConnectionMetadata: boolean;
   pollingHost?: string;
+  retryCallback?: RetryCb;
 }
 
 export interface UrlOptions {
