@@ -950,14 +950,14 @@ export class Client<Ctx extends unknown = null> {
       });
     }
 
-    const isPolling =
-        websocketFailureCount >= 3 && this.connectOptions.pollingHost;
+    const isPolling = websocketFailureCount >= 3 && this.connectOptions.pollingHost;
     const WebSocketClass = isPolling
       ? EIOCompat
       : getWebSocketClass(this.connectOptions.WebSocketClass);
-    const connStr = getConnectionStr(this.connectionMetadata,
-                                     isPolling ? this.connectOptions.pollingHost
-                                               : undefined);
+    const connStr = getConnectionStr(
+      this.connectionMetadata,
+      isPolling ? this.connectOptions.pollingHost : undefined,
+    );
     const ws = new WebSocketClass(connStr);
 
     ws.binaryType = 'arraybuffer';
@@ -1354,6 +1354,7 @@ export class Client<Ctx extends unknown = null> {
     if (this.retryTimeoutId) {
       // Client was closed while reconnecting
       clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
     }
 
     const willClientReconnect = closeResult.closeReason === ClientCloseReason.Disconnected;
