@@ -18,6 +18,7 @@ global_job_config:
   prologue:
     commands:
       - sem-version node 16
+      - sem-version cpp 5
       - checkout --use-cache
       - git switch -c pr
       - cache restore yarn-cache-main
