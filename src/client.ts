@@ -880,7 +880,18 @@ export class Client<Ctx extends unknown = null> {
           abortController.signal,
         );
       } catch (e) {
-        this.onUnrecoverableError(e);
+        let err: Error;
+        if (e instanceof Error) {
+          err = e;
+        } else if (e && typeof e === 'object' && 'message' in e) {
+          err = new Error((e as any).message);
+        } else if (typeof e === 'string') {
+          err = new Error(e);
+        } else {
+          err = new Error('Unknown error when fetching connection metadata');
+        }
+
+        this.onUnrecoverableError(err);
 
         return;
       }
@@ -1340,10 +1351,6 @@ export class Client<Ctx extends unknown = null> {
     };
 
     this.ws.onclose = onClose;
-
-    // Once connected treat any future error as a close event
-    // eslint-disable-next-line
-    // @ts-ignore seems like a type issue related to browser/node env
     this.ws.onerror = onClose;
 
     this.channelRequests.forEach((channelRequest) => {

@@ -1051,15 +1051,13 @@ test('closing before ever connecting', (done) => {
 test('fallback to polling', (done) => {
   const client = new Client();
 
-  class WebsocketThatNeverConnects {
+  class _WebsocketThatNeverConnects {
     static OPEN = 1;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
+  const WebsocketThatNeverConnects = _WebsocketThatNeverConnects as typeof WebSocket;
+
   expect(() => getWebSocketClass(WebsocketThatNeverConnects)).not.toThrow();
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
   expect(getWebSocketClass(WebsocketThatNeverConnects)).toEqual(WebsocketThatNeverConnects);
 
   let didLogFallback = false;
@@ -1077,8 +1075,6 @@ test('fallback to polling', (done) => {
           ...genConnectionMetadata(),
           error: null,
         }),
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
       WebSocketClass: WebsocketThatNeverConnects,
       context: null,
       pollingHost: 'gp-v2.replit.com',
@@ -1100,22 +1096,23 @@ test('does not fallback to polling if host is unset', (done) => {
   const client = new Client();
   client.setUnrecoverableErrorHandler(() => {});
 
-  class WebsocketThatNeverConnects {
+  class _WebsocketThatNeverConnects {
     static OPEN = 1;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
+  const WebsocketThatNeverConnects = _WebsocketThatNeverConnects as typeof WebSocket;
+
   expect(() => getWebSocketClass(WebsocketThatNeverConnects)).not.toThrow();
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
   expect(getWebSocketClass(WebsocketThatNeverConnects)).toEqual(WebsocketThatNeverConnects);
 
   let didLogFallback = false;
   client.addDebugFunc((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'connecting' &&
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (log.data as Record<string, any>)?.connectTries === 4) {
+    if (
+      log.type === 'breadcrumb' &&
+      log.message === 'connecting' &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (log.data as Record<string, any>)?.connectTries === 4
+    ) {
       setTimeout(() => {
         client.destroy();
       });
@@ -1133,8 +1130,6 @@ test('does not fallback to polling if host is unset', (done) => {
           ...genConnectionMetadata(),
           error: null,
         }),
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
       WebSocketClass: WebsocketThatNeverConnects,
       context: null,
     },

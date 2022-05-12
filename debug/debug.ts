@@ -16,7 +16,6 @@ client.setUnrecoverableErrorHandler((error) => {
 
 client.open(
   {
-    // @ts-ignore
     fetchConnectionMetadata: () => fetch('/token').then((response) => response.json()),
     WebSocketClass: WebSocket,
     context: null,
