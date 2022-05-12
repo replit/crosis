@@ -7,13 +7,11 @@ agent:
 execution_time_limit:
   minutes: 30
 fail_fast:
-  stop:
-    when: branch != "dev"
   cancel:
-    when: branch = "dev"
+    when: 'true'
 auto_cancel:
   running:
-    when: branch != "main"
+    when: branch != 'main'
   queued:
     when: 'true'
 global_job_config:
