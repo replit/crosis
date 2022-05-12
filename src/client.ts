@@ -1381,6 +1381,7 @@ export class Client<Ctx extends unknown = null> {
     if (this.retryTimeoutId) {
       // Client was closed while reconnecting
       clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
     }
 
     const willClientReconnect = closeResult.closeReason === ClientCloseReason.Disconnected;
