@@ -1,0 +1,51 @@
+version: v1.0
+name: Node JS
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+execution_time_limit:
+  minutes: 30
+fail_fast:
+  cancel:
+    when: 'true'
+auto_cancel:
+  running:
+    when: branch != 'main'
+  queued:
+    when: 'true'
+global_job_config:
+  prologue:
+    commands:
+      - sem-version node 16
+      - sem-version cpp 5
+      - checkout --use-cache
+      - git switch -c pr
+      - cache restore yarn-cache-main
+      - yarn install --frozen-lockfile
+blocks:
+  - name: lint
+    task:
+      jobs:
+        - name: lint
+          commands:
+            - yarn run lint
+    dependencies: []
+  - name: type check
+    dependencies: []
+    task:
+      jobs:
+        - name: type check
+          commands:
+            - yarn run tsc --noEmit
+  - name: tests
+    dependencies:
+      - lint
+      - type check
+    task:
+      jobs:
+        - name: tests
+          commands:
+            - yarn run test
+      secrets:
+        - name: crosis
