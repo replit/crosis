@@ -11,7 +11,7 @@ function getNextRetryDelay(retryNumber: number): number {
   return Math.min(backoff, MAX_BACKOFF) + randomMs;
 }
 
-export function createDefaultRetryCallback(): RetryCb {
+export function createDefaultRetryCallback(hasPolling: boolean): RetryCb {
   let websocketFailureCount = 0;
 
   return async function retryCallback({
@@ -28,7 +28,7 @@ export function createDefaultRetryCallback(): RetryCb {
     return {
       shouldAbort: false,
       backOffMs: getNextRetryDelay(count),
-      shouldPoll: websocketFailureCount > 3,
+      shouldPoll: websocketFailureCount > 3 && hasPolling,
     };
   };
 }

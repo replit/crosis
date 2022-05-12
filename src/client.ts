@@ -271,7 +271,7 @@ export class Client<Ctx = null> {
     this.connectOptions = {
       timeout: 10000,
       reuseConnectionMetadata: false,
-      retryCallback: createDefaultRetryCallback(),
+      retryCallback: createDefaultRetryCallback(Boolean(options.pollingHost)),
       ...options,
     };
 
@@ -282,7 +282,7 @@ export class Client<Ctx = null> {
     });
 
     this.chan0Cb = cb;
-    this.connect({ tryCount: 0, websocketFailureCount: 0 });
+    this.connect({ tryCount: 0, isPolling: false });
   };
 
   /**
@@ -465,8 +465,6 @@ export class Client<Ctx = null> {
       },
     });
 
-    const chan0 = this.getChannel(0);
-
     // Random base36 int
     const ref = Number(Math.random().toString().split('.')[1]).toString(36);
 
@@ -476,7 +474,7 @@ export class Client<Ctx = null> {
     // in a single tick, using promises here would causes us to
     // handle the incoming command before openChanRes, leading to errors
 
-    chan0.send({
+    this.getChannel(0).send({
       ref,
       openChan: {
         name: options.name,
@@ -485,7 +483,7 @@ export class Client<Ctx = null> {
       },
     });
 
-    const dispose = chan0.onCommand((cmd: api.Command) => {
+    const dispose = this.getChannel(0).onCommand((cmd: api.Command) => {
       if (ref !== cmd.ref) {
         return;
       }
@@ -569,16 +567,6 @@ export class Client<Ctx = null> {
     const chan = this.getChannel(channelRequest.channelId);
     chan.status = 'closing';
 
-    const chan0 = this.getChannel(0);
-
-    if (!chan0) {
-      this.onUnrecoverableError(
-        new Error('Tried to request a channel close but there was no chan0'),
-      );
-
-      return;
-    }
-
     this.debug({
       type: 'breadcrumb',
       message: 'requestChannelClose',
@@ -589,7 +577,7 @@ export class Client<Ctx = null> {
       },
     });
 
-    const res = await chan0.request({
+    const res = await this.getChannel(0).request({
       closeChan: {
         action: api.CloseChannel.Action.TRY_CLOSE,
         id: channelRequest.channelId,
@@ -797,22 +785,16 @@ export class Client<Ctx = null> {
   public getConnectionMetadata = (): GovalMetadata | null => this.connectionMetadata;
 
   /** @hidden */
-  private connect = async ({
-    tryCount,
-    websocketFailureCount,
-  }: {
-    tryCount: number;
-    websocketFailureCount: number;
-  }) => {
+  private connect = async ({ tryCount, isPolling }: { tryCount: number; isPolling: boolean }) => {
     this.debug({
       type: 'breadcrumb',
       message: 'connecting',
       data: {
         connectionState: this.connectionState,
         connectTries: tryCount,
-        websocketFailureCount,
         readyState: this.ws ? this.ws.readyState : undefined,
         chan0CbExists: Boolean(this.chan0Cb),
+        isPolling,
       },
     });
 
@@ -869,13 +851,12 @@ export class Client<Ctx = null> {
 
     this.connectionState = ConnectionState.CONNECTING;
 
-    const chan0 = new Channel({
+    this.channels[0] = new Channel({
       id: 0,
       name: 'chan0',
       onUnrecoverableError: this.onUnrecoverableError,
       send: this.send,
     });
-    this.channels[0] = chan0;
 
     if (!this.connectOptions.reuseConnectionMetadata || this.connectionMetadata === null) {
       if (this.fetchTokenAbortController) {
@@ -951,9 +932,8 @@ export class Client<Ctx = null> {
       if (connectionMetadata.error === FetchConnectionMetadataError.Retriable) {
         this.retryConnect({
           tryCount: tryCount + 1,
-          websocketFailureCount,
-          chan0,
-          error: new Error('Retriable error'),
+          retryReason: ConnectionError.MetadataRequestFailed,
+          websocketErrorCode: 0,
         });
 
         return;
@@ -974,15 +954,12 @@ export class Client<Ctx = null> {
       this.connectionMetadata = connectionMetadata;
     }
 
-    if (websocketFailureCount === 3 && this.connectOptions.pollingHost) {
-      // Report that we fellback to polling
-      this.debug({
-        type: 'breadcrumb',
-        message: 'polling fallback',
-      });
+    if (isPolling && !this.connectOptions.pollingHost) {
+      this.onUnrecoverableError(new Error('Got isPolling but no pollingHost'));
+
+      return;
     }
 
-    const isPolling = websocketFailureCount >= 3 && this.connectOptions.pollingHost;
     const WebSocketClass = isPolling
       ? EIOCompat
       : getWebSocketClass(this.connectOptions.WebSocketClass);
@@ -997,11 +974,6 @@ export class Client<Ctx = null> {
     this.ws = ws;
 
     // We'll use this to determine whether or not we should consider the next
-    // failure a websocket failure and fallback to polling. If we were able to
-    // pass the handshake phase at some point, then websockets work fine.
-    let didWebsocketsWork = false;
-
-    // We'll use this to determine whether or not we should consider the next
     // polling implementation failure to require a fresh metadata. If we were
     // able to receive any messages on channel 0, then the current metadata
     // should still be valid.
@@ -1014,53 +986,33 @@ export class Client<Ctx = null> {
      * 3- ContainerState.SLEEP command
      * 4- User calling `close` before we connect
      */
-    let onFailed: ((err: Error) => void) | null = null;
-
-    ws.onerror = () => {
-      if (!onFailed) {
-        this.onUnrecoverableError(new Error('Got websocket error but no `onFailed` cb'));
-
-        return;
-      }
-
-      onFailed(new Error('WebSocket errored'));
-    };
+    let onFailed:
+      | ((reconInfo: { retryReason: ConnectionError; websocketErrorCode: number }) => void)
+      | null = null;
 
     /**
      * Abrupt socket closures should report failed
      */
-    ws.onclose = (event: CloseEvent | Event) => {
+    ws.onclose = (event: CloseEvent) => {
       if (!onFailed) {
         this.onUnrecoverableError(new Error('Got websocket closure but no `onFailed` cb'));
 
         return;
       }
 
-      if (WebSocketClass === EIOCompat) {
-        if (!didReceiveAnyCommand) {
-          // The polling implementation doesn't convey the Websocket close
-          // event. Let's assume that we need to request a new token.
-          this.connectionMetadata = null;
-        }
-      } else if ('code' in event) {
-        const closeEvent = <CloseEvent>event;
-        const closeCodePolicyViolation = 1008;
-        if (closeEvent.code === closeCodePolicyViolation) {
-          // This means that the token was rejected. We need to fetch another one.
-          this.connectionMetadata = null;
-        }
+      const closeCodePolicyViolation = 1008;
+      if (
+        event.code === closeCodePolicyViolation ||
+        (WebSocketClass === EIOCompat && !didReceiveAnyCommand)
+      ) {
+        // This means that the token was rejected. We need to fetch another one.
+        this.connectionMetadata = null;
       }
 
-      onFailed(new Error('WebSocket closed before we got READY'));
-    };
-
-    ws.onopen = () => {
-      if (WebSocketClass === EIOCompat) {
-        return;
-      }
-
-      // From this point on, we count this connection as successful.
-      didWebsocketsWork = true;
+      onFailed({
+        retryReason: ConnectionError.SocketClosure,
+        websocketErrorCode: event.code,
+      });
     };
 
     /**
@@ -1102,7 +1054,10 @@ export class Client<Ctx = null> {
             return;
           }
 
-          onFailed(new Error('timeout'));
+          onFailed({
+            retryReason: ConnectionError.Timeout,
+            websocketErrorCode: 0,
+          });
         }, timeout);
       };
 
@@ -1120,7 +1075,7 @@ export class Client<Ctx = null> {
      * If we ever get ContainterState SLEEP it means that something went wrong
      * and connection should be dropped
      */
-    const unlistenChan0 = chan0.onCommand((cmd: api.Command) => {
+    const unlistenChan0 = this.getChannel(0).onCommand((cmd: api.Command) => {
       didReceiveAnyCommand = true;
       // Everytime we get a message on channel0
       // we will reset the timeout
@@ -1159,12 +1114,6 @@ export class Client<Ctx = null> {
             return;
           }
 
-          if (!chan0) {
-            this.onUnrecoverableError(new Error('Expected chan0 to be truthy'));
-
-            return;
-          }
-
           if (!this.chan0Cb) {
             this.onUnrecoverableError(new Error('Expected chan0Cb to be truthy'));
 
@@ -1181,7 +1130,7 @@ export class Client<Ctx = null> {
             }, 0);
 
           this.chan0CleanupCb = this.chan0Cb({
-            channel: chan0,
+            channel: this.getChannel(0),
             error: null,
             context: this.connectOptions.context,
           });
@@ -1197,7 +1146,10 @@ export class Client<Ctx = null> {
             return;
           }
 
-          onFailed(new Error('Got SLEEP as container state'));
+          onFailed({
+            retryReason: ConnectionError.ContainerSleep,
+            websocketErrorCode: 0,
+          });
 
           break;
 
@@ -1208,7 +1160,7 @@ export class Client<Ctx = null> {
     const currentChan0 = this.getChannel(0);
     const currentConnectOptions = this.connectOptions;
 
-    onFailed = (error: Error) => {
+    onFailed = (reconInfo: { retryReason: ConnectionError; websocketErrorCode: number }) => {
       // Make sure this function is not called multiple times.
       onFailed = null;
 
@@ -1228,9 +1180,7 @@ export class Client<Ctx = null> {
 
       this.retryConnect({
         tryCount: tryCount + 1,
-        websocketFailureCount: didWebsocketsWork ? 0 : websocketFailureCount + 1,
-        chan0,
-        error,
+        ...reconInfo,
       });
     };
   };
@@ -1242,14 +1192,12 @@ export class Client<Ctx = null> {
    */
   private retryConnect = async ({
     tryCount,
-    websocketFailureCount,
-    chan0,
-    error,
+    retryReason,
+    websocketErrorCode,
   }: {
     tryCount: number;
-    websocketFailureCount: number;
-    chan0: Channel;
-    error: Error;
+    retryReason: ConnectionError;
+    websocketErrorCode: number;
   }) => {
     if (this.retryTimeoutId) {
       // Multiple connection tries at the same time?!
@@ -1270,6 +1218,16 @@ export class Client<Ctx = null> {
       return;
     }
 
+    this.debug({
+      type: 'breadcrumb',
+      message: 'fetching retry information',
+      data: {
+        connectTries: tryCount,
+        retryReason,
+        websocketErrorCode,
+      },
+    });
+
     // Setting this synchronously before we defer to the user for 2 reasons.
     // First it makes sure that the invariant check above is primed before anything happens.
     // Second we will use this function to check whether this retry is still current.
@@ -1279,8 +1237,8 @@ export class Client<Ctx = null> {
 
     const retryInfo = await this.connectOptions.retryCallback({
       count: tryCount,
-      retryReason: ConnectionError.SocketClosure,
-      websocketErrorCode: 0,
+      retryReason,
+      websocketErrorCode,
     });
 
     if (currentTimeoutId !== this.retryTimeoutId) {
@@ -1309,15 +1267,13 @@ export class Client<Ctx = null> {
         data: {
           connectionState: this.connectionState,
           connectTries: tryCount,
-          websocketFailureCount,
-          error,
           wsReadyState: this.ws ? this.ws.readyState : undefined,
         },
       });
-      chan0.handleClose({ initiator: 'client', willReconnect: true });
+      this.getChannel(0).handleClose({ initiator: 'client', willReconnect: true });
       delete this.channels[0];
       this.connectionState = ConnectionState.DISCONNECTED;
-      this.connect({ tryCount, websocketFailureCount });
+      this.connect({ tryCount, isPolling: retryInfo.shouldPoll });
     }, retryInfo.backOffMs);
   };
 
@@ -1569,7 +1525,7 @@ export class Client<Ctx = null> {
       message: 'reconnecting',
     });
 
-    this.connect({ tryCount: 0, websocketFailureCount: 0 });
+    this.connect({ tryCount: 0, isPolling: false });
   };
 
   /** @hidden */
