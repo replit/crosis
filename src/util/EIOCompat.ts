@@ -206,6 +206,17 @@ export class EIOCompat implements WebSocket {
         const event = createEvent('error');
         this.onerror.call(this, event);
       }
+
+      // According to the specification, close is always called after error
+      // https://websockets.spec.whatwg.org/#closeWebSocket
+      if (this.onclose != null) {
+        const event = createCloseEvent({
+          code: 1001,
+          wasClean: false,
+        });
+
+        this.onclose.call(this, event);
+      }
     });
   }
 
