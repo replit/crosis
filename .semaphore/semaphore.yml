@@ -30,8 +30,6 @@ blocks:
         - name: lint
           commands:
             - yarn run lint
-      secrets:
-        - name: crosis
     dependencies: []
   - name: type check
     dependencies: []
@@ -49,3 +47,5 @@ blocks:
         - name: tests
           commands:
             - yarn run test
+      secrets:
+        - name: crosis
