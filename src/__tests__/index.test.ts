@@ -28,6 +28,39 @@ afterAll(() => {
   testingClients.forEach((c) => c.destroy());
 });
 
+/**
+ * A simple helper to allow us to do assertions inside callbacks.
+ * If `done` is not called after an assertion fails inside a callback
+ * the test will continue until it times out. This function makes sure
+ * done is called and we fail fast with correct stack traces.
+ */
+function wrapWithDone<Args extends Array<any>, Ret>(
+  done: jest.DoneCallback,
+  fn: (...args: Args) => Ret,
+) {
+  return (...args: Args): Ret => {
+    try {
+      const res = fn(...args);
+      if (
+        typeof res === 'object' &&
+        res &&
+        'catch' in res &&
+        typeof (res as any).catch === 'function'
+      ) {
+        return (res as any).catch((err: any) => {
+          done(err);
+        });
+      }
+
+      return res;
+    } catch (e) {
+      done(e);
+
+      return undefined as any;
+    }
+  };
+}
+
 test('client connect', (done) => {
   const client = getClient<{ username: string }>();
 
@@ -43,7 +76,7 @@ test('client connect', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    ({ channel, error, context }) => {
+    wrapWithDone(done, ({ channel, error, context }) => {
       expect(channel?.status).toBe('open');
       expect(context).toBe(ctx);
       expect(error).toEqual(null);
@@ -53,7 +86,7 @@ test('client connect', (done) => {
       return () => {
         done();
       };
-    },
+    }),
   );
 });
 
@@ -83,7 +116,7 @@ test('client connect with connection metadata retry', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    ({ channel, error, context }) => {
+    wrapWithDone(done, ({ channel, error, context }) => {
       expect(tryCount).toBe(2);
       expect(channel?.status).toBe('open');
       expect(context).toBe(ctx);
@@ -94,7 +127,7 @@ test('client connect with connection metadata retry', (done) => {
       return () => {
         done();
       };
-    },
+    }),
   );
 });
 
@@ -124,7 +157,7 @@ test('client retries', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(tryCount).toBe(2);
       expect(channel?.status).toBe('open');
       expect(error).toEqual(null);
@@ -134,7 +167,7 @@ test('client retries', (done) => {
       return () => {
         done();
       };
-    },
+    }),
   );
 });
 
@@ -220,7 +253,7 @@ test('client retries but does not cache tokens', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ error }) => {
+    wrapWithDone(done, ({ error }) => {
       expect(fetchConnectionMetadata.mock.calls.length).toBeGreaterThan(1);
 
       expect(error).toBeTruthy();
@@ -231,7 +264,7 @@ test('client retries but does not cache tokens', (done) => {
       done();
 
       return () => {};
-    },
+    }),
   );
 });
 
@@ -248,7 +281,7 @@ test('client requests new connection metadata after intentional close', (done) =
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(channel?.status).toBe('open');
       expect(error).toEqual(null);
 
@@ -284,7 +317,7 @@ test('client requests new connection metadata after intentional close', (done) =
           );
         });
       };
-    },
+    }),
   );
 });
 
@@ -309,7 +342,7 @@ test('channel closing itself when client willReconnect', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       clientOpenCount += 1;
       expect(error).toEqual(null);
       expect(channel?.status).toBe('open');
@@ -325,7 +358,7 @@ test('channel closing itself when client willReconnect', (done) => {
         client.close();
       }
 
-      return ({ willReconnect }) => {
+      return wrapWithDone(done, ({ willReconnect }) => {
         if (willReconnect) {
           return;
         }
@@ -335,25 +368,28 @@ test('channel closing itself when client willReconnect', (done) => {
         expect(channelOpenCount).toEqual(1);
 
         done();
-      };
-    },
+      });
+    }),
   );
 
-  const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
-    channelOpenCount += 1;
-    expect(error).toBe(null);
-    expect(channel?.status).toBe('open');
+  const close = client.openChannel(
+    { service: 'shell' },
+    wrapWithDone(done, ({ channel, error }) => {
+      channelOpenCount += 1;
+      expect(error).toBe(null);
+      expect(channel?.status).toBe('open');
 
-    return ({ willReconnect }) => {
-      expect(willReconnect).toBeTruthy();
-      // This cleanup function gets called because we triggered an unintentional
-      // disconnect above (`client.ws.onclose()`). Since this is unintentional
-      // the client will reconnect itself. But this outer `openChannel`callback will NOT
-      // get called a second time when the cleint re-connects since we are deliberately
-      // closing it on the next line.
-      close();
-    };
-  });
+      return wrapWithDone(done, ({ willReconnect }) => {
+        expect(willReconnect).toBeTruthy();
+        // This cleanup function gets called because we triggered an unintentional
+        // disconnect above (`client.ws.onclose()`). Since this is unintentional
+        // the client will reconnect itself. But this outer `openChannel`callback will NOT
+        // get called a second time when the cleint re-connects since we are deliberately
+        // closing it on the next line.
+        close();
+      });
+    }),
+  );
 });
 
 test('channel open and close', (done) => {
@@ -371,35 +407,38 @@ test('channel open and close', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(error).toEqual(null);
       expect(channel?.status).toBe('open');
 
-      return () => {
+      return wrapWithDone(done, () => {
         expect(channelClose).toHaveBeenCalled();
 
         done();
-      };
-    },
+      });
+    }),
   );
 
-  const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
-    expect(channel?.status).toBe('open');
-    expect(error).toBe(null);
+  const close = client.openChannel(
+    { service: 'shell' },
+    wrapWithDone(done, ({ channel, error }) => {
+      expect(channel?.status).toBe('open');
+      expect(error).toBe(null);
 
-    setTimeout(() => {
-      close();
-      expect(channel?.status).toBe('closing');
-    });
+      setTimeout(() => {
+        close();
+        expect(channel?.status).toBe('closing');
+      });
 
-    return ({ willReconnect }) => {
-      expect(willReconnect).toBeFalsy();
-      expect(channel?.status).toBe('closed');
+      return wrapWithDone(done, ({ willReconnect }) => {
+        expect(willReconnect).toBeFalsy();
+        expect(channel?.status).toBe('closed');
 
-      channelClose();
-      client.close();
-    };
-  });
+        channelClose();
+        client.close();
+      });
+    }),
+  );
 });
 
 test('channel accepts a thunk for service', (done) => {
@@ -418,43 +457,45 @@ test('channel accepts a thunk for service', (done) => {
       WebSocketClass: WebSocket,
       context,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(error).toEqual(null);
       expect(channel?.status).toBe('open');
 
-      return () => {
+      return wrapWithDone(done, () => {
         expect(channelClose).toHaveBeenCalled();
 
         done();
-      };
-    },
+      });
+    }),
   );
 
   const close = client.openChannel(
     {
-      service: (ctx) => {
+      service: wrapWithDone(done, (ctx) => {
         expect(ctx.username).toEqual('aghanim');
 
         return 'exec';
-      },
+      }),
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(channel?.status).toBe('open');
       expect(error).toBe(null);
 
-      setTimeout(() => {
-        close();
-        expect(channel?.status).toBe('closing');
-      });
+      setTimeout(
+        wrapWithDone(done, () => {
+          close();
+          expect(channel?.status).toBe('closing');
+        }),
+      );
 
-      return ({ willReconnect }) => {
+      return wrapWithDone(done, ({ willReconnect }) => {
         expect(willReconnect).toBeFalsy();
         expect(channel?.status).toBe('closed');
 
         channelClose();
         client.close();
-      };
-    },
+      });
+    }),
   );
 });
 
@@ -473,34 +514,37 @@ test('channel open and close from within openChannelCb synchronously', (done) =>
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(error).toEqual(null);
       expect(channel?.status).toBe('open');
 
-      return () => {
+      return wrapWithDone(done, () => {
         expect(channelClose).toHaveBeenCalled();
 
         done();
-      };
-    },
+      });
+    }),
   );
 
-  const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
-    expect(channel?.status).toBe('open');
-    expect(error).toBe(null);
+  const close = client.openChannel(
+    { service: 'shell' },
+    wrapWithDone(done, ({ channel, error }) => {
+      expect(channel?.status).toBe('open');
+      expect(error).toBe(null);
 
-    close();
+      close();
 
-    expect(channel?.status).toBe('closing');
+      expect(channel?.status).toBe('closing');
 
-    return ({ willReconnect }) => {
-      expect(willReconnect).toBeFalsy();
-      expect(channel?.status).toBe('closed');
+      return wrapWithDone(done, ({ willReconnect }) => {
+        expect(willReconnect).toBeFalsy();
+        expect(channel?.status).toBe('closed');
 
-      channelClose();
-      client.close();
-    };
-  });
+        channelClose();
+        client.close();
+      });
+    }),
+  );
 });
 
 test('channel open and close from within openChannelCb synchronously', (done) => {
@@ -518,7 +562,7 @@ test('channel open and close from within openChannelCb synchronously', (done) =>
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(error).toEqual(null);
       expect(channel?.status).toBe('open');
 
@@ -527,25 +571,28 @@ test('channel open and close from within openChannelCb synchronously', (done) =>
 
         done();
       };
-    },
+    }),
   );
 
-  const close = client.openChannel({ service: 'shell' }, ({ channel, error }) => {
-    expect(channel?.status).toBe('open');
-    expect(error).toBe(null);
+  const close = client.openChannel(
+    { service: 'shell' },
+    wrapWithDone(done, ({ channel, error }) => {
+      expect(channel?.status).toBe('open');
+      expect(error).toBe(null);
 
-    close();
+      close();
 
-    expect(channel?.status).toBe('closing');
+      expect(channel?.status).toBe('closing');
 
-    return ({ willReconnect }) => {
-      expect(willReconnect).toBeFalsy();
-      expect(channel?.status).toBe('closed');
+      return wrapWithDone(done, ({ willReconnect }) => {
+        expect(willReconnect).toBeFalsy();
+        expect(channel?.status).toBe('closed');
 
-      channelClose();
-      client.close();
-    };
-  });
+        channelClose();
+        client.close();
+      });
+    }),
+  );
 });
 
 test('channel skips opening', (done) => {
@@ -566,7 +613,7 @@ test('channel skips opening', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    ({ error }) => {
+    wrapWithDone(done, ({ error }) => {
       expect(error).toBeNull();
 
       setTimeout(() => {
@@ -580,7 +627,7 @@ test('channel skips opening', (done) => {
       return () => {
         done();
       };
-    },
+    }),
   );
 
   client.openChannel(
@@ -609,7 +656,7 @@ test('channel skips opening conditionally', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       clientOpenCount += 1;
       expect(channel?.status).toBe('open');
       expect(error).toEqual(null);
@@ -617,7 +664,7 @@ test('channel skips opening conditionally', (done) => {
         client.close();
       }
 
-      return ({ willReconnect }) => {
+      return wrapWithDone(done, ({ willReconnect }) => {
         if (willReconnect) {
           return;
         }
@@ -626,8 +673,8 @@ test('channel skips opening conditionally', (done) => {
         expect(channelOpenCount).toEqual(1);
 
         done();
-      };
-    },
+      });
+    }),
   );
 
   client.openChannel(
@@ -635,7 +682,7 @@ test('channel skips opening conditionally', (done) => {
       skip: () => channelOpenCount > 0,
       service: 'shell',
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       if (!unexpectedDisconnectTriggered) {
         setTimeout(() => {
           // eslint-disable-next-line
@@ -654,18 +701,21 @@ test('channel skips opening conditionally', (done) => {
 
       expect(error).toBeTruthy();
       expect(error?.message).toBe('Failed to open');
-    },
+    }),
   );
 });
 
 test('openChannel before open', (done) => {
   const client = getClient();
 
-  client.openChannel({ service: 'exec' }, ({ channel }) => {
-    expect(channel).toBeTruthy();
+  client.openChannel(
+    { service: 'exec' },
+    wrapWithDone(done, ({ channel }) => {
+      expect(channel).toBeTruthy();
 
-    client.close();
-  });
+      client.close();
+    }),
+  );
 
   client.open(
     {
@@ -677,13 +727,13 @@ test('openChannel before open', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(channel).toBeTruthy();
 
       return () => {
         done();
       };
-    },
+    }),
   );
 });
 
@@ -691,34 +741,37 @@ test('closing client maintains openChannel requests', (done) => {
   const client = getClient();
 
   let first = true;
-  client.openChannel({ service: 'exec' }, ({ channel }) => {
-    expect(channel).toBeTruthy();
+  client.openChannel(
+    { service: 'exec' },
+    wrapWithDone(done, ({ channel }) => {
+      expect(channel).toBeTruthy();
 
-    if (first) {
-      client.close();
-      first = false;
+      if (first) {
+        client.close();
+        first = false;
 
-      setTimeout(() => {
-        // open again should call this same function
-        client.open(
-          {
-            fetchConnectionMetadata: () =>
-              Promise.resolve({
-                ...genConnectionMetadata(),
-                error: null,
-              }),
-            WebSocketClass: WebSocket,
-            context: null,
-          },
-          () => () => {
-            done();
-          },
-        );
-      }, 200);
-    } else {
-      client.close();
-    }
-  });
+        setTimeout(() => {
+          // open again should call this same function
+          client.open(
+            {
+              fetchConnectionMetadata: () =>
+                Promise.resolve({
+                  ...genConnectionMetadata(),
+                  error: null,
+                }),
+              WebSocketClass: WebSocket,
+              context: null,
+            },
+            () => () => {
+              done();
+            },
+          );
+        }, 200);
+      } else {
+        client.close();
+      }
+    }),
+  );
 
   client.open(
     {
@@ -730,11 +783,11 @@ test('closing client maintains openChannel requests', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(channel).toBeTruthy();
 
       return () => {};
-    },
+    }),
   );
 });
 
@@ -762,13 +815,16 @@ test('allows opening channel with the same name after closing others and client 
 
   close();
   // open same name synchronously
-  client.openChannel({ name, service: 'exec' }, ({ channel }) => {
-    expect(channel).toBeTruthy();
-    expect(calledFirstWithError).toBeTruthy();
-    client.close();
+  client.openChannel(
+    { name, service: 'exec' },
+    wrapWithDone(done, ({ channel }) => {
+      expect(channel).toBeTruthy();
+      expect(calledFirstWithError).toBeTruthy();
+      client.close();
 
-    done();
-  });
+      done();
+    }),
+  );
 
   client.open(
     {
@@ -797,7 +853,7 @@ test('allows opening channel with the same name after others are closing others 
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ error }) => {
+    wrapWithDone(done, ({ error }) => {
       if (error) {
         done(error);
 
@@ -807,50 +863,56 @@ test('allows opening channel with the same name after others are closing others 
       const name = Math.random().toString();
 
       let firstChannel: Channel;
-      const close = client.openChannel({ name, service: 'exec' }, ({ channel }) => {
-        expect(channel).toBeTruthy();
+      const close = client.openChannel(
+        { name, service: 'exec' },
+        wrapWithDone(done, ({ channel }) => {
+          expect(channel).toBeTruthy();
 
-        if (!channel) {
-          throw new Error('apease typescript');
-        }
+          if (!channel) {
+            throw new Error('apease typescript');
+          }
 
-        firstChannel = channel;
+          firstChannel = channel;
 
-        expect(firstChannel.status).toEqual('closing');
-      });
+          expect(firstChannel.status).toEqual('closing');
+        }),
+      );
 
       // Close immediately
       close();
 
       // open same name synchronously
-      const close2 = client.openChannel({ name, service: 'exec' }, ({ channel: secondChannel }) => {
-        // ensure first channel opens
-        expect(firstChannel).toBeTruthy();
-        expect(secondChannel).toBeTruthy();
-        expect(secondChannel?.status).toEqual('open');
-        expect(secondChannel).not.toEqual(firstChannel);
+      const close2 = client.openChannel(
+        { name, service: 'exec' },
+        wrapWithDone(done, ({ channel: secondChannel }) => {
+          // ensure first channel opens
+          expect(firstChannel).toBeTruthy();
+          expect(secondChannel).toBeTruthy();
+          expect(secondChannel?.status).toEqual('open');
+          expect(secondChannel).not.toEqual(firstChannel);
 
-        // After the channel is opened close the current channel and open a new one
-        close2();
-        expect(secondChannel?.status).toEqual('closing');
-        const close3 = client.openChannel(
-          { name, service: 'exec' },
-          ({ channel: finalChannel }) => {
-            expect(finalChannel).toBeTruthy();
-            expect(finalChannel?.status).toEqual('open');
-            expect(finalChannel).not.toEqual(firstChannel);
-            expect(finalChannel).not.toEqual(secondChannel);
+          // After the channel is opened close the current channel and open a new one
+          close2();
+          expect(secondChannel?.status).toEqual('closing');
+          const close3 = client.openChannel(
+            { name, service: 'exec' },
+            wrapWithDone(done, ({ channel: finalChannel }) => {
+              expect(finalChannel).toBeTruthy();
+              expect(finalChannel?.status).toEqual('open');
+              expect(finalChannel).not.toEqual(firstChannel);
+              expect(finalChannel).not.toEqual(secondChannel);
 
-            close3();
+              close3();
 
-            client.close();
-            done();
-          },
-        );
-      });
+              client.close();
+              done();
+            }),
+          );
+        }),
+      );
 
       return () => {};
-    },
+    }),
   );
 });
 
@@ -878,44 +940,50 @@ test('opens multiple anonymous channels while client is connected', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel: chan0 }) => {
+    wrapWithDone(done, ({ channel: chan0 }) => {
       expect(chan0).toBeTruthy();
 
       let firstOpened = false;
       let secondOpened = false;
 
-      client.openChannel({ service: 'exec' }, ({ channel }) => {
-        if (firstOpened) {
-          doneOnce(new Error('exepected channel to open only once'));
+      client.openChannel(
+        { service: 'exec' },
+        wrapWithDone(done, ({ channel }) => {
+          if (firstOpened) {
+            doneOnce(new Error('exepected channel to open only once'));
 
-          return;
-        }
+            return;
+          }
 
-        expect(channel).toBeTruthy();
-        firstOpened = true;
+          expect(channel).toBeTruthy();
+          firstOpened = true;
 
-        if (secondOpened) {
-          doneOnce();
-        }
-      });
+          if (secondOpened) {
+            doneOnce();
+          }
+        }),
+      );
 
-      client.openChannel({ service: 'exec' }, ({ channel }) => {
-        if (secondOpened) {
-          doneOnce(new Error('exepected channel to open only once'));
+      client.openChannel(
+        { service: 'exec' },
+        wrapWithDone(done, ({ channel }) => {
+          if (secondOpened) {
+            doneOnce(new Error('exepected channel to open only once'));
 
-          return;
-        }
+            return;
+          }
 
-        expect(channel).toBeTruthy();
-        secondOpened = true;
+          expect(channel).toBeTruthy();
+          secondOpened = true;
 
-        if (firstOpened) {
-          doneOnce();
-        }
-      });
+          if (firstOpened) {
+            doneOnce();
+          }
+        }),
+      );
 
       return () => {};
-    },
+    }),
   );
 });
 
@@ -937,7 +1005,7 @@ test('client reconnects unexpected disconnects', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(error).toEqual(null);
       expect(channel?.status).toEqual('open');
 
@@ -972,7 +1040,7 @@ test('client reconnects unexpected disconnects', (done) => {
           done();
         }
       };
-    },
+    }),
   );
 });
 
@@ -998,7 +1066,7 @@ test('client is closed while reconnecting', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel }) => {
+    wrapWithDone(done, ({ channel }) => {
       if (channel) {
         // called once after initial connect
         onOpen();
@@ -1010,11 +1078,11 @@ test('client is closed while reconnecting', (done) => {
         });
       }
 
-      return () => {
+      return wrapWithDone(done, () => {
         expect(onOpen).toHaveBeenCalledTimes(1);
         done();
-      };
-    },
+      });
+    }),
   );
 });
 
@@ -1042,7 +1110,7 @@ test('closing before ever connecting', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ error }) => {
+    wrapWithDone(done, ({ error }) => {
       if (error) {
         openError();
         expect(open).not.toHaveBeenCalled();
@@ -1059,7 +1127,7 @@ test('closing before ever connecting', (done) => {
       return () => {
         close();
       };
-    },
+    }),
   );
 });
 
@@ -1094,7 +1162,7 @@ test('fallback to polling', (done) => {
       context: null,
       pollingHost: 'gp-v2.replit.com',
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(error).toBeNull();
       expect(channel).not.toBeNull();
       expect(didLogFallback).toBe(true);
@@ -1103,7 +1171,7 @@ test('fallback to polling', (done) => {
       return () => {
         done();
       };
-    },
+    }),
   );
 }, 40000);
 
@@ -1148,13 +1216,13 @@ test('does not fallback to polling if host is unset', (done) => {
       WebSocketClass: WebsocketThatNeverConnects,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(didLogFallback).toBe(false);
       expect(channel).toBeNull();
       expect(error).not.toBeNull();
 
       done();
-    },
+    }),
   );
 }, 40000);
 
@@ -1162,12 +1230,14 @@ test('fetch token fail', (done) => {
   const chan0Cb = jest.fn();
   const client = getClient();
 
-  client.setUnrecoverableErrorHandler((e) => {
-    expect(chan0Cb).toHaveBeenCalledTimes(1);
-    expect(e.message).toContain('fail');
+  client.setUnrecoverableErrorHandler(
+    wrapWithDone(done, (e) => {
+      expect(chan0Cb).toHaveBeenCalledTimes(1);
+      expect(e.message).toContain('fail');
 
-    done();
-  });
+      done();
+    }),
+  );
 
   client.open(
     {
@@ -1207,7 +1277,7 @@ test('fetch abort signal works as expected', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(channel).toBe(null);
       expect(error).toBeTruthy();
       expect(error?.message).toBe('Failed to open');
@@ -1218,7 +1288,7 @@ test('fetch abort signal works as expected', (done) => {
       done();
 
       return () => {};
-    },
+    }),
   );
 });
 
@@ -1250,7 +1320,7 @@ test('can close and open in synchronously without aborting fetch token', (done) 
   client.close();
 
   expect(resolveFetchToken).toBeTruthy();
-  // resolving the first fetch token later shouldn't casue any errors
+  // resolving the first fetch token later shouldn't case any errors
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   resolveFetchToken!({ error: FetchConnectionMetadataError.Aborted });
   expect(onAbort).toHaveBeenCalledTimes(1);
@@ -1273,17 +1343,17 @@ test('can close and open in synchronously without aborting fetch token', (done) 
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ channel, error }) => {
+    wrapWithDone(done, ({ channel, error }) => {
       expect(channel?.status).toBe('open');
       expect(error).toEqual(null);
 
       client.close();
 
-      return () => {
+      return wrapWithDone(done, () => {
         expect(firstChan0Cb).toHaveBeenCalledTimes(1);
 
         done();
-      };
-    },
+      });
+    }),
   );
 });
