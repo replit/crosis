@@ -77,6 +77,11 @@ export type DebugLog =
       type: 'log';
       log: {
         direction: 'in' | 'out';
+        channel: {
+          id: number;
+          name?: string;
+          service?: string;
+        };
         cmd: api.Command;
       };
     };

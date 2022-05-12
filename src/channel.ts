@@ -8,6 +8,16 @@ export class Channel {
   public id: number;
 
   /**
+   * The name of the channel.
+   */
+  public readonly name?: string;
+
+  /**
+   * The name of the service associated with the channel.
+   */
+  public readonly service?: string;
+
+  /**
    * The current connection status of the channel.
    * When the channel is open or closing you can potentially
    * receive commands on the channel.
@@ -54,14 +64,20 @@ export class Channel {
    */
   constructor({
     id,
+    name,
+    service,
     send,
     onUnrecoverableError,
   }: {
     id: number;
+    name?: string;
+    service?: string;
     send: (cmd: api.Command) => void;
     onUnrecoverableError: (e: Error) => void;
   }) {
     this.id = id;
+    this.name = name;
+    this.service = service;
     this.sendToContainer = send;
     this.onUnrecoverableError = onUnrecoverableError;
     this.status = 'open';
