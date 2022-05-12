@@ -29,5 +29,6 @@ module.exports = {
     'operator-linebreak': 'off',
     'no-param-reassign': ['error', { props: false }],
     'object-curly-newline': 'off',
+    'max-classes-per-file': 'off',
   },
 };
