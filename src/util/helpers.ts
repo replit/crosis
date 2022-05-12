@@ -55,10 +55,7 @@ export function getWebSocketClass(
  * Given connection metadata, creates a websocket connection string. Will
  * fallback to polling if `pollingHost` is provided.
  */
-export function getConnectionStr(
-  connectionMetadata: GovalMetadata,
-  pollingHost?: string,
-): string {
+export function getConnectionStr(connectionMetadata: GovalMetadata, pollingHost?: string): string {
   const gurl = urllib.parse(connectionMetadata.gurl);
   if (pollingHost) {
     gurl.hostname = pollingHost;
