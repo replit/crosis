@@ -58,7 +58,7 @@ type ChannelRequest<Ctx> =
       cleanupCb: null;
     };
 
-export class Client<Ctx extends unknown = null> {
+export class Client<Ctx = null> {
   /**
    * Indicates the current state of the connection with the container.
    * This will only be DISCONNECTED if `open` has not been called
@@ -883,8 +883,13 @@ export class Client<Ctx extends unknown = null> {
         let err: Error;
         if (e instanceof Error) {
           err = e;
-        } else if (e && typeof e === 'object' && 'message' in e) {
-          err = new Error((e as any).message);
+        } else if (
+          e &&
+          typeof e === 'object' &&
+          'message' in e &&
+          typeof (e as Record<string, string>).message === 'string'
+        ) {
+          err = new Error((e as Record<string, string>).message);
         } else if (typeof e === 'string') {
           err = new Error(e);
         } else {

@@ -1,20 +1,17 @@
 module.exports = {
-  parser: '@typescript-eslint/parser',
-  extends: ['airbnb', 'plugin:@typescript-eslint/recommended', 'prettier/@typescript-eslint'],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:prettier/recommended',
+  ],
   plugins: ['@typescript-eslint', 'prettier'],
-  settings: {
-    'import/parsers': {
-      '@typescript-eslint/parser': ['.ts'],
-    },
-    'import/resolver': {
-      typescript: {},
-    },
-  },
+  parser: '@typescript-eslint/parser',
   env: {
     browser: true,
     node: true,
   },
   rules: {
+    'prettier/prettier': 'error',
     'import/prefer-default-export': 'off',
     indent: 'off',
     'implicit-arrow-linebreak': 'off', // conflicts with prettier
@@ -29,6 +26,5 @@ module.exports = {
     'operator-linebreak': 'off',
     'no-param-reassign': ['error', { props: false }],
     'object-curly-newline': 'off',
-    'max-classes-per-file': 'off',
   },
 };
