@@ -1189,6 +1189,8 @@ export class Client<Ctx = null> {
       }
     });
 
+    const currentChan0 = this.getChannel(0);
+    const currentConnectOptions = this.connectOptions;
     onFailed = (error: Error) => {
       // Make sure this function is not called multiple times.
       onFailed = null;
@@ -1198,6 +1200,14 @@ export class Client<Ctx = null> {
       this.cleanupSocket();
       cancelTimeout();
       unlistenChan0();
+
+      if (this.connectOptions !== currentConnectOptions || this.getChannel(0) !== currentChan0) {
+        this.onUnrecoverableError(
+          new Error('onFailed got called but client is in a different connecting context'),
+        );
+
+        return;
+      }
 
       this.retryConnect({
         tryCount: tryCount + 1,
@@ -1225,15 +1235,14 @@ export class Client<Ctx = null> {
     error: Error;
   }) => {
     if (this.retryTimeoutId) {
-      this.onUnrecoverableError(new Error('unexpected existing retryTimeoutId'));
+      this.onUnrecoverableError(new Error('Unexpected existing retryTimeoutId'));
 
       return;
     }
 
     if (!this.chan0Cb) {
-      // User called close
-      // TODO (masad-frost) something more explicit here
-      // might be the way to go
+      this.onUnrecoverableError(new Error('Expected chan0Cb when scheduling a retry'));
+
       return;
     }
 
