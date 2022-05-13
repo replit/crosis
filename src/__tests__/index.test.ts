@@ -64,6 +64,13 @@ function wrapWithDone<Args extends Array<any>, Ret>(
 function getWebsocketClassThatNeverConnects() {
   class _WebsocketThatNeverConnects {
     static OPEN = 1;
+    onclose?: (closeEvent: CloseEvent) => void;
+
+    send = () => {};
+
+    close = (code = 1000, reason?: string) => {
+      setTimeout(() => this.onclose?.(createCloseEvent({ code, reason })));
+    };
   }
 
   const WebsocketThatNeverConnects = _WebsocketThatNeverConnects as typeof WebSocket;
