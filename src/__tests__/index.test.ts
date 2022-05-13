@@ -1238,7 +1238,7 @@ test('does not fallback to polling if host is unset', (done) => {
   );
 }, 40000);
 
-test.only('cancels connection timeout when closing', (done) => {
+test('cancels connection timeout when closing', (done) => {
   const client = getClient(done);
 
   const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();

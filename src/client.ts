@@ -158,6 +158,16 @@ export class Client<Ctx = null> {
   private retryTimeoutId: ReturnType<typeof setTimeout> | null;
 
   /**
+   * Users can provide a timeout for how long the client should
+   * wait for a successful connection to the server. When the client
+   * closes while we're waiting for the timeout, we clear this
+   * timeout.
+   *
+   * @hidden
+   */
+  private connectTimeoutId: ReturnType<typeof setTimeout> | null;
+
+  /**
    * Abort controller is used so that when the user calls client.close while
    * we're fetching connection metadata, we can be sure that we don't have a
    * `connect` call lingering around waiting for connection metadata and
@@ -196,6 +206,7 @@ export class Client<Ctx = null> {
     this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
     this.retryTimeoutId = null;
+    this.connectTimeoutId = null;
     this.fetchTokenAbortController = null;
     this.destroyed = false;
     this.connectionMetadata = null;
@@ -679,11 +690,6 @@ export class Client<Ctx = null> {
       throw error;
     }
 
-    if (this.fetchTokenAbortController) {
-      this.fetchTokenAbortController.abort();
-      this.fetchTokenAbortController = null;
-    }
-
     // If the close is intentional, let's unset the metadata, the client
     // may be re-used to connect to another repl
     this.connectionMetadata = null;
@@ -850,6 +856,12 @@ export class Client<Ctx = null> {
 
     if (Object.keys(this.channels).length) {
       this.onUnrecoverableError(new Error('Found an an unexpected existing channels'));
+
+      return;
+    }
+
+    if (this.connectTimeoutId) {
+      this.onUnrecoverableError(new Error('Unexpected connectTimeoutId'));
 
       return;
     }
@@ -1062,20 +1074,23 @@ export class Client<Ctx = null> {
     let cancelTimeout = () => {};
     const { timeout } = this.connectOptions;
     if (timeout !== null) {
-      let timeoutId: ReturnType<typeof setTimeout>; // Can also be of type `number` in the browser
-
       cancelTimeout = () => {
         this.debug({ type: 'breadcrumb', message: 'cancel timeout' });
 
-        clearTimeout(timeoutId);
+        if (this.connectTimeoutId) {
+          clearTimeout(this.connectTimeoutId);
+          this.connectTimeoutId = null;
+        }
       };
 
       resetTimeout = () => {
         this.debug({ type: 'breadcrumb', message: 'reset timeout' });
 
-        clearTimeout(timeoutId);
+        if (this.connectTimeoutId) {
+          clearTimeout(this.connectTimeoutId);
+        }
 
-        timeoutId = setTimeout(() => {
+        this.connectTimeoutId = setTimeout(() => {
           this.debug({ type: 'breadcrumb', message: 'connect timeout' });
 
           if (!onFailed) {
@@ -1191,6 +1206,7 @@ export class Client<Ctx = null> {
 
     const currentChan0 = this.getChannel(0);
     const currentConnectOptions = this.connectOptions;
+
     onFailed = (error: Error) => {
       // Make sure this function is not called multiple times.
       onFailed = null;
@@ -1403,6 +1419,17 @@ export class Client<Ctx = null> {
       // Client was closed while reconnecting
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
+    }
+
+    if (this.connectTimeoutId) {
+      // Client was closed while waiting for connection
+      clearTimeout(this.connectTimeoutId);
+      this.connectTimeoutId = null;
+    }
+
+    if (this.fetchTokenAbortController) {
+      this.fetchTokenAbortController.abort();
+      this.fetchTokenAbortController = null;
     }
 
     const willClientReconnect = closeResult.closeReason === ClientCloseReason.Disconnected;
