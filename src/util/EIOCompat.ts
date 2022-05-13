@@ -42,7 +42,10 @@ function createMessageEvent(data: ArrayBuffer): MessageEvent {
   } as MessageEvent;
 }
 
-function createCloseEvent(info: CloseEventInit): CloseEvent {
+/**
+ * @hidden
+ */
+export function createCloseEvent(info: CloseEventInit): CloseEvent {
   if (typeof window !== 'undefined') {
     return new CloseEvent('close', info);
   }

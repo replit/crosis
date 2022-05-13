@@ -4,6 +4,7 @@ import type { FetchConnectionMetadataResult } from '../types';
 import { Client, FetchConnectionMetadataError } from '..';
 import { getWebSocketClass } from '../util/helpers';
 import { Channel } from '../channel';
+import { createCloseEvent } from '../util/EIOCompat';
 
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
@@ -19,6 +20,7 @@ const testingClients: Array<Client<any>> = [];
 // Just a helper that to help us exit from jest without any open handles
 function getClient<Ctx = null>(done: jest.DoneCallback) {
   const c = new Client<Ctx>();
+  c.setUnrecoverableErrorHandler(done);
   testingClients.push(c);
 
   return c;
@@ -64,6 +66,7 @@ function wrapWithDone<Args extends Array<any>, Ret>(
 function getWebsocketClassThatNeverConnects() {
   class _WebsocketThatNeverConnects {
     static OPEN = 1;
+
     onclose?: (closeEvent: CloseEvent) => void;
 
     send = () => {};
@@ -1234,6 +1237,42 @@ test('does not fallback to polling if host is unset', (done) => {
     }),
   );
 }, 40000);
+
+test.only('cancels connection timeout when closing', (done) => {
+  const client = getClient(done);
+
+  const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
+
+  const timeout = 2000;
+
+  client.addDebugFunc((log) => {
+    if (log.type === 'breadcrumb' && log.message === 'connecting') {
+      setTimeout(() => {
+        client.close();
+
+        setTimeout(() => {
+          done();
+          // ample time for the other timeout to clear up
+          // and reak havoc if it was to do that.
+        }, timeout + 100);
+      });
+    }
+  });
+
+  client.open(
+    {
+      timeout,
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebsocketThatNeverConnects,
+      context: null,
+    },
+    () => {},
+  );
+}, 20000);
 
 test('fetch token fail', (done) => {
   const chan0Cb = jest.fn();
