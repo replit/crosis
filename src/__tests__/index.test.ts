@@ -4,6 +4,7 @@ import type { FetchConnectionMetadataResult } from '../types';
 import { Client, FetchConnectionMetadataError } from '..';
 import { getWebSocketClass } from '../util/helpers';
 import { Channel } from '../channel';
+import { createCloseEvent } from '../util/EIOCompat';
 
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
@@ -17,8 +18,9 @@ jest.setTimeout(30 * 1000);
 const testingClients: Array<Client<any>> = [];
 
 // Just a helper that to help us exit from jest without any open handles
-function getClient<Ctx = null>() {
+function getClient<Ctx = null>(done: jest.DoneCallback) {
   const c = new Client<Ctx>();
+  c.setUnrecoverableErrorHandler(done);
   testingClients.push(c);
 
   return c;
@@ -61,8 +63,30 @@ function wrapWithDone<Args extends Array<any>, Ret>(
   };
 }
 
+function getWebsocketClassThatNeverConnects() {
+  class _WebsocketThatNeverConnects {
+    static OPEN = 1;
+
+    onclose?: (closeEvent: CloseEvent) => void;
+
+    send = () => {};
+
+    close = (code = 1000, reason?: string) => {
+      setTimeout(() => this.onclose?.(createCloseEvent({ code, reason })));
+    };
+  }
+
+  const WebsocketThatNeverConnects = _WebsocketThatNeverConnects as typeof WebSocket;
+
+  // Make sure internals think it's a websocket
+  expect(() => getWebSocketClass(WebsocketThatNeverConnects)).not.toThrow();
+  expect(getWebSocketClass(WebsocketThatNeverConnects)).toEqual(WebsocketThatNeverConnects);
+
+  return WebsocketThatNeverConnects;
+}
+
 test('client connect', (done) => {
-  const client = getClient<{ username: string }>();
+  const client = getClient<{ username: string }>(done);
 
   const ctx = { username: 'zyzz' };
 
@@ -91,7 +115,7 @@ test('client connect', (done) => {
 });
 
 test('client connect with connection metadata retry', (done) => {
-  const client = getClient<{ username: string }>();
+  const client = getClient<{ username: string }>(done);
 
   const ctx = { username: 'zyzz' };
 
@@ -132,7 +156,7 @@ test('client connect with connection metadata retry', (done) => {
 });
 
 test('client retries', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   let tryCount = 0;
 
@@ -172,7 +196,7 @@ test('client retries', (done) => {
 });
 
 test('client retries and caches tokens', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   const fetchConnectionMetadata = jest.fn();
 
@@ -221,7 +245,7 @@ test('client retries and caches tokens', (done) => {
 });
 
 test('client retries but does not cache tokens', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   const fetchConnectionMetadata = jest.fn();
 
@@ -269,7 +293,7 @@ test('client retries but does not cache tokens', (done) => {
 });
 
 test('client requests new connection metadata after intentional close', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   client.open(
     {
@@ -327,7 +351,7 @@ test('channel closing itself when client willReconnect', (done) => {
   let channelOpenCount = 0;
   let connectionMetadataCount = 0;
 
-  const client = getClient();
+  const client = getClient(done);
 
   client.open(
     {
@@ -393,7 +417,7 @@ test('channel closing itself when client willReconnect', (done) => {
 });
 
 test('channel open and close', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   const channelClose = jest.fn();
 
@@ -443,7 +467,7 @@ test('channel open and close', (done) => {
 
 test('channel accepts a thunk for service', (done) => {
   const context = { username: 'aghanim' };
-  const client = getClient<typeof context>();
+  const client = getClient<typeof context>(done);
 
   const channelClose = jest.fn();
 
@@ -500,7 +524,7 @@ test('channel accepts a thunk for service', (done) => {
 });
 
 test('channel open and close from within openChannelCb synchronously', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   const channelClose = jest.fn();
 
@@ -548,7 +572,7 @@ test('channel open and close from within openChannelCb synchronously', (done) =>
 });
 
 test('channel open and close from within openChannelCb synchronously', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   const channelClose = jest.fn();
 
@@ -596,7 +620,7 @@ test('channel open and close from within openChannelCb synchronously', (done) =>
 });
 
 test('channel skips opening', (done) => {
-  const client = getClient<{ username: string }>();
+  const client = getClient<{ username: string }>(done);
 
   const service = 'shell';
   const ctx = { username: 'midas' };
@@ -644,7 +668,7 @@ test('channel skips opening conditionally', (done) => {
   let clientOpenCount = 0;
   let channelOpenCount = 0;
 
-  const client = getClient();
+  const client = getClient(done);
 
   client.open(
     {
@@ -706,7 +730,7 @@ test('channel skips opening conditionally', (done) => {
 });
 
 test('openChannel before open', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   client.openChannel(
     { service: 'exec' },
@@ -738,7 +762,7 @@ test('openChannel before open', (done) => {
 });
 
 test('closing client maintains openChannel requests', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   let first = true;
   client.openChannel(
@@ -791,8 +815,8 @@ test('closing client maintains openChannel requests', (done) => {
   );
 });
 
-test('client rejects opening same channel twice', () => {
-  const client = getClient();
+test('client rejects opening same channel twice', (done) => {
+  const client = getClient(done);
   client.setUnrecoverableErrorHandler(() => {});
 
   const name = Math.random().toString();
@@ -801,10 +825,12 @@ test('client rejects opening same channel twice', () => {
   expect(() => {
     client.openChannel({ name, service: 'exec' }, () => {});
   }).toThrow();
+
+  done();
 });
 
 test('allows opening channel with the same name after closing others and client is disconnected', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   const name = Math.random().toString();
 
@@ -841,7 +867,7 @@ test('allows opening channel with the same name after closing others and client 
 });
 
 test('allows opening channel with the same name after others are closing others and client is connected', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   client.open(
     {
@@ -917,7 +943,7 @@ test('allows opening channel with the same name after others are closing others 
 });
 
 test('opens multiple anonymous channels while client is connected', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   let didDone = false;
   const doneOnce = (e?: Error) => {
@@ -988,7 +1014,7 @@ test('opens multiple anonymous channels while client is connected', (done) => {
 });
 
 test('client reconnects unexpected disconnects', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   let disconnectTriggered = false;
   let timesConnected = 0;
@@ -1047,7 +1073,7 @@ test('client reconnects unexpected disconnects', (done) => {
 test('client is closed while reconnecting', (done) => {
   const onOpen = jest.fn();
 
-  const client = getClient();
+  const client = getClient(done);
   client.addDebugFunc((log) => {
     if (log.type === 'breadcrumb' && log.message === 'reconnecting') {
       setTimeout(() => {
@@ -1087,7 +1113,7 @@ test('client is closed while reconnecting', (done) => {
 });
 
 test('closing before ever connecting', (done) => {
-  const client = getClient();
+  const client = getClient(done);
   client.addDebugFunc((log) => {
     if (log.type === 'breadcrumb' && log.message === 'connecting') {
       setTimeout(() => {
@@ -1132,16 +1158,9 @@ test('closing before ever connecting', (done) => {
 });
 
 test('fallback to polling', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
-  class _WebsocketThatNeverConnects {
-    static OPEN = 1;
-  }
-
-  const WebsocketThatNeverConnects = _WebsocketThatNeverConnects as typeof WebSocket;
-
-  expect(() => getWebSocketClass(WebsocketThatNeverConnects)).not.toThrow();
-  expect(getWebSocketClass(WebsocketThatNeverConnects)).toEqual(WebsocketThatNeverConnects);
+  const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
 
   let didLogFallback = false;
   client.addDebugFunc((log) => {
@@ -1176,17 +1195,10 @@ test('fallback to polling', (done) => {
 }, 40000);
 
 test('does not fallback to polling if host is unset', (done) => {
-  const client = getClient();
+  const client = getClient(done);
   client.setUnrecoverableErrorHandler(() => {});
 
-  class _WebsocketThatNeverConnects {
-    static OPEN = 1;
-  }
-
-  const WebsocketThatNeverConnects = _WebsocketThatNeverConnects as typeof WebSocket;
-
-  expect(() => getWebSocketClass(WebsocketThatNeverConnects)).not.toThrow();
-  expect(getWebSocketClass(WebsocketThatNeverConnects)).toEqual(WebsocketThatNeverConnects);
+  const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
 
   let didLogFallback = false;
   client.addDebugFunc((log) => {
@@ -1226,9 +1238,45 @@ test('does not fallback to polling if host is unset', (done) => {
   );
 }, 40000);
 
+test('cancels connection timeout when closing', (done) => {
+  const client = getClient(done);
+
+  const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
+
+  const timeout = 2000;
+
+  client.addDebugFunc((log) => {
+    if (log.type === 'breadcrumb' && log.message === 'connecting') {
+      setTimeout(() => {
+        client.close();
+
+        setTimeout(() => {
+          done();
+          // ample time for the other timeout to clear up
+          // and reak havoc if it was to do that.
+        }, timeout + 100);
+      });
+    }
+  });
+
+  client.open(
+    {
+      timeout,
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebsocketThatNeverConnects,
+      context: null,
+    },
+    () => {},
+  );
+}, 20000);
+
 test('fetch token fail', (done) => {
   const chan0Cb = jest.fn();
-  const client = getClient();
+  const client = getClient(done);
 
   client.setUnrecoverableErrorHandler(
     wrapWithDone(done, (e) => {
@@ -1253,7 +1301,7 @@ test('fetch token fail', (done) => {
 });
 
 test('fetch abort signal works as expected', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   const onAbort = jest.fn();
 
@@ -1293,7 +1341,7 @@ test('fetch abort signal works as expected', (done) => {
 });
 
 test('can close and open in synchronously without aborting fetch token', (done) => {
-  const client = getClient();
+  const client = getClient(done);
 
   const onAbort = jest.fn();
   const firstChan0Cb = jest.fn();
