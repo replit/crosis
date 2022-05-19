@@ -1,3 +1,13 @@
+#### v8.0.0 [BREAKING]
+
+Breaking change: `pollingHost` must be specified for polling fallback to work
+
+Fixed a couple of bugs where some resources where not cleaned up properly
+
+#### v7.3.2
+
+Should have been published as v8.0.0
+
 #### v7.3.1
 
 Changed the default polling host to gp-v2.replit.com.
