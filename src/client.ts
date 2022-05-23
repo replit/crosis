@@ -1125,7 +1125,7 @@ export class Client<Ctx = null> {
       // we will reset the timeout
       resetTimeout();
 
-      if (cmd.FirewallDenied != null) {
+      if (cmd.firewallDenied != null) {
         this.onUnrecoverableError(
           new Error("Can't connect to unfirewalled repl from firewall mode"),
         );
