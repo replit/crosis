@@ -1126,7 +1126,7 @@ export class Client<Ctx = null> {
       resetTimeout();
 
       if (cmd.FirewallDenied === true) {
-        this.onUnrecoverableError(new Error('Can\'t connect to unfirewalled repl'));
+        this.onUnrecoverableError(new Error("Can't connect to unfirewalled repl"));
 
         return;
       }
