@@ -1345,10 +1345,10 @@
   resolved "https://registry.yarnpkg.com/@protobufjs/utf8/-/utf8-1.1.0.tgz#a777360b5b39a1a2e5106f8e858f2fd2d060c570"
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
-"@replit/protocol@>=0.2.47":
-  version "0.2.47"
-  resolved "https://registry.yarnpkg.com/@replit/protocol/-/protocol-0.2.47.tgz#6322c2af085f9fac346814295861697cc37d0b9e"
-  integrity sha512-70LClWikfmKJ4rMGasi+m8AFSzSVSeRCJjGkl6fQ+qi9xITUTyjr4KawTiBsHlPCNdwOXoeI7iY4htywNyXJkQ==
+"@replit/protocol@>=0.2.48":
+  version "0.2.48"
+  resolved "https://registry.yarnpkg.com/@replit/protocol/-/protocol-0.2.48.tgz#70a48d3f4ad9361c6d163a587ad0117ca0d63915"
+  integrity sha512-oxrSkJc0T7cxRhMDZi6ld83fSiDi88inGqg3eLI9H6O2Q2curhOYgnXamk6OHB1DxJ7TjBllN6GWAocKeXQ7AA==
   dependencies:
     protobufjs "^6.10.2"
 

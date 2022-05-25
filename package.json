@@ -25,7 +25,7 @@
     "engine.io-client": "^3.4.0"
   },
   "devDependencies": {
-    "@replit/protocol": ">=0.2.47",
+    "@replit/protocol": ">=0.2.48",
     "@types/engine.io-client": "^3.1.5",
     "@types/jest": "^27.5.1",
     "@types/node": "^17.0.32",
