@@ -132,6 +132,12 @@ export class Client<Ctx = null> {
   private debugFuncs: Array<(log: DebugLog) => void>;
 
   /**
+   * Listeners to be called for BootStatus messages
+   *
+   */
+  private bootStatusFuncs: Array<(cmd: api.BootStatus) => void>;
+
+  /**
    * A function supplied to us by the user of the client. Will be called
    * any time we have an unrecoverable error, usually an invariance
    *
@@ -195,6 +201,7 @@ export class Client<Ctx = null> {
     this.chan0CleanupCb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.debugFuncs = [];
+    this.bootStatusFuncs = [];
     this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
     this.retryTimeoutId = null;
@@ -760,6 +767,21 @@ export class Client<Ctx = null> {
   };
 
   /**
+   * Adds a listener for bootstatus messages coming in from the backend
+   * before we acquire and connect to the container.
+   */
+  public onBootStatus = (bootStatusFunc: (command: api.BootStatus) => void): (() => void) => {
+    this.bootStatusFuncs.push(bootStatusFunc);
+
+    return () => {
+      const idx = this.bootStatusFuncs.indexOf(bootStatusFunc);
+      if (idx > -1) {
+        this.bootStatusFuncs.splice(idx, 1);
+      }
+    };
+  };
+
+  /**
    * Set a function to handle unrecoverable error
    *
    * Unrecoverable errors are internal errors or invariance errors
@@ -1109,6 +1131,13 @@ export class Client<Ctx = null> {
         this.onUnrecoverableError(
           new Error("Can't connect to unfirewalled repl from firewall mode"),
         );
+
+        return;
+      }
+
+      const bootStatus = cmd.bootStatus;
+      if (bootStatus) {
+        this.bootStatusFuncs.forEach((fn) => fn(bootStatus));
 
         return;
       }
