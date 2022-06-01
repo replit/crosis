@@ -878,6 +878,18 @@ export class Client<Ctx = null> {
     });
     this.channels[0] = chan0;
 
+    // We'll emit bootstatus throughout the lifetime of the channel
+    // bootstatus messages may come in after container state is ready
+    // and so we don't want to dispose this listener until the current
+    // connection is completely disposed, which automatically disposes
+    // this channel and attached listeners
+    chan0.onCommand((cmd) => {
+      const bootStatus = cmd.bootStatus;
+      if (bootStatus != null) {
+        this.bootStatusFuncs.forEach((cb) => cb(bootStatus));
+      }
+    });
+
     if (!this.connectOptions.reuseConnectionMetadata || this.connectionMetadata === null) {
       if (this.fetchTokenAbortController) {
         this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
@@ -1131,13 +1143,6 @@ export class Client<Ctx = null> {
         this.onUnrecoverableError(
           new Error("Can't connect to unfirewalled repl from firewall mode"),
         );
-
-        return;
-      }
-
-      const bootStatus = cmd.bootStatus;
-      if (bootStatus) {
-        this.bootStatusFuncs.forEach((fn) => fn(bootStatus));
 
         return;
       }
