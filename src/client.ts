@@ -134,6 +134,7 @@ export class Client<Ctx = null> {
   /**
    * Listeners to be called for BootStatus messages
    *
+   * @hidden
    */
   private bootStatusFuncs: Array<(cmd: api.BootStatus) => void>;
 
