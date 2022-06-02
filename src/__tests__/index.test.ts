@@ -5,6 +5,7 @@ import { Client, FetchConnectionMetadataError } from '..';
 import { getWebSocketClass } from '../util/helpers';
 import { Channel } from '../channel';
 import { createCloseEvent } from '../util/EIOCompat';
+import { api } from '@replit/protocol';
 
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
@@ -1403,5 +1404,57 @@ test('can close and open in synchronously without aborting fetch token', (done) 
         done();
       });
     }),
+  );
+});
+
+test('emits boot status messages', (done) => {
+  const client = getClient<{ username: string }>(done);
+
+  const ctx = { username: 'zyzz' };
+
+  let count = 0;
+  client.onBootStatus(
+    wrapWithDone(done, (bootStatus) => {
+      count++;
+
+      if (count === 1) {
+        expect(bootStatus).toEqual(
+          expect.objectContaining({
+            stage: api.BootStatus.Stage.HANDSHAKE,
+          }),
+        );
+      } else if (count === 2) {
+        expect(bootStatus).toEqual(
+          expect.objectContaining({
+            stage: api.BootStatus.Stage.ACQUIRING,
+          }),
+        );
+      } else if (count === 3) {
+        // LOAD_BLOCKS and PULL_FILES aren't emitted since
+        // this container should not have any history
+
+        expect(bootStatus).toEqual(
+          expect.objectContaining({
+            stage: api.BootStatus.Stage.COMPLETE,
+          }),
+        );
+
+        client.destroy();
+        done();
+      }
+    }),
+  );
+
+  client.open(
+    {
+      fetchConnectionMetadata: () =>
+        Promise.resolve({
+          ...genConnectionMetadata(),
+          error: null,
+        }),
+      WebSocketClass: WebSocket,
+      context: ctx,
+    },
+    () => {},
   );
 });
