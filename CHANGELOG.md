@@ -1,3 +1,13 @@
+#### v9.0.0 [BREAKING]
+
+Breaking change: removed deprecated `setDebugFunc`
+
+Breaking change: renamed `addDebugFunc` to `onDebugLog`
+
+Breaking change: Unrecoverable error is emitted when `firewallDenied` command is received during connecting.
+
+Added new listener `onBootStatus` allowing users to capture to BootStatus messages during connecting.
+
 #### v8.0.0 [BREAKING]
 
 Breaking change: `pollingHost` must be specified for polling fallback to work
