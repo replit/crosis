@@ -125,14 +125,6 @@ export class Client<Ctx = null> {
   };
 
   /**
-   * Called for breadcrumbs and other debug reasons. Use addDebugFunc
-   * instead
-   *
-   * @hidden
-   */
-  private legacyDebugFunc: undefined | ((log: DebugLog) => void);
-
-  /**
    * Listeners to be called for breadcrumbs and other debug reasons
    *
    * @hidden
@@ -749,26 +741,14 @@ export class Client<Ctx = null> {
    * @hidden
    */
   private debug = (log: DebugLog): void => {
-    if (this.legacyDebugFunc) {
-      this.legacyDebugFunc(log);
-    }
     this.debugFuncs.forEach((func) => func(log));
-  };
-
-  /**
-   * Sets a logging/debugging function
-   *
-   * @deprecated use addDebugFunc instead
-   */
-  public setDebugFunc = (debugFunc: (log: DebugLog) => void): void => {
-    this.legacyDebugFunc = debugFunc;
   };
 
   /**
    * Adds a logging/debugging function. Returns a function that will remove
    * the callback
    */
-  public addDebugFunc = (debugFunc: (log: DebugLog) => void): (() => void) => {
+  public onDebugLog = (debugFunc: (log: DebugLog) => void): (() => void) => {
     this.debugFuncs.push(debugFunc);
 
     return () => {

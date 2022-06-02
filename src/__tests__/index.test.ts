@@ -201,7 +201,7 @@ test('client retries and caches tokens', (done) => {
   const fetchConnectionMetadata = jest.fn();
 
   let reconnectCount = 0;
-  client.addDebugFunc((log) => {
+  client.onDebugLog((log) => {
     if (log.type !== 'breadcrumb' || log.message !== 'retrying') {
       return;
     }
@@ -250,7 +250,7 @@ test('client retries but does not cache tokens', (done) => {
   const fetchConnectionMetadata = jest.fn();
 
   let reconnectCount = 0;
-  client.addDebugFunc((log) => {
+  client.onDebugLog((log) => {
     if (log.type !== 'breadcrumb' || log.message !== 'retrying') {
       return;
     }
@@ -1074,7 +1074,7 @@ test('client is closed while reconnecting', (done) => {
   const onOpen = jest.fn();
 
   const client = getClient(done);
-  client.addDebugFunc((log) => {
+  client.onDebugLog((log) => {
     if (log.type === 'breadcrumb' && log.message === 'reconnecting') {
       setTimeout(() => {
         client.close();
@@ -1114,7 +1114,7 @@ test('client is closed while reconnecting', (done) => {
 
 test('closing before ever connecting', (done) => {
   const client = getClient(done);
-  client.addDebugFunc((log) => {
+  client.onDebugLog((log) => {
     if (log.type === 'breadcrumb' && log.message === 'connecting') {
       setTimeout(() => {
         client.close();
@@ -1163,7 +1163,7 @@ test('fallback to polling', (done) => {
   const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
 
   let didLogFallback = false;
-  client.addDebugFunc((log) => {
+  client.onDebugLog((log) => {
     if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
       didLogFallback = true;
     }
@@ -1201,7 +1201,7 @@ test('does not fallback to polling if host is unset', (done) => {
   const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
 
   let didLogFallback = false;
-  client.addDebugFunc((log) => {
+  client.onDebugLog((log) => {
     if (
       log.type === 'breadcrumb' &&
       log.message === 'connecting' &&
@@ -1245,7 +1245,7 @@ test('cancels connection timeout when closing', (done) => {
 
   const timeout = 2000;
 
-  client.addDebugFunc((log) => {
+  client.onDebugLog((log) => {
     if (log.type === 'breadcrumb' && log.message === 'connecting') {
       setTimeout(() => {
         client.close();

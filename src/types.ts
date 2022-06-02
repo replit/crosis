@@ -65,7 +65,7 @@ export interface OpenOptions<Ctx> extends Partial<ConnectOptions<Ctx>> {
 }
 
 /**
- * See [[Client.setDebugFunc]]
+ * See [[Client.onDebugLog]]
  */
 export type DebugLog =
   | {
