@@ -20,8 +20,10 @@ ${keyData.toString('base64')}
 -----END PRIVATE KEY-----`);
 })();
 
-function genConnectionMetadata() {
+function genConnectionMetadata(options) {
   const now = Date.now();
+
+  const restrictNetwork = !!options?.restrictNetwork;
 
   const token = api.ReplToken.create({
     iat: {
@@ -46,6 +48,7 @@ function genConnectionMetadata() {
       shares: 0.5,
       disk: 1024 * 1024 * 1024,
       net: true,
+      restrictNetwork,
     },
   });
 

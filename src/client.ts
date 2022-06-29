@@ -783,6 +783,17 @@ export class Client<Ctx = null> {
   };
 
   /**
+   * Adds a listener for the "firewall denied" condition, which occurs when
+   * a user from firewalledreplit.com tries to connect to a repl which has
+   * already been started in regular mode.
+   * By default, throw an unrecoverable error, but this can be overridden if
+   * clients want to do something different here.
+   */
+  public onFirewallDenied = () => {
+    this.onUnrecoverableError(new Error("Can't connect to unfirewalled repl from firewall mode"));
+  };
+
+  /**
    * Set a function to handle unrecoverable error
    *
    * Unrecoverable errors are internal errors or invariance errors
@@ -1141,9 +1152,7 @@ export class Client<Ctx = null> {
       resetTimeout();
 
       if (cmd.firewallDenied != null) {
-        this.onUnrecoverableError(
-          new Error("Can't connect to unfirewalled repl from firewall mode"),
-        );
+        this.onFirewallDenied();
 
         return;
       }
