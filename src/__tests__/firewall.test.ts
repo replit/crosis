@@ -42,7 +42,7 @@ test('handles firewall denied condition specifically', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    (_) => {
+    () => {
       const firewalledClient = getClient<{ username: string }>(done);
 
       firewalledClient.onFirewallDenied = wrapWithDone(done, () => {
@@ -63,7 +63,7 @@ test('handles firewall denied condition specifically', (done) => {
           WebSocketClass: WebSocket,
           context: firewalledCtx,
         },
-        (_) => {
+        () => {
           // Just clean up, the important thing is to check whether
           // onFirewallDenied runs as expected
           client.close();

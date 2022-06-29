@@ -6,6 +6,7 @@
  * the test will continue until it times out. This function makes sure
  * done is called and we fail fast with correct stack traces.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function wrapWithDone<Args extends Array<any>, Ret>(
   done: jest.DoneCallback,
   fn: (...args: Args) => Ret,
@@ -17,8 +18,10 @@ export function wrapWithDone<Args extends Array<any>, Ret>(
         typeof res === 'object' &&
         res &&
         'catch' in res &&
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         typeof (res as any).catch === 'function'
       ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (res as any).catch((err: any) => {
           done(err);
         });
@@ -28,6 +31,7 @@ export function wrapWithDone<Args extends Array<any>, Ret>(
     } catch (e) {
       done(e);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return undefined as any;
     }
   };
