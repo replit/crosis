@@ -32,11 +32,13 @@ test('handles firewall denied condition specifically', (done) => {
 
   const ctx = { username: 'zyzz' };
 
+  const connmeta = genConnectionMetadata();
+
   client.open(
     {
       fetchConnectionMetadata: () =>
         Promise.resolve({
-          ...genConnectionMetadata(),
+          ...connmeta,
           error: null,
         }),
       WebSocketClass: WebSocket,
@@ -57,7 +59,7 @@ test('handles firewall denied condition specifically', (done) => {
         {
           fetchConnectionMetadata: () =>
             Promise.resolve({
-              ...genConnectionMetadata({ restrictNetwork: true }),
+              ...genConnectionMetadata({ restrictNetwork: true, repl: connmeta.repl }),
               error: null,
             }),
           WebSocketClass: WebSocket,
