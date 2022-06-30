@@ -114,13 +114,13 @@ const closeChannel = client.openChannel({ service: 'exec' }, function open({ cha
 To run tests run
 
 ```bash
-USER_KEY_ID=XXXX USER_PRIVATE_KEY_PEM=XXXX yarn test
+USER_KEY_ID=XXXX USER_PRIVATE_KEY=XXXX yarn test
 ```
 
 To interact with a connected client in the browser run
 
 ```bash
-USER_KEY_ID=XXXX USER_PRIVATE_KEY_PEM=XXXX yarn debug
+USER_KEY_ID=XXXX USER_PRIVATE_KEY=XXXX yarn debug
 ```
 
 You can then access the client from the console an send messages like:
