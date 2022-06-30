@@ -24,7 +24,9 @@ function getClient<Ctx = null>(done: jest.DoneCallback) {
 }
 
 afterAll(() => {
-  testingClients.forEach((c) => c.destroy());
+  testingClients.forEach((c) => {
+    c.destroy();
+  });
 });
 
 test('handles firewall denied condition specifically', (done) => {
@@ -48,9 +50,9 @@ test('handles firewall denied condition specifically', (done) => {
       const firewalledClient = getClient<{ username: string }>(done);
 
       firewalledClient.onFirewallDenied = wrapWithDone(done, () => {
-        return () => {
-          done();
-        };
+        client.destroy();
+        firewalledClient.destroy();
+        done();
       });
 
       const firewalledCtx = { username: 'firewallzyzz' };
@@ -65,12 +67,7 @@ test('handles firewall denied condition specifically', (done) => {
           WebSocketClass: WebSocket,
           context: firewalledCtx,
         },
-        () => {
-          // Just clean up, the important thing is to check whether
-          // onFirewallDenied runs as expected
-          client.close();
-          firewalledClient.close();
-        },
+        () => {},
       );
     },
   );
