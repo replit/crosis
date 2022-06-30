@@ -131,6 +131,6 @@ window.client.send({ exec: { args: ['kill', '1'] } });
 
 ### Releasing
 
-To release, just run `USER_KEY_ID=XXXX USER_PRIVATE_KEY_PEM=XXXX yarn version`, it will prompt you for a version, then it will push to github and release to npm.
+To release, just run `USER_KEY_ID=XXXX USER_PRIVATE_KEY=XXXX yarn version`, it will prompt you for a version, then it will push to github and release to npm.
 
 To update documentation, go to https://crosisdoc.util.repl.co/__repl and run `. ./updatedocs.sh`
