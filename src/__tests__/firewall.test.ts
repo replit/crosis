@@ -1,7 +1,7 @@
 /* eslint-env jest */
 
 import { Client } from '..';
-import { wrapWithDone } from '../../test/utils';
+import { wrapWithDone } from '../__testutils__/done';
 
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');

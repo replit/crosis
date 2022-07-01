@@ -6,7 +6,7 @@ import { getWebSocketClass } from '../util/helpers';
 import { Channel } from '../channel';
 import { createCloseEvent } from '../util/EIOCompat';
 import { api } from '@replit/protocol';
-import { wrapWithDone } from '../../test/utils';
+import { wrapWithDone } from '../__testutils__/done';
 
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
