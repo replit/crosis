@@ -1,6 +1,6 @@
 type Repl = {
   id: string;
-  languag: string;
+  language: string;
   slug: string;
   user: string;
   bucket: string;

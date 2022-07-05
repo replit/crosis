@@ -24,17 +24,14 @@ function genConnectionMetadata(options) {
   const now = Date.now();
 
   const restrictNetwork = !!options?.restrictNetwork;
-  let repl = options?.repl;
 
-  if (repl == null) {
-    repl = {
-      id: `testing-crosis-${Math.random().toString(36).split('.')[1]}`,
-      language: 'bash',
-      slug: Math.random().toString(36).slice(2),
-      user: 'crosistest',
-      bucket: 'test-replit-repls',
-    };
-  }
+  const repl = options?.repl || {
+    id: `testing-crosis-${Math.random().toString(36).split('.')[1]}`,
+    language: 'bash',
+    slug: Math.random().toString(36).slice(2),
+    user: 'crosistest',
+    bucket: 'test-replit-repls',
+  };
 
   const token = api.ReplToken.create({
     iat: {
