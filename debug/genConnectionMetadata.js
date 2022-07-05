@@ -20,8 +20,21 @@ ${keyData.toString('base64')}
 -----END PRIVATE KEY-----`);
 })();
 
-function genConnectionMetadata() {
+function genConnectionMetadata(options) {
   const now = Date.now();
+
+  const restrictNetwork = !!options?.restrictNetwork;
+  let repl = options?.repl;
+
+  if (repl == null) {
+    repl = {
+      id: `testing-crosis-${Math.random().toString(36).split('.')[1]}`,
+      language: 'bash',
+      slug: Math.random().toString(36).slice(2),
+      user: 'crosistest',
+      bucket: 'test-replit-repls',
+    };
+  }
 
   const token = api.ReplToken.create({
     iat: {
@@ -33,19 +46,14 @@ function genConnectionMetadata() {
     cluster: 'global',
     persistence: api.ReplToken.Persistence.NONE,
     format: api.ReplToken.WireFormat.PROTOBUF,
-    repl: {
-      id: `testing-crosis-${Math.random().toString(36).split('.')[1]}`,
-      language: 'bash',
-      slug: Math.random().toString(36).slice(2),
-      user: 'crosistest',
-      bucket: 'test-replit-repls',
-    },
+    repl,
     resourceLimits: {
       memory: 1024 * 1024 * 512,
       threads: 0.5,
       shares: 0.5,
       disk: 1024 * 1024 * 1024,
       net: true,
+      restrictNetwork,
     },
   });
 
@@ -69,6 +77,7 @@ function genConnectionMetadata() {
     token: encodedToken,
     gurl: 'wss://eval.global.replit.com',
     conmanURL: 'https://eval.global.replit.com',
+    repl,
   };
 }
 
