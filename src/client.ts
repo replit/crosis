@@ -2,7 +2,11 @@ import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
 import { EIOCompat } from './util/EIOCompat';
-import { FetchConnectionMetadataError, ConnectionState, FetchConnectionMetadataResult } from './types';
+import {
+  FetchConnectionMetadataError,
+  ConnectionState,
+  FetchConnectionMetadataResult,
+} from './types';
 import type {
   ConnectOptions,
   GovalMetadata,
@@ -1666,10 +1670,10 @@ export class Client<Ctx = null> {
       token: this.connectionMetadata.token,
       conmanURL: this.connectionMetadata.conmanURL,
       gurl: url,
-    }
+    };
     const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
       error: null,
-      ...govalMetadata
+      ...govalMetadata,
     };
     this.close();
     this.open(
