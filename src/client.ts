@@ -909,7 +909,6 @@ export class Client<Ctx = null> {
     chan0.onCommand((cmd) => {
       const redirect = cmd.redirect;
       if (redirect != null) {
-        console.log('redirect: ', redirect);
         return this.handleRedirect(redirect.url);
       }
     });
@@ -1663,8 +1662,9 @@ export class Client<Ctx = null> {
 
   private handleRedirect = (url: string) => {
     if (!this.connectionMetadata) {
-      console.log("Error: client's connectionMetadata is null");
-      return;
+      return this.onUnrecoverableError(
+        new Error("client's connectionMetadata is null when redirecting"),
+      );
     }
     const govalMetadata: GovalMetadata = {
       token: this.connectionMetadata.token,
@@ -1682,13 +1682,7 @@ export class Client<Ctx = null> {
         WebSocketClass: WebSocket,
         context: null,
       },
-      ({ channel, error }) => {
-        console.log('channel ', { channel, error });
-
-        return (reason) => {
-          console.log('channe close after redirect, reason: ', reason);
-        };
-      },
+      this.chan0Cb,
     );
   };
 }
