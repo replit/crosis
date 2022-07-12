@@ -164,9 +164,6 @@ export class Channel {
    * Called when the channel recieves a message
    */
   public handleCommand = (cmd: api.Command): void => {
-    if (cmd.redirect !== undefined) {
-      // return this.handleRedirect(cmd.redirect.url);
-    }
     this.onCommandListeners.forEach((l) => l(cmd));
 
     if (cmd.ref && this.requestMap[cmd.ref]) {
@@ -174,11 +171,6 @@ export class Channel {
       delete this.requestMap[cmd.ref];
     }
   };
-
-  // public handleRedirect = (url: string): void => {
-  //   // TODO
-  //   return;
-  // }
 
   /**
    * @hidden should only be called by [[Client]]
