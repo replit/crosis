@@ -2,7 +2,7 @@ import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
 import { EIOCompat } from './util/EIOCompat';
-import { FetchConnectionMetadataError, ConnectionState } from './types';
+import { FetchConnectionMetadataError, ConnectionState, FetchConnectionMetadataResult } from './types';
 import type {
   ConnectOptions,
   GovalMetadata,
@@ -902,6 +902,14 @@ export class Client<Ctx = null> {
       }
     });
 
+    chan0.onCommand((cmd) => {
+      const redirect = cmd.redirect;
+      if (redirect != null) {
+        console.log('redirect: ', redirect);
+        return this.handleRedirect(redirect.url);
+      }
+    });
+
     if (!this.connectOptions.reuseConnectionMetadata || this.connectionMetadata === null) {
       if (this.fetchTokenAbortController) {
         this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
@@ -1647,5 +1655,36 @@ export class Client<Ctx = null> {
     console.error('Please supply your own unrecoverable error handling function');
 
     throw e;
+  };
+
+  private handleRedirect = (url: string) => {
+    if (!this.connectionMetadata) {
+      console.log("Error: client's connectionMetadata is null");
+      return;
+    }
+    const govalMetadata: GovalMetadata = {
+      token: this.connectionMetadata.token,
+      conmanURL: this.connectionMetadata.conmanURL,
+      gurl: url,
+    }
+    const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
+      error: null,
+      ...govalMetadata
+    };
+    this.close();
+    this.open(
+      {
+        fetchConnectionMetadata: () => Promise.resolve(fetchConnectionMetadataResult),
+        WebSocketClass: WebSocket,
+        context: null,
+      },
+      ({ channel, error }) => {
+        console.log('channel ', { channel, error });
+
+        return (reason) => {
+          console.log('channe close after redirect, reason: ', reason);
+        };
+      },
+    );
   };
 }
