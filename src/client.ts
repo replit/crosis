@@ -195,16 +195,15 @@ export class Client<Ctx = null> {
    */
   private connectionMetadata: GovalMetadata | null;
 
-
   /**
-    * URL of the origin of the previous redirect message.
-    * This is used to restore the connection in case we get a failure after a redirect.
-    * Example:
-    * In case we get a redirect message from server 1 pointing us to server 2,
-    * and then connection to server 2 fails, we try to reconnect to server 1.
-    * This is used in cases where a server provides load balancing through redirect
-    * messages.
-    */
+   * URL of the origin of the previous redirect message.
+   * This is used to restore the connection in case we get a failure after a redirect.
+   * Example:
+   * In case we get a redirect message from server 1 pointing us to server 2,
+   * and then connection to server 2 fails, we try to reconnect to server 1.
+   * This is used in cases where a server provides load balancing through redirect
+   * messages.
+   */
   private redirectInitiatorURL: string | null;
 
   /**
@@ -1289,7 +1288,7 @@ export class Client<Ctx = null> {
       });
 
       if (this.redirectInitiatorURL) {
-        this.handleRedirect(this.redirectInitiatorURL)
+        this.handleRedirect(this.redirectInitiatorURL);
       }
     };
   };
@@ -1680,7 +1679,7 @@ export class Client<Ctx = null> {
   };
 
   private handleRedirect = (url: string) => {
-      this.debug({
+    this.debug({
       type: 'breadcrumb',
       message: 'handling redirect',
       data: {
@@ -1693,15 +1692,11 @@ export class Client<Ctx = null> {
       );
     }
     if (!this.connectOptions || !this.connectOptions.context) {
-      return this.onUnrecoverableError(
-        new Error("client's context is null when redirecting"),
-        );
+      return this.onUnrecoverableError(new Error("client's context is null when redirecting"));
     }
 
     if (!this.chan0Cb) {
-      return this.onUnrecoverableError(
-        new Error("client's chan0Cb is null when redirecting"),
-        );
+      return this.onUnrecoverableError(new Error("client's chan0Cb is null when redirecting"));
     }
     const context = this.connectOptions.context;
     const chan0Cb = this.chan0Cb;
