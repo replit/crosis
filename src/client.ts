@@ -1692,6 +1692,18 @@ export class Client<Ctx = null> {
         new Error("client's connectionMetadata is null when redirecting"),
       );
     }
+    if (!this.connectOptions || !this.connectOptions.context) {
+      return this.onUnrecoverableError(
+        new Error("client's context is null when redirecting"),
+        );
+    }
+
+    if (!this.chan0Cb) {
+      return this.onUnrecoverableError(
+        new Error("client's chan0Cb is null when redirecting"),
+        );
+    }
+    const context = this.connectOptions.context;
     const chan0Cb = this.chan0Cb;
     const govalMetadata: GovalMetadata = {
       token: this.connectionMetadata.token,
@@ -1709,7 +1721,7 @@ export class Client<Ctx = null> {
       {
         fetchConnectionMetadata: () => Promise.resolve(fetchConnectionMetadataResult),
         WebSocketClass: WebSocket,
-        context: null,
+        context: context,
       },
       chan0Cb,
     );
