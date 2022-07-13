@@ -195,6 +195,18 @@ export class Client<Ctx = null> {
    */
   private connectionMetadata: GovalMetadata | null;
 
+
+  /**
+    * URL of the origin of the previous redirect message.
+    * This is used to restore the connection in case we get a failure after a redirect.
+    * Example:
+    * In case we get a redirect message from server 1 pointing us to server 2,
+    * and then connection to server 2 fails, we try to reconnect to server 1.
+    * This is used in cases where a server provides load balancing through redirect
+    * messages.
+    */
+  private redirectInitiatorURL: string | null;
+
   /**
    * @typeParam Ctx  context, passed to various callbacks, specified when calling {@link Client.open | open}
    */
@@ -214,6 +226,7 @@ export class Client<Ctx = null> {
     this.fetchTokenAbortController = null;
     this.destroyed = false;
     this.connectionMetadata = null;
+    this.redirectInitiatorURL = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -1274,6 +1287,10 @@ export class Client<Ctx = null> {
         chan0,
         error,
       });
+
+      if (this.redirectInitiatorURL) {
+        this.handleRedirect(this.redirectInitiatorURL)
+      }
     };
   };
 
@@ -1632,6 +1649,8 @@ export class Client<Ctx = null> {
       },
     });
 
+    this.redirectInitiatorURL = null;
+
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       try {
         this.handleClose({
@@ -1661,6 +1680,13 @@ export class Client<Ctx = null> {
   };
 
   private handleRedirect = (url: string) => {
+      this.debug({
+      type: 'breadcrumb',
+      message: 'handling redirect',
+      data: {
+        connectionMetadata: this.connectionMetadata,
+      },
+    });
     if (!this.connectionMetadata) {
       return this.onUnrecoverableError(
         new Error("client's connectionMetadata is null when redirecting"),
@@ -1672,11 +1698,13 @@ export class Client<Ctx = null> {
       conmanURL: this.connectionMetadata.conmanURL,
       gurl: url,
     };
+    this.redirectInitiatorURL = this.connectionMetadata.gurl;
     const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
       error: null,
       ...govalMetadata,
     };
     this.close();
+
     this.open(
       {
         fetchConnectionMetadata: () => Promise.resolve(fetchConnectionMetadataResult),
