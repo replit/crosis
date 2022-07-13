@@ -1666,6 +1666,7 @@ export class Client<Ctx = null> {
         new Error("client's connectionMetadata is null when redirecting"),
       );
     }
+    const chan0Cb = this.chan0Cb;
     const govalMetadata: GovalMetadata = {
       token: this.connectionMetadata.token,
       conmanURL: this.connectionMetadata.conmanURL,
@@ -1682,7 +1683,7 @@ export class Client<Ctx = null> {
         WebSocketClass: WebSocket,
         context: null,
       },
-      this.chan0Cb,
+      chan0Cb,
     );
   };
 }
