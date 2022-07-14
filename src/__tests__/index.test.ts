@@ -7,8 +7,6 @@ import { Channel } from '../channel';
 import { createCloseEvent } from '../util/EIOCompat';
 import { api } from '@replit/protocol';
 import { wrapWithDone } from '../__testutils__/done';
-import WS from 'jest-websocket-mock';
-
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
 
@@ -1426,46 +1424,4 @@ test('emits boot status messages', (done) => {
     },
     () => {},
   );
-});
-
-test('websocket mock', (done) => {
-  const ctx = { username: 'zyzz' };
-  const client = new Client<{ username: string }>();
-  client.setUnrecoverableErrorHandler(
-    (e) => { console.log('got unrecoverable error: ', e) }
-  );
-  testingClients.push(client);
-  const addr = "ws://localhost:1234"
-
-  let connectionMetadata = genConnectionMetadata();
-  connectionMetadata.gurl = addr;
-
-  const server = new WS(addr);
-
-  client.open(
-    {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...connectionMetadata,
-          error: null,
-        }),
-      WebSocketClass: WebSocket,
-      context: ctx,
-    },
-    wrapWithDone(done, ({ channel, error, context }) => {
-      expect(channel?.status).toBe('open');
-      expect(context).toBe(ctx);
-      expect(error).toEqual(null);
-
-      client.close();
-
-      return () => {
-        done();
-      };
-    }),
-  );
-
-  server.connected.then(() => {
-    console.log('server connected');
-  });
 });
