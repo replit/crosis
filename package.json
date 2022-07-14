@@ -22,7 +22,8 @@
   "license": "MIT",
   "dependencies": {
     "abortcontroller-polyfill": "^1.7.3",
-    "engine.io-client": "^3.4.0"
+    "engine.io-client": "^3.4.0",
+    "jest-websocket-mock": "^2.3.0"
   },
   "devDependencies": {
     "@replit/protocol": ">=0.2.48",
