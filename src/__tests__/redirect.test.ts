@@ -20,19 +20,7 @@ afterAll(() => {
   });
 });
 describe('websocket', () => {
-
-  test("hello example", async () => {
-    const server = new WS("ws://localhost:1234");
-    const client = new WebSocket("ws://localhost:1234");
-
-    await server.connected;
-    client.send("hello");
-    await expect(server).toReceiveMessage("hello");
-    expect(server).toHaveReceivedMessages(["hello"]);
-    server.close();
-  });
-
-  test('websocket mock', async () => {
+  test('redirect message', async () => {
     const ctx = { username: 'zyzz' };
     // const client = getClient<{ username: string }>(done);
     const client = new Client<{ username: string }>();
@@ -43,7 +31,7 @@ describe('websocket', () => {
     const addr1 = "ws://localhost:1235"
     const addr2 = "ws://localhost:1236"
 
-    const server1 = new WS(addr1+'/wsv2/', { jsonProtocol: true });
+    const server1 = new WS(addr1+'/wsv2/');
     server1.on('connection', (_) => {
       console.log('server 1 connected!');
     });
@@ -52,7 +40,7 @@ describe('websocket', () => {
       console.log('server 1 got message');
     });
 
-    const server2 = new WS(addr2+'/wsv2/', { jsonProtocol: true });
+    const server2 = new WS(addr2+'/wsv2/');
     server2.on('connection', (_) => {
       console.log('server 2 connected!');
     });
@@ -78,18 +66,17 @@ describe('websocket', () => {
       () => {}
     );
 
-    console.log('awaiting for connection');
+    console.log('awaiting for connection to server 1');
     await server1.connected
-    console.log('server connected');
-    // wss.close();
     const cmdJson = {
       redirect: {
         url: addr2
       }
     };
     const redirect = api.Command.create(cmdJson)
-    console.log('redirect: ', redirect);
     sendFromServer(redirect, server1);
+
+    await server2.connected;
   });
 
 });
