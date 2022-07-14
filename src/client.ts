@@ -1692,7 +1692,9 @@ export class Client<Ctx = null> {
       );
     }
     if (!this.connectOptions) {
-      return this.onUnrecoverableError(new Error("client's connectOptions is null when redirecting"));
+      return this.onUnrecoverableError(
+        new Error("client's connectOptions is null when redirecting"),
+      );
     }
 
     if (!this.chan0Cb) {
