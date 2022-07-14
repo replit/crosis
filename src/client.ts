@@ -1691,8 +1691,8 @@ export class Client<Ctx = null> {
         new Error("client's connectionMetadata is null when redirecting"),
       );
     }
-    if (!this.connectOptions || !this.connectOptions.context) {
-      return this.onUnrecoverableError(new Error("client's context is null when redirecting"));
+    if (!this.connectOptions) {
+      return this.onUnrecoverableError(new Error("client's connectOptions is null when redirecting"));
     }
 
     if (!this.chan0Cb) {
