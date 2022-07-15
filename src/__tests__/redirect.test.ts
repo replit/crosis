@@ -14,44 +14,44 @@ jest.setTimeout(1000);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const testingClients: Array<Client<any>> = [];
 
+const sendFromServer = (cmd: api.Command, ws: WS) => {
+    const cmdBuf = api.Command.encode(cmd).finish();
+    const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
+    ws.send(buffer);
+};
+
+const genPortNumber = () => {
+  return Math.floor(Math.random() * 100000)
+};
+
+const genConnectionMetadataWithGurl = (gurl: string) => {
+  let connectionMetadata = genConnectionMetadata();
+  connectionMetadata.gurl = gurl;
+  connectionMetadata.token = ''; // need this so the mock server connects
+  return connectionMetadata;
+};
+
 afterAll(() => {
   testingClients.forEach((c) => {
     c.destroy();
   });
 });
-describe('websocket', () => {
-  test('redirect message', async () => {
+
+describe('redirect handling', () => {
+  test('redirect message results in client reconnecting to target', async () => {
     const ctx = { username: 'zyzz' };
-    // const client = getClient<{ username: string }>(done);
     const client = new Client<{ username: string }>();
     client.setUnrecoverableErrorHandler(
       (e) => { console.log('got unrecoverable error: ', e) }
     );
     testingClients.push(client);
-    const addr1 = "ws://localhost:1235"
-    const addr2 = "ws://localhost:1236"
+    const addr1 = "ws://localhost:" + genPortNumber();
+    const addr2 = "ws://localhost:" + genPortNumber();
 
     const server1 = new WS(addr1+'/wsv2/');
-    server1.on('connection', (_) => {
-      console.log('server 1 connected!');
-    });
-
-    server1.on('message', (_) => {
-      console.log('server 1 got message');
-    });
-
     const server2 = new WS(addr2+'/wsv2/');
-    server2.on('connection', (_) => {
-      console.log('server 2 connected!');
-    });
 
-    server2.on('message', (_) => {
-      console.log('server 2 got message');
-    });
-
-    let connectionMetadata = genConnectionMetadata();
-    connectionMetadata.gurl = addr1;
-    connectionMetadata.token = ''; // need this so the mock server connects
+    let connectionMetadata = genConnectionMetadataWithGurl(addr1);
 
     client.open(
       {
@@ -66,7 +66,6 @@ describe('websocket', () => {
       () => {}
     );
 
-    console.log('awaiting for connection to server 1');
     await server1.connected
     const cmdJson = {
       redirect: {
@@ -77,12 +76,98 @@ describe('websocket', () => {
     sendFromServer(redirect, server1);
 
     await server2.connected;
+
+    server2.close();
   });
 
-});
+  test('disconnect after redirect results in client connecting to original server', async () => {
+    const ctx = { username: 'zyzz' };
+    const client = new Client<{ username: string }>();
+    client.setUnrecoverableErrorHandler(
+      (e) => { console.log('got unrecoverable error: ', e) }
+    );
+    testingClients.push(client);
+    const addr1 = "ws://localhost:" + genPortNumber();
+    const addr2 = "ws://localhost:" + genPortNumber();
 
-const sendFromServer = (cmd: api.Command, ws: WS) => {
-    const cmdBuf = api.Command.encode(cmd).finish();
-    const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
-    ws.send(buffer);
-};
+    const server1 = new WS(addr1+'/wsv2/');
+    const server2 = new WS(addr2+'/wsv2/');
+
+    let connectionMetadata = genConnectionMetadataWithGurl(addr1);
+
+    client.open(
+      {
+        fetchConnectionMetadata: () =>
+          Promise.resolve({
+            ...connectionMetadata,
+            error: null,
+          }),
+        WebSocketClass: WebSocket,
+        context: ctx,
+      },
+      () => {}
+    );
+
+    await server1.connected
+    const cmdJson = {
+      redirect: {
+        url: addr2
+      }
+    };
+    const redirect = api.Command.create(cmdJson)
+    sendFromServer(redirect, server1);
+
+    await server2.connected;
+
+    server2.close();
+
+    await server1.connected
+
+    server1.close();
+  });
+
+  test('disconnect after redirect results in client connecting to original server', async () => {
+    const ctx = { username: 'zyzz' };
+    const client = new Client<{ username: string }>();
+    client.setUnrecoverableErrorHandler(
+      (e) => { console.log('got unrecoverable error: ', e) }
+    );
+    testingClients.push(client);
+    const addr1 = "ws://localhost:" + genPortNumber();
+    const addr2 = "ws://localhost:" + genPortNumber();
+
+    const server1 = new WS(addr1+'/wsv2/');
+    const server2 = new WS(addr2+'/wsv2/');
+
+    let connectionMetadata = genConnectionMetadataWithGurl(addr1);
+
+    client.open(
+      {
+        fetchConnectionMetadata: () =>
+          Promise.resolve({
+            ...connectionMetadata,
+            error: null,
+          }),
+        WebSocketClass: WebSocket,
+        context: ctx,
+      },
+      () => {}
+    );
+
+    await server1.connected
+    const cmdJson = {
+      redirect: {
+        url: addr2
+      }
+    };
+    const redirect = api.Command.create(cmdJson)
+    sendFromServer(redirect, server1);
+
+    await server2.connected;
+
+    server2.error();
+
+    await server1.connected
+    server1.close();
+  });
+});
