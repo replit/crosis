@@ -103,7 +103,7 @@ export type DebugLogBreadcrumb<Ctx> =
       data?: {
         name: ChannelOptions<Ctx>['name'];
         service: ChannelOptions<Ctx>['service'];
-        action: api.OpenChannel.Action;
+        action: ChannelOptions<Ctx>['action'];
       };
     }
   | {
@@ -130,7 +130,7 @@ export type DebugLogBreadcrumb<Ctx> =
       data: {
         id: number;
         name: ChannelOptions<Ctx>['name'];
-        service: string | ServiceThunk<Ctx>;
+        service: ChannelOptions<Ctx>['service'];
         closeStatus: api.CloseChannelRes.Status;
       };
     }
@@ -185,8 +185,8 @@ export type DebugLog<Ctx> =
         direction: 'in' | 'out';
         channel: {
           id: number;
-          name?: string;
-          service?: string;
+          name?: ChannelOptions<Ctx>['name'];
+          service?: ChannelOptions<Ctx>['service'];
         };
         cmd: api.Command;
       };
