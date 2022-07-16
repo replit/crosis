@@ -64,23 +64,21 @@ export interface OpenOptions<Ctx> extends Partial<ConnectOptions<Ctx>> {
   context: Ctx;
 }
 
-type GenericBreadcrumb = {
-  type: 'breadcrumb';
-  message:
-    | 'constructor'
-    | 'openChanres'
-    | 'connected!'
-    | 'user close'
-    | 'cancel timeout'
-    | 'reset timeout'
-    | 'connect timeout'
-    | 'polling fallback'
-    | 'reconnecting'
-    | 'destroy';
-};
-
-type DebugLogBreadcrumb<Ctx> =
-  | GenericBreadcrumb
+export type DebugLogBreadcrumb<Ctx> =
+  | {
+      type: 'breadcrumb';
+      message:
+        | 'constructor'
+        | 'openChanres'
+        | 'connected!'
+        | 'user close'
+        | 'cancel timeout'
+        | 'reset timeout'
+        | 'connect timeout'
+        | 'polling fallback'
+        | 'reconnecting'
+        | 'destroy';
+    }
   | {
       type: 'breadcrumb';
       message: 'open';
@@ -153,6 +151,7 @@ type DebugLogBreadcrumb<Ctx> =
       data: api.ContainerState.State;
     }
   | {
+      type: 'breadcrumb';
       message: 'wsclose';
       data?: {
         event: CloseEvent | Event;
