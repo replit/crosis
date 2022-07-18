@@ -64,23 +64,129 @@ export interface OpenOptions<Ctx> extends Partial<ConnectOptions<Ctx>> {
   context: Ctx;
 }
 
+export type DebugLogBreadcrumb<Ctx> =
+  | {
+      type: 'breadcrumb';
+      message:
+        | 'constructor'
+        | 'openChanres'
+        | 'connected!'
+        | 'user close'
+        | 'cancel timeout'
+        | 'reset timeout'
+        | 'connect timeout'
+        | 'polling fallback'
+        | 'reconnecting'
+        | 'destroy';
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'open';
+      data: {
+        polling: false;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'connecting';
+      data: {
+        connectionState: ConnectionState;
+        connectTries: number;
+        websocketFailureCount: number;
+        readyState: WebSocket['readyState'] | undefined;
+        chan0CbExists: boolean;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestOpenChannel';
+      data?: {
+        name: ChannelOptions<Ctx>['name'];
+        service: ChannelOptions<Ctx>['service'];
+        action: ChannelOptions<Ctx>['action'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestChannelClose';
+      data: {
+        id: number;
+        name: ChannelOptions<Ctx>['name'];
+        service: ChannelOptions<Ctx>['service'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestChannelClose:chan0Closed';
+      data: {
+        id: number;
+        name: ChannelOptions<Ctx>['name'];
+        service: ChannelOptions<Ctx>['service'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestChannelClose:closeChanRes';
+      data: {
+        id: number;
+        name: ChannelOptions<Ctx>['name'];
+        service: ChannelOptions<Ctx>['service'];
+        closeStatus: api.CloseChannelRes.Status;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'retrying';
+      data: {
+        connectionState: ConnectionState;
+        connectTries: number;
+        websocketFailureCount: number;
+        error: Error;
+        wsReadyState?: WebSocket['readyState'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'containerState';
+      data: api.ContainerState.State;
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'wsclose';
+      data?: {
+        event: CloseEvent | Event;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'cleanupSocket';
+      data: {
+        hasWs: boolean;
+        readyState: WebSocket['readyState'] | null;
+        connectionState: ConnectionState;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'unrecoverable error';
+      data: {
+        message: string;
+      };
+    };
+
 /**
  * See [[Client.onDebugLog]]
  */
-export type DebugLog =
-  | {
-      type: 'breadcrumb';
-      message: string;
-      data?: unknown;
-    }
+export type DebugLog<Ctx> =
+  | DebugLogBreadcrumb<Ctx>
   | {
       type: 'log';
       log: {
         direction: 'in' | 'out';
         channel: {
           id: number;
-          name?: string;
-          service?: string;
+          name?: ChannelOptions<Ctx>['name'];
+          service?: ChannelOptions<Ctx>['service'];
         };
         cmd: api.Command;
       };
