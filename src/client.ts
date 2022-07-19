@@ -133,7 +133,7 @@ export class Client<Ctx = null> {
    *
    * @hidden
    */
-  private debugFuncs: Array<(log: DebugLog) => void>;
+  private debugFuncs: Array<(log: DebugLog<Ctx>) => void>;
 
   /**
    * Listeners to be called for BootStatus messages
@@ -764,7 +764,7 @@ export class Client<Ctx = null> {
    *
    * @hidden
    */
-  private debug = (log: DebugLog): void => {
+  private debug = (log: DebugLog<Ctx>): void => {
     this.debugFuncs.forEach((func) => func(log));
   };
 
@@ -772,7 +772,7 @@ export class Client<Ctx = null> {
    * Adds a logging/debugging function. Returns a function that will remove
    * the callback
    */
-  public onDebugLog = (debugFunc: (log: DebugLog) => void): (() => void) => {
+  public onDebugLog = (debugFunc: (log: DebugLog<Ctx>) => void): (() => void) => {
     this.debugFuncs.push(debugFunc);
 
     return () => {
