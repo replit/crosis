@@ -65,7 +65,8 @@ describe('redirect handling', () => {
       () => {},
     );
 
-    await server1.connected;
+    await expect(server1.connected).resolves.toBeTruthy();
+
     const cmdJson = {
       redirect: {
         url: addr2,
@@ -74,7 +75,7 @@ describe('redirect handling', () => {
     const redirect = api.Command.create(cmdJson);
     sendFromServer(redirect, server1);
 
-    await server2.connected;
+    await expect(server2.connected).resolves.toBeTruthy();
 
     server2.close();
   });
@@ -107,7 +108,7 @@ describe('redirect handling', () => {
       () => {},
     );
 
-    await server1.connected;
+    await expect(server1.connected).resolves.toBeTruthy();
     const cmdJson = {
       redirect: {
         url: addr2,
@@ -116,11 +117,11 @@ describe('redirect handling', () => {
     const redirect = api.Command.create(cmdJson);
     sendFromServer(redirect, server1);
 
-    await server2.connected;
+    await expect(server2.connected).resolves.toBeTruthy();
 
     server2.close();
 
-    await server1.connected;
+    await expect(server1.connected).resolves.toBeTruthy();
 
     server1.close();
   });
@@ -153,7 +154,7 @@ describe('redirect handling', () => {
       () => {},
     );
 
-    await server1.connected;
+    await expect(server1.connected).resolves.toBeTruthy();
     const cmdJson = {
       redirect: {
         url: addr2,
@@ -162,11 +163,11 @@ describe('redirect handling', () => {
     const redirect = api.Command.create(cmdJson);
     sendFromServer(redirect, server1);
 
-    await server2.connected;
+    await expect(server2.connected).resolves.toBeTruthy();
 
     server2.error();
 
-    await server1.connected;
+    await expect(server1.connected).resolves.toBeTruthy();
     server1.close();
   });
 });
