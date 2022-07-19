@@ -1,6 +1,6 @@
 {
   "name": "@replit/crosis",
-  "version": "9.0.1",
+  "version": "9.0.2",
   "description": "Goval connection and channel manager",
   "files": [
     "/dist"
@@ -22,9 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "abortcontroller-polyfill": "^1.7.3",
-    "engine.io-client": "^3.4.0",
-    "jest-websocket-mock": "^2.3.0",
-    "mock-socket": "^9.1.5"
+    "engine.io-client": "^3.4.0"
   },
   "devDependencies": {
     "@replit/protocol": ">=0.2.48",
@@ -39,7 +37,7 @@
     "eslint-plugin-prettier": "4.0.0",
     "express": "^4.18.1",
     "jest": "^28.1.0",
-    "parcel": "1.12.3",
+    "parcel": "^2.5.0",
     "prettier": "^2.6.2",
     "ts-jest": "^28.0.2",
     "typedoc": "^0.22.15",
