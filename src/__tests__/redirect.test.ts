@@ -11,8 +11,7 @@ const genConnectionMetadata = require('../../debug/genConnectionMetadata');
 // eslint-disable-next-line
 jest.setTimeout(1000);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const testingClients: Array<Client<any>> = [];
+const testingClients: Array<Client<{ username: string}>> = [];
 
 const sendFromServer = (cmd: api.Command, ws: WS) => {
   const cmdBuf = api.Command.encode(cmd).finish();
