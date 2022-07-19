@@ -172,6 +172,13 @@ export type DebugLogBreadcrumb<Ctx> =
       data: {
         message: string;
       };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'handling redirect';
+      data: {
+        connectionMetadata: GovalMetadata | null;
+      };
     };
 
 /**
