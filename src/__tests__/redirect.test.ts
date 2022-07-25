@@ -19,16 +19,14 @@ const sendFromServer = (cmd: api.Command, ws: WS) => {
   ws.send(buffer);
 };
 
-const genPortNumber = () => {
-  return Math.floor(Math.random() * 100000);
-};
-
 const genConnectionMetadataWithGurl = (gurl: string) => {
   const connectionMetadata = genConnectionMetadata();
   connectionMetadata.gurl = gurl;
   connectionMetadata.token = ''; // need this so the mock server connects
   return connectionMetadata;
 };
+
+let port = 9751;
 
 afterAll(() => {
   testingClients.forEach((c) => {
@@ -44,8 +42,8 @@ describe('redirect handling', () => {
       console.log('got unrecoverable error: ', e);
     });
     testingClients.push(client);
-    const addr1 = 'ws://localhost:' + genPortNumber();
-    const addr2 = 'ws://localhost:' + genPortNumber();
+    const addr1 = 'ws://localhost:' + port;
+    const addr2 = 'ws://localhost:' + port + 1;
 
     const server1 = new WS(addr1 + '/wsv2/');
     const server2 = new WS(addr2 + '/wsv2/');
@@ -77,6 +75,7 @@ describe('redirect handling', () => {
 
     await expect(server2.connected).resolves.toBeTruthy();
 
+    server1.close();
     server2.close();
   });
 
@@ -87,8 +86,8 @@ describe('redirect handling', () => {
       console.log('got unrecoverable error: ', e);
     });
     testingClients.push(client);
-    const addr1 = 'ws://localhost:' + genPortNumber();
-    const addr2 = 'ws://localhost:' + genPortNumber();
+    const addr1 = 'ws://localhost:' + port;
+    const addr2 = 'ws://localhost:' + port + 1;
 
     const server1 = new WS(addr1 + '/wsv2/');
     const server2 = new WS(addr2 + '/wsv2/');
@@ -133,8 +132,8 @@ describe('redirect handling', () => {
       console.log('got unrecoverable error: ', e);
     });
     testingClients.push(client);
-    const addr1 = 'ws://localhost:' + genPortNumber();
-    const addr2 = 'ws://localhost:' + genPortNumber();
+    const addr1 = 'ws://localhost:' + port;
+    const addr2 = 'ws://localhost:' + port + 1;
 
     const server1 = new WS(addr1 + '/wsv2/');
     const server2 = new WS(addr2 + '/wsv2/');
