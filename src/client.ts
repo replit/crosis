@@ -1322,7 +1322,18 @@ export class Client<Ctx = null> {
     }
 
     if (tryCount >= MAX_RETRY_COUNT && this.redirectInitiatorURL) {
-        return this.handleRedirect(this.redirectInitiatorURL);
+      this.debug({
+        type: 'breadcrumb',
+        message: 'redirectInitiatorFallback',
+        data: {
+          connectionState: this.connectionState,
+          connectTries: tryCount,
+          websocketFailureCount,
+          error,
+          wsReadyState: this.ws ? this.ws.readyState : undefined,
+        },
+      });
+      return this.redirectInitiatorFallback();
     }
 
     this.retryTimeoutId = setTimeout(() => {
@@ -1680,6 +1691,45 @@ export class Client<Ctx = null> {
     console.error('Please supply your own unrecoverable error handling function');
 
     throw e;
+  };
+
+  private redirectInitiatorFallback = () => {
+    if (!this.connectionMetadata) {
+      return this.onUnrecoverableError(
+        new Error("client's connectionMetadata is null when redirecting to initiator"),
+      );
+    }
+    if (!this.connectOptions) {
+      return this.onUnrecoverableError(
+        new Error("client's connectOptions is null when redirecting to initiator"),
+      );
+    }
+
+    if (!this.chan0Cb) {
+      return this.onUnrecoverableError(new Error("client's chan0Cb is null when redirecting to initiator"));
+    }
+    const context = this.connectOptions.context;
+    const chan0Cb = this.chan0Cb;
+    const govalMetadata: GovalMetadata = {
+      token: this.connectionMetadata.token,
+      conmanURL: this.connectionMetadata.conmanURL,
+      gurl: this.connectionMetadata.gurl,
+    };
+    this.redirectInitiatorURL = null;
+    const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
+      error: null,
+      ...govalMetadata,
+    };
+    this.close();
+
+    this.open(
+      {
+        fetchConnectionMetadata: () => Promise.resolve(fetchConnectionMetadataResult),
+        WebSocketClass: WebSocket,
+        context: context,
+      },
+      chan0Cb,
+    );
   };
 
   private handleRedirect = (url: string) => {
