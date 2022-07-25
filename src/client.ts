@@ -16,6 +16,10 @@ import type {
   OpenOptions,
 } from './types';
 
+// Maximum amount of retries before connecting back to the
+// redirect initiator (only effective after a redirect)
+const MAX_RETRY_COUNT = 10;
+
 enum ClientCloseReason {
   /**
    * called `client.close`
@@ -1286,10 +1290,6 @@ export class Client<Ctx = null> {
         chan0,
         error,
       });
-
-      if (this.redirectInitiatorURL) {
-        this.handleRedirect(this.redirectInitiatorURL);
-      }
     };
   };
 
@@ -1319,6 +1319,10 @@ export class Client<Ctx = null> {
       this.onUnrecoverableError(new Error('Expected chan0Cb when scheduling a retry'));
 
       return;
+    }
+
+    if (tryCount >= MAX_RETRY_COUNT && this.redirectInitiatorURL) {
+        return this.handleRedirect(this.redirectInitiatorURL);
     }
 
     this.retryTimeoutId = setTimeout(() => {
