@@ -2,7 +2,11 @@ import { api } from '@replit/protocol';
 import { Channel } from './channel';
 import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
 import { EIOCompat } from './util/EIOCompat';
-import { FetchConnectionMetadataError, ConnectionState } from './types';
+import {
+  FetchConnectionMetadataError,
+  ConnectionState,
+  FetchConnectionMetadataResult,
+} from './types';
 import type {
   ConnectOptions,
   GovalMetadata,
@@ -11,6 +15,10 @@ import type {
   DebugLog,
   OpenOptions,
 } from './types';
+
+// Maximum amount of retries before connecting back to the
+// redirect initiator (only effective after a redirect)
+const MAX_RETRY_COUNT = 10;
 
 enum ClientCloseReason {
   /**
@@ -192,6 +200,17 @@ export class Client<Ctx = null> {
   private connectionMetadata: GovalMetadata | null;
 
   /**
+   * URL of the origin of the previous redirect message.
+   * This is used to restore the connection in case we get a failure after a redirect.
+   * Example:
+   * In case we get a redirect message from server 1 pointing us to server 2,
+   * and then connection to server 2 fails, we try to reconnect to server 1.
+   * This is used in cases where a server provides load balancing through redirect
+   * messages.
+   */
+  private redirectInitiatorURL: string | null;
+
+  /**
    * @typeParam Ctx  context, passed to various callbacks, specified when calling {@link Client.open | open}
    */
   constructor() {
@@ -210,6 +229,7 @@ export class Client<Ctx = null> {
     this.fetchTokenAbortController = null;
     this.destroyed = false;
     this.connectionMetadata = null;
+    this.redirectInitiatorURL = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -902,6 +922,13 @@ export class Client<Ctx = null> {
       }
     });
 
+    chan0.onCommand((cmd) => {
+      const redirect = cmd.redirect;
+      if (redirect != null) {
+        return this.handleRedirect(redirect.url);
+      }
+    });
+
     if (!this.connectOptions.reuseConnectionMetadata || this.connectionMetadata === null) {
       if (this.fetchTokenAbortController) {
         this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
@@ -1294,6 +1321,21 @@ export class Client<Ctx = null> {
       return;
     }
 
+    if (tryCount >= MAX_RETRY_COUNT && this.redirectInitiatorURL) {
+      this.debug({
+        type: 'breadcrumb',
+        message: 'redirectInitiatorFallback',
+        data: {
+          connectionState: this.connectionState,
+          connectTries: tryCount,
+          websocketFailureCount,
+          error,
+          wsReadyState: this.ws ? this.ws.readyState : undefined,
+        },
+      });
+      return this.redirectInitiatorFallback();
+    }
+
     this.retryTimeoutId = setTimeout(() => {
       if (!this.chan0Cb) {
         this.onUnrecoverableError(new Error('Scheduled retry is called after we closed?'));
@@ -1621,6 +1663,8 @@ export class Client<Ctx = null> {
       },
     });
 
+    this.redirectInitiatorURL = null;
+
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       try {
         this.handleClose({
@@ -1647,5 +1691,92 @@ export class Client<Ctx = null> {
     console.error('Please supply your own unrecoverable error handling function');
 
     throw e;
+  };
+
+  private redirectInitiatorFallback = () => {
+    if (!this.connectionMetadata) {
+      return this.onUnrecoverableError(
+        new Error("client's connectionMetadata is null when redirecting to initiator"),
+      );
+    }
+    if (!this.connectOptions) {
+      return this.onUnrecoverableError(
+        new Error("client's connectOptions is null when redirecting to initiator"),
+      );
+    }
+
+    if (!this.chan0Cb) {
+      return this.onUnrecoverableError(
+        new Error("client's chan0Cb is null when redirecting to initiator"),
+      );
+    }
+    const context = this.connectOptions.context;
+    const chan0Cb = this.chan0Cb;
+    const govalMetadata: GovalMetadata = {
+      token: this.connectionMetadata.token,
+      conmanURL: this.connectionMetadata.conmanURL,
+      gurl: this.connectionMetadata.gurl,
+    };
+    this.redirectInitiatorURL = null;
+    const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
+      error: null,
+      ...govalMetadata,
+    };
+    this.close();
+
+    this.open(
+      {
+        fetchConnectionMetadata: () => Promise.resolve(fetchConnectionMetadataResult),
+        WebSocketClass: WebSocket,
+        context: context,
+      },
+      chan0Cb,
+    );
+  };
+
+  private handleRedirect = (url: string) => {
+    this.debug({
+      type: 'breadcrumb',
+      message: 'handling redirect',
+      data: {
+        connectionMetadata: this.connectionMetadata,
+      },
+    });
+    if (!this.connectionMetadata) {
+      return this.onUnrecoverableError(
+        new Error("client's connectionMetadata is null when redirecting"),
+      );
+    }
+    if (!this.connectOptions) {
+      return this.onUnrecoverableError(
+        new Error("client's connectOptions is null when redirecting"),
+      );
+    }
+
+    if (!this.chan0Cb) {
+      return this.onUnrecoverableError(new Error("client's chan0Cb is null when redirecting"));
+    }
+    const context = this.connectOptions.context;
+    const chan0Cb = this.chan0Cb;
+    const govalMetadata: GovalMetadata = {
+      token: this.connectionMetadata.token,
+      conmanURL: this.connectionMetadata.conmanURL,
+      gurl: url,
+    };
+    this.redirectInitiatorURL = this.connectionMetadata.gurl;
+    const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
+      error: null,
+      ...govalMetadata,
+    };
+    this.close();
+
+    this.open(
+      {
+        fetchConnectionMetadata: () => Promise.resolve(fetchConnectionMetadataResult),
+        WebSocketClass: WebSocket,
+        context: context,
+      },
+      chan0Cb,
+    );
   };
 }

@@ -147,6 +147,17 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
+      message: 'redirectInitiatorFallback';
+      data: {
+        connectionState: ConnectionState;
+        connectTries: number;
+        websocketFailureCount: number;
+        error: Error;
+        wsReadyState?: WebSocket['readyState'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
       message: 'containerState';
       data: api.ContainerState.State;
     }
@@ -171,6 +182,13 @@ export type DebugLogBreadcrumb<Ctx> =
       message: 'unrecoverable error';
       data: {
         message: string;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'handling redirect';
+      data: {
+        connectionMetadata: GovalMetadata | null;
       };
     };
 

@@ -7,7 +7,6 @@ import { Channel } from '../channel';
 import { createCloseEvent } from '../util/EIOCompat';
 import { api } from '@replit/protocol';
 import { wrapWithDone } from '../__testutils__/done';
-
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
 
