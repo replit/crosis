@@ -26,7 +26,7 @@ const genConnectionMetadataWithGurl = (gurl: string) => {
   return connectionMetadata;
 };
 
-let port = 9751;
+const port = 9751;
 
 afterAll(() => {
   testingClients.forEach((c) => {

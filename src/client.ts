@@ -1706,7 +1706,9 @@ export class Client<Ctx = null> {
     }
 
     if (!this.chan0Cb) {
-      return this.onUnrecoverableError(new Error("client's chan0Cb is null when redirecting to initiator"));
+      return this.onUnrecoverableError(
+        new Error("client's chan0Cb is null when redirecting to initiator"),
+      );
     }
     const context = this.connectOptions.context;
     const chan0Cb = this.chan0Cb;
