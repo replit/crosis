@@ -6,6 +6,7 @@ import {
   FetchConnectionMetadataError,
   ConnectionState,
   FetchConnectionMetadataResult,
+  CloseCode,
 } from './types';
 import type {
   ConnectOptions,
@@ -1066,7 +1067,7 @@ export class Client<Ctx = null> {
      * 3- ContainerState.SLEEP command
      * 4- User calling `close` before we connect
      */
-    let onFailed: ((err: Error) => void) | null = null;
+    let onFailed: ((err: Error, retriable?: boolean) => void) | null = null;
 
     ws.onerror = () => {
       if (!onFailed) {
@@ -1088,6 +1089,8 @@ export class Client<Ctx = null> {
         return;
       }
 
+      let retriable = true;
+
       if (WebSocketClass === EIOCompat) {
         if (!didReceiveAnyCommand) {
           // The polling implementation doesn't convey the Websocket close
@@ -1096,14 +1099,20 @@ export class Client<Ctx = null> {
         }
       } else if ('code' in event) {
         const closeEvent = <CloseEvent>event;
-        const closeCodePolicyViolation = 1008;
-        if (closeEvent.code === closeCodePolicyViolation) {
+        if (closeEvent.code === CloseCode.POLICY_VIOLATION) {
           // This means that the token was rejected. We need to fetch another one.
           this.connectionMetadata = null;
         }
+
+        if (
+          closeEvent.code === CloseCode.USER_ERROR ||
+          closeEvent.code === CloseCode.FIREWALL_DENIED
+        ) {
+          retriable = false;
+        }
       }
 
-      onFailed(new Error('WebSocket closed before we got READY'));
+      onFailed(new Error('WebSocket closed before we got READY'), retriable);
     };
 
     ws.onopen = () => {
@@ -1266,7 +1275,7 @@ export class Client<Ctx = null> {
     const currentChan0 = this.getChannel(0);
     const currentConnectOptions = this.connectOptions;
 
-    onFailed = (error: Error) => {
+    onFailed = (error: Error, retriable = true) => {
       // Make sure this function is not called multiple times.
       onFailed = null;
 
@@ -1282,6 +1291,10 @@ export class Client<Ctx = null> {
         );
 
         return;
+      }
+
+      if (!retriable) {
+        this.onUnrecoverableError(error);
       }
 
       this.retryConnect({

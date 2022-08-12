@@ -267,3 +267,11 @@ export type OpenChannelCb<Ctx> = (
 export interface RequestResult extends api.Command {
   channelClosed?: ChannelCloseReason;
 }
+
+export const CloseCode = {
+  INVALID_UPSTREAM_RESPONSE: 1014,
+  POLICY_VIOLATION: 1008,
+  FIREWALL_DENIED: 4000,
+  TRY_ANOTHER_MACHINE: 4001,
+  USER_ERROR: 4002,
+};
