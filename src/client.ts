@@ -1295,6 +1295,7 @@ export class Client<Ctx = null> {
 
       if (!retriable) {
         this.onUnrecoverableError(error);
+        return;
       }
 
       this.retryConnect({
