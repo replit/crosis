@@ -44,6 +44,7 @@ export interface ConnectOptions<Ctx> {
   context: Ctx;
   reuseConnectionMetadata: boolean;
   pollingHost?: string;
+  getNextRetryDelayMs: (tryCount: number) => number;
 }
 
 export interface UrlOptions {

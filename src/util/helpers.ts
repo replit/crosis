@@ -7,7 +7,7 @@ const MAX_BACKOFF = 15000;
 /**
  * Calculates the backoff for n retry
  */
-export function getNextRetryDelay(retryNumber: number): number {
+export function defaultGetNextRetryDelay(retryNumber: number): number {
   const randomMs = Math.floor(Math.random() * 500);
   const backoff = BACKOFF_FACTOR ** retryNumber * 1000;
 
