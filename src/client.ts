@@ -1,6 +1,6 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
-import { getWebSocketClass, getNextRetryDelay, getConnectionStr } from './util/helpers';
+import { getWebSocketClass, defaultGetNextRetryDelay, getConnectionStr } from './util/helpers';
 import { EIOCompat } from './util/EIOCompat';
 import {
   FetchConnectionMetadataError,
@@ -292,6 +292,7 @@ export class Client<Ctx = null> {
     this.connectOptions = {
       timeout: 10000,
       reuseConnectionMetadata: false,
+      getNextRetryDelayMs: defaultGetNextRetryDelay,
       ...options,
     };
 
@@ -1335,6 +1336,12 @@ export class Client<Ctx = null> {
       return;
     }
 
+    if (!this.connectOptions) {
+      this.onUnrecoverableError(new Error('Expected connectOptions when scheduling a retry'));
+
+      return;
+    }
+
     if (tryCount >= MAX_RETRY_COUNT && this.redirectInitiatorURL) {
       this.debug({
         type: 'breadcrumb',
@@ -1374,7 +1381,7 @@ export class Client<Ctx = null> {
       delete this.channels[0];
       this.connectionState = ConnectionState.DISCONNECTED;
       this.connect({ tryCount, websocketFailureCount });
-    }, getNextRetryDelay(tryCount));
+    }, this.connectOptions.getNextRetryDelayMs(tryCount));
   };
 
   /** @hidden */
