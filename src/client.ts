@@ -1408,7 +1408,7 @@ export class Client<Ctx = null> {
         type: 'breadcrumb',
         message: 'calling send on a closed client',
         data: {
-          channelId: cmd.channelId,
+          channelId: cmd.channel,
         },
       });
 
