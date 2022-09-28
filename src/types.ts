@@ -191,6 +191,15 @@ export type DebugLogBreadcrumb<Ctx> =
       data: {
         connectionMetadata: GovalMetadata | null;
       };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'handle channel close';
+      data: {
+        channelRequestIsOpen: boolean;
+        willChannelReconnect: boolean;
+        hasWs: boolean;
+      };
     };
 
 /**

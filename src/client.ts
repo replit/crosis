@@ -1532,6 +1532,16 @@ export class Client<Ctx = null> {
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
 
+      this.debug({
+        type: 'breadcrumb',
+        message: 'handle channel close',
+        data: {
+          channelRequestIsOpen: channelRequest.isOpen,
+          willChannelReconnect,
+          hasWs: Boolean(this.ws),
+        },
+      });
+
       if (channelRequest.isOpen) {
         const channel = this.getChannel(channelRequest.channelId);
         channel.handleClose({
