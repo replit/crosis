@@ -199,6 +199,14 @@ export type DebugLogBreadcrumb<Ctx> =
         channelRequestIsOpen: boolean;
         willChannelReconnect: boolean;
         hasWs: boolean;
+        channelId: string | null;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'calling send on a closed client';
+      data: {
+        channelId: string;
       };
     };
 

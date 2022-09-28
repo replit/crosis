@@ -1404,6 +1404,14 @@ export class Client<Ctx = null> {
     const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
 
     if (this.ws == null) {
+      this.debug({
+        type: 'breadcrumb',
+        message: 'calling send on a closed client',
+        data: {
+          channelId: cmd.channelId,
+        },
+      });
+
       this.onUnrecoverableError(new Error('Calling send on a closed client'));
 
       return;
@@ -1539,6 +1547,7 @@ export class Client<Ctx = null> {
           channelRequestIsOpen: channelRequest.isOpen,
           willChannelReconnect,
           hasWs: Boolean(this.ws),
+          channelId: channelRequest.channelId,
         },
       });
 
