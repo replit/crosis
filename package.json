@@ -1,6 +1,6 @@
 {
   "name": "@replit/crosis",
-  "version": "9.1.0",
+  "version": "9.1.1",
   "description": "Goval connection and channel manager",
   "files": [
     "/dist"
@@ -15,7 +15,7 @@
     "clean": "rm -rf dist dist.browser",
     "docs": "typedoc --out docs --name crosis src/index.ts node_modules/@replit/protocol/index.d.ts",
     "test": "jest --no-cache",
-    "preversion": "yarn lint && yarn test && yarn clean && yarn build",
+    "preversion": "yarn lint && yarn clean && yarn build",
     "postversion": "echo \"committing\" && git commit -am v$npm_package_version && echo \"setting tag\" && git tag v$npm_package_version && echo \"pushing branch and tag\" && git push origin HEAD --tags && echo \"publishing\" && yarn publish --new-version $npm_package_version && echo \"Successfully released version v$npm_package_version!\""
   },
   "author": "faris@repl.it",
