@@ -109,7 +109,7 @@ const closeChannel = client.openChannel({ service: 'exec' }, function open({ cha
 });
 ```
 
-### Delevoping
+### Developing
 
 To run tests run
 
