@@ -1,6 +1,6 @@
 /* global Event CloseEvent MessageEvent */
 
-import * as eio from 'engine.io-client';
+import eio from 'engine.io-client';
 import * as urllib from 'url';
 
 export function splitHref(href: string): { uri: string; path: string } {

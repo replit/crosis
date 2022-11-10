@@ -2,9 +2,10 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist/",
+    "esModuleInterop": true,
     "module": "commonjs",
     "moduleResolution": "node",
-    "target": "es5",
+    "target": "es2018",
     "strict": true,
     "lib": ["es6", "dom"],
     "noUnusedLocals": true,

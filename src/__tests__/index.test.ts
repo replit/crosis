@@ -6,9 +6,9 @@ import { getWebSocketClass } from '../util/helpers';
 import { Channel } from '../channel';
 import { createCloseEvent } from '../util/EIOCompat';
 import { api } from '@replit/protocol';
+import { concurrent } from '../__testutils__/concurrent';
 import { wrapWithDone } from '../__testutils__/done';
-// eslint-disable-next-line
-const genConnectionMetadata = require('../../debug/genConnectionMetadata');
+import genConnectionMetadata from '../../debug/genConnectionMetadata';
 
 // eslint-disable-next-line
 const WebSocket = require('ws');
@@ -26,6 +26,11 @@ function getClient<Ctx = null>(done: jest.DoneCallback) {
 
   return c;
 }
+
+const getConnectionMetadata = async () => ({
+  ...genConnectionMetadata(),
+  error: null,
+});
 
 afterAll(() => {
   testingClients.forEach((c) => c.destroy());
@@ -53,18 +58,14 @@ function getWebsocketClassThatNeverConnects() {
   return WebsocketThatNeverConnects;
 }
 
-test('client connect', (done) => {
+concurrent('client connect', (done) => {
   const client = getClient<{ username: string }>(done);
 
   const ctx = { username: 'zyzz' };
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: ctx,
     },
@@ -82,7 +83,7 @@ test('client connect', (done) => {
   );
 });
 
-test('client connect with connection metadata retry', (done) => {
+concurrent('client connect with connection metadata retry', (done) => {
   const client = getClient<{ username: string }>(done);
 
   const ctx = { username: 'zyzz' };
@@ -91,19 +92,19 @@ test('client connect with connection metadata retry', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () => {
+      fetchConnectionMetadata: async () => {
         tryCount += 1;
 
         if (tryCount === 1) {
-          return Promise.resolve({
+          return {
             error: FetchConnectionMetadataError.Retriable,
-          });
+          };
         }
 
-        return Promise.resolve({
+        return {
           ...genConnectionMetadata(),
           error: null,
-        });
+        };
       },
       WebSocketClass: WebSocket,
       context: ctx,
@@ -123,28 +124,25 @@ test('client connect with connection metadata retry', (done) => {
   );
 });
 
-test('client retries', (done) => {
+concurrent('client retries', (done) => {
   const client = getClient(done);
 
   let tryCount = 0;
 
   client.open(
     {
-      fetchConnectionMetadata: () => {
+      fetchConnectionMetadata: async () => {
         tryCount += 1;
 
         if (tryCount === 1) {
-          return Promise.resolve({
+          return {
             ...genConnectionMetadata(),
             error: null,
             token: 'test - bad connection metadata retries',
-          });
+          };
         }
 
-        return Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        });
+        return getConnectionMetadata();
       },
       WebSocketClass: WebSocket,
       context: null,
@@ -163,7 +161,7 @@ test('client retries', (done) => {
   );
 });
 
-test('client retries and caches tokens', (done) => {
+concurrent('client retries and caches tokens', (done) => {
   const client = getClient(done);
 
   const fetchConnectionMetadata = jest.fn();
@@ -185,14 +183,14 @@ test('client retries and caches tokens', (done) => {
     {
       timeout: 1,
       reuseConnectionMetadata: true,
-      fetchConnectionMetadata: () => {
+      fetchConnectionMetadata: async () => {
         fetchConnectionMetadata();
-        return Promise.resolve({
+        return {
           token: 'test - bad connection metadata retries',
           gurl: 'ws://invalid.example.com',
           conmanURL: 'http://invalid.example.com',
           error: null,
-        });
+        };
       },
       WebSocketClass: WebSocket,
       context: null,
@@ -212,7 +210,7 @@ test('client retries and caches tokens', (done) => {
   );
 });
 
-test('client retries but does not cache tokens', (done) => {
+concurrent('client retries but does not cache tokens', (done) => {
   const client = getClient(done);
 
   const fetchConnectionMetadata = jest.fn();
@@ -233,14 +231,14 @@ test('client retries but does not cache tokens', (done) => {
   client.open(
     {
       timeout: 1,
-      fetchConnectionMetadata: () => {
+      fetchConnectionMetadata: async () => {
         fetchConnectionMetadata();
-        return Promise.resolve({
+        return {
           token: 'test - bad connection metadata retries',
           gurl: 'ws://invalid.example.com',
           conmanURL: 'http://invalid.example.com',
           error: null,
-        });
+        };
       },
       WebSocketClass: WebSocket,
       context: null,
@@ -260,16 +258,12 @@ test('client retries but does not cache tokens', (done) => {
   );
 });
 
-test('client requests new connection metadata after intentional close', (done) => {
+concurrent('client requests new connection metadata after intentional close', (done) => {
   const client = getClient(done);
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -313,7 +307,7 @@ test('client requests new connection metadata after intentional close', (done) =
   );
 });
 
-test('channel closing itself when client willReconnect', (done) => {
+concurrent('channel closing itself when client willReconnect', (done) => {
   let disconnectTriggered = false;
   let clientOpenCount = 0;
   let channelOpenCount = 0;
@@ -326,10 +320,7 @@ test('channel closing itself when client willReconnect', (done) => {
       fetchConnectionMetadata: () => {
         connectionMetadataCount += 1;
 
-        return Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        });
+        return getConnectionMetadata();
       },
       WebSocketClass: WebSocket,
       context: null,
@@ -384,18 +375,14 @@ test('channel closing itself when client willReconnect', (done) => {
   );
 });
 
-test('channel open and close', (done) => {
+concurrent('channel open and close', (done) => {
   const client = getClient(done);
 
   const channelClose = jest.fn();
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -433,7 +420,7 @@ test('channel open and close', (done) => {
   );
 });
 
-test('channel accepts a thunk for service', (done) => {
+concurrent('channel accepts a thunk for service', (done) => {
   const context = { username: 'aghanim' };
   const client = getClient<typeof context>(done);
 
@@ -441,11 +428,7 @@ test('channel accepts a thunk for service', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context,
     },
@@ -491,18 +474,14 @@ test('channel accepts a thunk for service', (done) => {
   );
 });
 
-test('channel open and close from within openChannelCb synchronously', (done) => {
+concurrent('channel open and close from within openChannelCb synchronously', (done) => {
   const client = getClient(done);
 
   const channelClose = jest.fn();
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -539,18 +518,14 @@ test('channel open and close from within openChannelCb synchronously', (done) =>
   );
 });
 
-test('channel open and close from within openChannelCb synchronously', (done) => {
+concurrent('channel open and close from within openChannelCb synchronously', (done) => {
   const client = getClient(done);
 
   const channelClose = jest.fn();
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -587,7 +562,7 @@ test('channel open and close from within openChannelCb synchronously', (done) =>
   );
 });
 
-test('channel skips opening', (done) => {
+concurrent('channel skips opening', (done) => {
   const client = getClient<{ username: string }>(done);
 
   const service = 'shell';
@@ -597,11 +572,10 @@ test('channel skips opening', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: async () => ({
+        ...genConnectionMetadata(),
+        error: null,
+      }),
       WebSocketClass: WebSocket,
       context: ctx,
     },
@@ -631,7 +605,7 @@ test('channel skips opening', (done) => {
   );
 });
 
-test('channel skips opening conditionally', (done) => {
+concurrent('channel skips opening conditionally', (done) => {
   let unexpectedDisconnectTriggered = false;
   let clientOpenCount = 0;
   let channelOpenCount = 0;
@@ -640,11 +614,7 @@ test('channel skips opening conditionally', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -697,7 +667,7 @@ test('channel skips opening conditionally', (done) => {
   );
 });
 
-test('openChannel before open', (done) => {
+concurrent('openChannel before open', (done) => {
   const client = getClient(done);
 
   client.openChannel(
@@ -711,11 +681,7 @@ test('openChannel before open', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -729,7 +695,7 @@ test('openChannel before open', (done) => {
   );
 });
 
-test('closing client maintains openChannel requests', (done) => {
+concurrent('closing client maintains openChannel requests', (done) => {
   const client = getClient(done);
 
   let first = true;
@@ -767,11 +733,7 @@ test('closing client maintains openChannel requests', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -783,7 +745,7 @@ test('closing client maintains openChannel requests', (done) => {
   );
 });
 
-test('client rejects opening same channel twice', (done) => {
+concurrent('client rejects opening same channel twice', (done) => {
   const client = getClient(done);
   client.setUnrecoverableErrorHandler(() => {});
 
@@ -797,120 +759,126 @@ test('client rejects opening same channel twice', (done) => {
   done();
 });
 
-test('allows opening channel with the same name after closing others and client is disconnected', (done) => {
-  const client = getClient(done);
+concurrent(
+  'allows opening channel with the same name after closing others and client is disconnected',
+  (done) => {
+    const client = getClient(done);
 
-  const name = Math.random().toString();
+    const name = Math.random().toString();
 
-  let calledFirstWithError = false;
-  const close = client.openChannel({ name, service: 'exec' }, ({ error }) => {
-    calledFirstWithError = Boolean(error);
-  });
+    let calledFirstWithError = false;
+    const close = client.openChannel({ name, service: 'exec' }, ({ error }) => {
+      calledFirstWithError = Boolean(error);
+    });
 
-  close();
-  // open same name synchronously
-  client.openChannel(
-    { name, service: 'exec' },
-    wrapWithDone(done, ({ channel }) => {
-      expect(channel).toBeTruthy();
-      expect(calledFirstWithError).toBeTruthy();
-      client.close();
+    close();
+    // open same name synchronously
+    client.openChannel(
+      { name, service: 'exec' },
+      wrapWithDone(done, ({ channel }) => {
+        expect(channel).toBeTruthy();
+        expect(calledFirstWithError).toBeTruthy();
+        client.close();
 
-      done();
-    }),
-  );
+        done();
+      }),
+    );
 
-  client.open(
-    {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
-      WebSocketClass: WebSocket,
-      context: null,
-    },
-    () => {},
-  );
-});
+    client.open(
+      {
+        fetchConnectionMetadata: () =>
+          Promise.resolve({
+            ...genConnectionMetadata(),
+            error: null,
+          }),
+        WebSocketClass: WebSocket,
+        context: null,
+      },
+      () => {},
+    );
+  },
+);
 
-test('allows opening channel with the same name after others are closing others and client is connected', (done) => {
-  const client = getClient(done);
+concurrent(
+  'allows opening channel with the same name after others are closing others and client is connected',
+  (done) => {
+    const client = getClient(done);
 
-  client.open(
-    {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
-      WebSocketClass: WebSocket,
-      context: null,
-    },
-    wrapWithDone(done, ({ error }) => {
-      if (error) {
-        done(error);
+    client.open(
+      {
+        fetchConnectionMetadata: () =>
+          Promise.resolve({
+            ...genConnectionMetadata(),
+            error: null,
+          }),
+        WebSocketClass: WebSocket,
+        context: null,
+      },
+      wrapWithDone(done, ({ error }) => {
+        if (error) {
+          done(error);
+
+          return () => {};
+        }
+
+        const name = Math.random().toString();
+
+        let firstChannel: Channel;
+        const close = client.openChannel(
+          { name, service: 'exec' },
+          wrapWithDone(done, ({ channel }) => {
+            expect(channel).toBeTruthy();
+
+            if (!channel) {
+              throw new Error('apease typescript');
+            }
+
+            firstChannel = channel;
+
+            expect(firstChannel.status).toEqual('closing');
+          }),
+        );
+
+        // Close immediately
+        close();
+
+        // open same name synchronously
+        const close2 = client.openChannel(
+          { name, service: 'exec' },
+          wrapWithDone(done, ({ channel: secondChannel }) => {
+            // ensure first channel opens
+            expect(firstChannel).toBeTruthy();
+            expect(secondChannel).toBeTruthy();
+            expect(secondChannel?.status).toEqual('open');
+            expect(secondChannel).not.toEqual(firstChannel);
+
+            // After the channel is opened close the current channel and open a new one
+            close2();
+            expect(secondChannel?.status).toEqual('closing');
+            const close3 = client.openChannel(
+              { name, service: 'exec' },
+              wrapWithDone(done, ({ channel: finalChannel }) => {
+                expect(finalChannel).toBeTruthy();
+                expect(finalChannel?.status).toEqual('open');
+                expect(finalChannel).not.toEqual(firstChannel);
+                expect(finalChannel).not.toEqual(secondChannel);
+
+                close3();
+
+                client.close();
+                done();
+              }),
+            );
+          }),
+        );
 
         return () => {};
-      }
+      }),
+    );
+  },
+);
 
-      const name = Math.random().toString();
-
-      let firstChannel: Channel;
-      const close = client.openChannel(
-        { name, service: 'exec' },
-        wrapWithDone(done, ({ channel }) => {
-          expect(channel).toBeTruthy();
-
-          if (!channel) {
-            throw new Error('apease typescript');
-          }
-
-          firstChannel = channel;
-
-          expect(firstChannel.status).toEqual('closing');
-        }),
-      );
-
-      // Close immediately
-      close();
-
-      // open same name synchronously
-      const close2 = client.openChannel(
-        { name, service: 'exec' },
-        wrapWithDone(done, ({ channel: secondChannel }) => {
-          // ensure first channel opens
-          expect(firstChannel).toBeTruthy();
-          expect(secondChannel).toBeTruthy();
-          expect(secondChannel?.status).toEqual('open');
-          expect(secondChannel).not.toEqual(firstChannel);
-
-          // After the channel is opened close the current channel and open a new one
-          close2();
-          expect(secondChannel?.status).toEqual('closing');
-          const close3 = client.openChannel(
-            { name, service: 'exec' },
-            wrapWithDone(done, ({ channel: finalChannel }) => {
-              expect(finalChannel).toBeTruthy();
-              expect(finalChannel?.status).toEqual('open');
-              expect(finalChannel).not.toEqual(firstChannel);
-              expect(finalChannel).not.toEqual(secondChannel);
-
-              close3();
-
-              client.close();
-              done();
-            }),
-          );
-        }),
-      );
-
-      return () => {};
-    }),
-  );
-});
-
-test('opens multiple anonymous channels while client is connected', (done) => {
+concurrent('opens multiple anonymous channels while client is connected', (done) => {
   const client = getClient(done);
 
   let didDone = false;
@@ -926,11 +894,7 @@ test('opens multiple anonymous channels while client is connected', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -981,7 +945,7 @@ test('opens multiple anonymous channels while client is connected', (done) => {
   );
 });
 
-test('client reconnects unexpected disconnects', (done) => {
+concurrent('client reconnects unexpected disconnects', (done) => {
   const client = getClient(done);
 
   let disconnectTriggered = false;
@@ -991,11 +955,7 @@ test('client reconnects unexpected disconnects', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -1038,7 +998,7 @@ test('client reconnects unexpected disconnects', (done) => {
   );
 });
 
-test('client is closed while reconnecting', (done) => {
+concurrent('client is closed while reconnecting', (done) => {
   const onOpen = jest.fn();
 
   const client = getClient(done);
@@ -1052,11 +1012,7 @@ test('client is closed while reconnecting', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -1080,7 +1036,7 @@ test('client is closed while reconnecting', (done) => {
   );
 });
 
-test('closing before ever connecting', (done) => {
+concurrent('closing before ever connecting', (done) => {
   const client = getClient(done);
   client.onDebugLog((log) => {
     if (log.type === 'breadcrumb' && log.message === 'connecting') {
@@ -1096,11 +1052,7 @@ test('closing before ever connecting', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -1125,124 +1077,130 @@ test('closing before ever connecting', (done) => {
   );
 });
 
-test('fallback to polling', (done) => {
-  const client = getClient(done);
+concurrent(
+  'fallback to polling',
+  (done) => {
+    const client = getClient(done);
 
-  const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
+    const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
 
-  let didLogFallback = false;
-  client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
-      didLogFallback = true;
-    }
-  });
+    let didLogFallback = false;
+    client.onDebugLog((log) => {
+      if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
+        didLogFallback = true;
+      }
+    });
 
-  client.open(
-    {
-      timeout: 2000,
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
+    client.open(
+      {
+        timeout: 2000,
+        fetchConnectionMetadata: async () => ({
           ...genConnectionMetadata(),
           error: null,
         }),
-      WebSocketClass: WebsocketThatNeverConnects,
-      context: null,
-      pollingHost: 'gp-v2.replit.com',
-    },
-    wrapWithDone(done, ({ channel, error }) => {
-      expect(error).toBeNull();
-      expect(channel).not.toBeNull();
-      expect(didLogFallback).toBe(true);
-      client.close();
-
-      return () => {
-        done();
-      };
-    }),
-  );
-}, 40000);
-
-test('does not fallback to polling if host is unset', (done) => {
-  const client = getClient(done);
-  client.setUnrecoverableErrorHandler(() => {});
-
-  const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
-
-  let didLogFallback = false;
-  client.onDebugLog((log) => {
-    if (
-      log.type === 'breadcrumb' &&
-      log.message === 'connecting' &&
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (log.data as Record<string, any>)?.connectTries === 4
-    ) {
-      setTimeout(() => {
-        client.destroy();
-      });
-    }
-    if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
-      didLogFallback = true;
-    }
-  });
-
-  client.open(
-    {
-      timeout: 500,
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
-      WebSocketClass: WebsocketThatNeverConnects,
-      context: null,
-    },
-    wrapWithDone(done, ({ channel, error }) => {
-      expect(didLogFallback).toBe(false);
-      expect(channel).toBeNull();
-      expect(error).not.toBeNull();
-
-      done();
-    }),
-  );
-}, 40000);
-
-test('cancels connection timeout when closing', (done) => {
-  const client = getClient(done);
-
-  const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
-
-  const timeout = 2000;
-
-  client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'connecting') {
-      setTimeout(() => {
+        WebSocketClass: WebsocketThatNeverConnects,
+        context: null,
+        pollingHost: 'gp-v2.replit.com',
+      },
+      wrapWithDone(done, ({ channel, error }) => {
+        expect(error).toBeNull();
+        expect(channel).not.toBeNull();
+        expect(didLogFallback).toBe(true);
         client.close();
 
-        setTimeout(() => {
+        return () => {
           done();
-          // ample time for the other timeout to clear up
-          // and reak havoc if it was to do that.
-        }, timeout + 100);
-      });
-    }
-  });
+        };
+      }),
+    );
+  },
+  50000,
+);
 
-  client.open(
-    {
-      timeout,
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
+concurrent(
+  'does not fallback to polling if host is unset',
+  (done) => {
+    const client = getClient(done);
+    client.setUnrecoverableErrorHandler(() => {});
+
+    const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
+
+    let didLogFallback = false;
+    client.onDebugLog((log) => {
+      if (
+        log.type === 'breadcrumb' &&
+        log.message === 'connecting' &&
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (log.data as Record<string, any>)?.connectTries === 4
+      ) {
+        setTimeout(() => {
+          client.destroy();
+        });
+      }
+      if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
+        didLogFallback = true;
+      }
+    });
+
+    client.open(
+      {
+        timeout: 500,
+        fetchConnectionMetadata: getConnectionMetadata,
+        WebSocketClass: WebsocketThatNeverConnects,
+        context: null,
+      },
+      wrapWithDone(done, ({ channel, error }) => {
+        expect(didLogFallback).toBe(false);
+        expect(channel).toBeNull();
+        expect(error).not.toBeNull();
+
+        done();
+      }),
+    );
+  },
+  40000,
+);
+
+concurrent(
+  'cancels connection timeout when closing',
+  (done) => {
+    const client = getClient(done);
+
+    const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
+
+    const timeout = 2000;
+
+    client.onDebugLog((log) => {
+      if (log.type === 'breadcrumb' && log.message === 'connecting') {
+        setTimeout(() => {
+          client.close();
+
+          setTimeout(() => {
+            done();
+            // ample time for the other timeout to clear up
+            // and reak havoc if it was to do that.
+          }, timeout + 100);
+        });
+      }
+    });
+
+    client.open(
+      {
+        timeout,
+        fetchConnectionMetadata: async () => ({
           ...genConnectionMetadata(),
           error: null,
         }),
-      WebSocketClass: WebsocketThatNeverConnects,
-      context: null,
-    },
-    () => {},
-  );
-}, 20000);
+        WebSocketClass: WebsocketThatNeverConnects,
+        context: null,
+      },
+      () => {},
+    );
+  },
+  20000,
+);
 
-test('fetch token fail', (done) => {
+concurrent('fetch token fail', (done) => {
   const chan0Cb = jest.fn();
   const client = getClient(done);
 
@@ -1268,7 +1226,7 @@ test('fetch token fail', (done) => {
   );
 });
 
-test('fetch abort signal works as expected', (done) => {
+concurrent('fetch abort signal works as expected', (done) => {
   const client = getClient(done);
 
   const onAbort = jest.fn();
@@ -1308,7 +1266,7 @@ test('fetch abort signal works as expected', (done) => {
   );
 });
 
-test('can close and open in synchronously without aborting fetch token', (done) => {
+concurrent('can close and open in synchronously without aborting fetch token', (done) => {
   const client = getClient(done);
 
   const onAbort = jest.fn();
@@ -1351,11 +1309,7 @@ test('can close and open in synchronously without aborting fetch token', (done) 
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: null,
     },
@@ -1374,7 +1328,7 @@ test('can close and open in synchronously without aborting fetch token', (done) 
   );
 });
 
-test('emits boot status messages', (done) => {
+concurrent('emits boot status messages', (done) => {
   const client = getClient<{ username: string }>(done);
 
   const ctx = { username: 'zyzz' };
@@ -1414,11 +1368,7 @@ test('emits boot status messages', (done) => {
 
   client.open(
     {
-      fetchConnectionMetadata: () =>
-        Promise.resolve({
-          ...genConnectionMetadata(),
-          error: null,
-        }),
+      fetchConnectionMetadata: getConnectionMetadata,
       WebSocketClass: WebSocket,
       context: ctx,
     },
