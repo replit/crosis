@@ -5,7 +5,7 @@
     "esModuleInterop": true,
     "module": "commonjs",
     "moduleResolution": "node",
-    "target": "es2020",
+    "target": "es2018",
     "strict": true,
     "lib": ["es6", "dom"],
     "noUnusedLocals": true,

@@ -6,7 +6,8 @@ export function concurrent(
   test.concurrent(
     name,
     () =>
-      new Promise<void>((resolve, reject) => {
+      // eslint-disable-next-line no-async-promise-executor
+      new Promise<void>(async (resolve, reject) => {
         function done(err?: any) {
           if (err) {
             reject(err);
@@ -15,7 +16,11 @@ export function concurrent(
           }
         }
         done.fail = reject;
-        fn(done);
+        try {
+          await fn(done);
+        } catch (e) {
+          reject(e);
+        }
       }),
     timeout,
   );
