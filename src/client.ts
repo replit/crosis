@@ -1106,8 +1106,8 @@ export class Client<Ctx = null> {
           // permanent error from the perspective of the infrastructure, most
           // of the time it can be corrected by fetching a new token, since
           // this happens during cluster transfers most of the time (although
-          // sometimes it also happens when a particular Repl is tombstoned).
-          // TODO: Make the tombstone case return an USER_ERROR to have more
+          // sometimes it also happens when a particular Repl is taken down).
+          // TODO: Make the takedown case return an USER_ERROR to have more
           // clarity about why the Repl couldn't run.
           this.connectionMetadata = null;
         } else if (closeEvent.code === CloseCode.USER_ERROR) {
