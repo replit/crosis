@@ -1,6 +1,6 @@
 {
   "name": "@replit/crosis",
-  "version": "9.1.1",
+  "version": "9.1.2",
   "description": "Goval connection and channel manager",
   "files": [
     "/dist"
@@ -25,7 +25,7 @@
     "engine.io-client": "^3.4.0"
   },
   "devDependencies": {
-    "@replit/protocol": ">=0.2.48",
+    "@replit/protocol": ">=0.2.77",
     "@types/engine.io-client": "^3.1.5",
     "@types/jest": "^27.5.1",
     "@types/node": "^17.0.32",
