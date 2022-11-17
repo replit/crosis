@@ -1091,6 +1091,7 @@ export class Client<Ctx = null> {
       }
 
       let retriable = true;
+      let errorMessage = 'WebSocket closed before we got READY';
 
       if (WebSocketClass === EIOCompat) {
         if (!didReceiveAnyCommand) {
@@ -1101,19 +1102,28 @@ export class Client<Ctx = null> {
       } else if ('code' in event) {
         const closeEvent = <CloseEvent>event;
         if (closeEvent.code === CloseCode.POLICY_VIOLATION) {
-          // This means that the token was rejected. We need to fetch another one.
+          // This means that the token was rejected. Even though this is a
+          // permanent error from the perspective of the infrastructure, most
+          // of the time it can be corrected by fetching a new token, since
+          // this happens during cluster transfers most of the time (although
+          // sometimes it also happens when a particular Repl is taken down).
+          // TODO: Make the takedown case return an USER_ERROR to have more
+          // clarity about why the Repl couldn't run.
           this.connectionMetadata = null;
-        }
-
-        if (
-          closeEvent.code === CloseCode.USER_ERROR ||
-          closeEvent.code === CloseCode.FIREWALL_DENIED
-        ) {
+        } else if (closeEvent.code === CloseCode.USER_ERROR) {
+          errorMessage = 'Repl not allowed to run at this time. Please try again later.';
+          retriable = false;
+        } else if (closeEvent.code === CloseCode.FIREWALL_DENIED) {
+          errorMessage = "Can't connect to unfirewalled repl from firewall mode";
+          retriable = false;
+        } else if (closeEvent.code === CloseCode.CONCURRENT_REPL_LIMIT) {
+          errorMessage =
+            'You have reached the concurrent Repl limit. Please shut down other Repls.';
           retriable = false;
         }
       }
 
-      onFailed(new Error('WebSocket closed before we got READY'), retriable);
+      onFailed(new Error(errorMessage), retriable);
     };
 
     ws.onopen = () => {
