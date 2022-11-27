@@ -13,6 +13,9 @@ export function defaultGetNextRetryDelay(retryNumber: number): number {
 
   return Math.min(backoff, MAX_BACKOFF) + randomMs;
 }
+/**
+ * Check if supplied param is a standard WebSocket instance.
+ */
 
 function isWebSocket(w: unknown): w is WebSocket {
   if (typeof w !== 'object' && typeof w !== 'function') {
