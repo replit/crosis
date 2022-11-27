@@ -15,15 +15,7 @@ export function defaultGetNextRetryDelay(retryNumber: number): number {
 }
 
 function isWebSocket(w: unknown): w is WebSocket {
-  if (typeof w !== 'object' && typeof w !== 'function') {
-    return false;
-  }
-
-  if (!w) {
-    return false;
-  }
-
-  return 'OPEN' in w && (w as WebSocket).OPEN === 1;
+  return typeof w === 'object' && w && 'OPEN' in w && (w as WebSocket).OPEN === 1;
 }
 
 /**
