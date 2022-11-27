@@ -14,6 +14,27 @@ export function defaultGetNextRetryDelay(retryNumber: number): number {
   return Math.min(backoff, MAX_BACKOFF) + randomMs;
 }
 
+function isWebSocket(w: unknown): w is WebSocket {
+  // If it's an object and the websocket property exists, and the constructor is the same as the class passed in, it's a websocket!
+  if (typeof w === 'object' && 'websocket' in w && w.constructor === WebSocket) {
+    return true;
+  return false;
+}
+  }
+
+// The old function below
+// function isWebSocket(w: unknown): w is WebSocket {
+//   if (typeof w !== 'object' && typeof w !== 'function') {
+//     return false;
+//   }
+//
+//   if (!w) {
+//     return false;
+//   }
+//
+//   return 'OPEN' in w && (w as WebSocket).OPEN === 1;
+// }
+
 /**
  * Gets a websocket class from the global scope, or asserts if the supplied websocket follows the standard
  */
@@ -21,7 +42,7 @@ export function getWebSocketClass(
   WebSocketClass: ConnectOptions<unknown>['WebSocketClass'],
 ): typeof WebSocket {
   if (WebSocketClass) {
-    if (typeof WebSocketClass !== 'function' && 'OPEN' in WebSocketClass && WebSocketClass.OPEN !== 1) {
+    if (!isWebSocket(WebSocketClass)) {
       throw new Error('Passed in WebSocket does not look like a standard WebSocket');
     }
 
@@ -29,7 +50,7 @@ export function getWebSocketClass(
   }
 
   if (typeof WebSocket !== 'undefined') {
-    if ('OPEN' in WebSocket && WebSocket.OPEN !== 1) {
+    if (!isWebSocket(WebSocket)) {
       throw new Error('Global WebSocket does not look like a standard WebSocket');
     }
 
