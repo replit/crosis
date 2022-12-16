@@ -806,13 +806,13 @@ export class Client<Ctx = null> {
 
   /**
    * Adds a listener for the "firewall denied" condition, which occurs when
-   * a user from firewalledreplit.com tries to connect to a repl which has
+   * a user from firewalledreplit.com tries to connect to a Repl which has
    * already been started in regular mode.
    * By default, throw an unrecoverable error, but this can be overridden if
    * clients want to do something different here.
    */
   public onFirewallDenied = () => {
-    this.onUnrecoverableError(new Error("Can't connect to unfirewalled repl from firewall mode"));
+    this.onUnrecoverableError(new Error("Can't connect to unfirewalled Repl from firewall mode"));
   };
 
   /**
@@ -1114,7 +1114,7 @@ export class Client<Ctx = null> {
           errorMessage = 'Repl not allowed to run at this time. Please try again later.';
           retriable = false;
         } else if (closeEvent.code === CloseCode.FIREWALL_DENIED) {
-          errorMessage = "Can't connect to unfirewalled repl from firewall mode";
+          errorMessage = "Can't connect to unfirewalled Repl from firewall mode";
           retriable = false;
         } else if (closeEvent.code === CloseCode.CONCURRENT_REPL_LIMIT) {
           errorMessage =
@@ -1688,9 +1688,9 @@ export class Client<Ctx = null> {
     ws.onclose = null;
     ws.onopen = null;
 
-    // Replace exististing error handler so an error doesn't get thrown.
+    // Replace existing error handler so an error doesn't get thrown.
     // We got here after either `handleClose` so it is safe to ignore
-    //  any potential remaining errors
+    // any potential remaining errors
     ws.onerror = () => {};
 
     if (ws.readyState === 0 || ws.readyState === 1) {
