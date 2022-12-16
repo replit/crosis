@@ -1064,7 +1064,7 @@ export class Client<Ctx = null> {
     /**
      * Failure can happen due to a number of reasons
      * 1- Abrupt socket closure
-     * 2- Timedout connection request
+     * 2- Timed out connection request
      * 3- ContainerState.SLEEP command
      * 4- User calling `close` before we connect
      */
