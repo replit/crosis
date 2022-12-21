@@ -67,6 +67,14 @@ type ChannelRequest<Ctx> =
       cleanupCb: null;
     };
 
+class ErrorWithCloseCode extends Error {
+  public closeCode: number;
+  constructor(message: string, closeCode: number) {
+    super(message);
+    this.closeCode = closeCode;
+  }
+}
+
 export class Client<Ctx = null> {
   /**
    * Indicates the current state of the connection with the container.
@@ -1067,8 +1075,9 @@ export class Client<Ctx = null> {
      * 2- Timed out connection request
      * 3- ContainerState.SLEEP command
      * 4- User calling `close` before we connect
+     * 5- Explicit user errors.
      */
-    let onFailed: ((err: Error, retriable?: boolean) => void) | null = null;
+    let onFailed: ((err: Error | ErrorWithCloseCode, retriable?: boolean) => void) | null = null;
 
     ws.onerror = () => {
       if (!onFailed) {
@@ -1121,6 +1130,8 @@ export class Client<Ctx = null> {
             'You have reached the concurrent Repl limit. Please shut down other Repls.';
           retriable = false;
         }
+
+        return onFailed(new ErrorWithCloseCode(errorMessage, closeEvent.code), retriable);
       }
 
       onFailed(new Error(errorMessage), retriable);
