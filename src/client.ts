@@ -912,8 +912,8 @@ export class Client<Ctx = null> {
     });
     this.channels[0] = chan0;
 
-    // We'll emit bootstatus throughout the lifetime of the channel
-    // bootstatus messages may come in after container state is ready
+    // We'll emit bootStatus throughout the lifetime of the channel
+    // bootStatus messages may come in after container state is ready
     // and so we don't want to dispose this listener until the current
     // connection is completely disposed, which automatically disposes
     // this channel and attached listeners
@@ -1186,10 +1186,10 @@ export class Client<Ctx = null> {
      * Every time we get a message we reset the connection timeout (if it exists)
      * this is because it signifies that the connection will eventually work.
      *
-     * If we ever get a ContainterState READY we can officially
+     * If we ever get a ContainerState READY we can officially
      * say that the connection is successful and we open chan0 and other `chanReq`s
      *
-     * If we ever get ContainterState SLEEP it means that something went wrong
+     * If we ever get ContainerState SLEEP it means that something went wrong
      * and connection should be dropped
      */
     const unlistenChan0 = chan0.onCommand((cmd: api.Command) => {
