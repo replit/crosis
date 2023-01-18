@@ -1113,13 +1113,14 @@ export class Client<Ctx = null> {
         } else if (closeEvent.code === CloseCode.USER_ERROR) {
           errorMessage = 'Repl not allowed to run at this time. Please try again later.';
           retriable = false;
-        } else if (closeEvent.code === CloseCode.FIREWALL_DENIED) {
-          errorMessage = "Can't connect to unfirewalled repl from firewall mode";
-          retriable = false;
         } else if (closeEvent.code === CloseCode.CONCURRENT_REPL_LIMIT) {
           errorMessage =
             'You have reached the concurrent Repl limit. Please shut down other Repls.';
           retriable = false;
+        } else if (closeEvent.code === CloseCode.FIREWALL_DENIED) {
+          cleanupConnection();
+          this.onFirewallDenied();
+          return;
         }
       }
 
@@ -1286,15 +1287,19 @@ export class Client<Ctx = null> {
     const currentChan0 = this.getChannel(0);
     const currentConnectOptions = this.connectOptions;
 
+    const cleanupConnection = () => {
+      // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
+      // will be used in addition to new `cancelTimeout` and `unlistenChan0` functions.
+      this.cleanupSocket();
+      cancelTimeout();
+      unlistenChan0();
+    };
+
     onFailed = (error: Error, retriable = true) => {
       // Make sure this function is not called multiple times.
       onFailed = null;
 
-      // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
-      // will be used in additon to new `cancelTimeout` and `unlistenChan0` functions.
-      this.cleanupSocket();
-      cancelTimeout();
-      unlistenChan0();
+      cleanupConnection();
 
       if (this.connectOptions !== currentConnectOptions || this.getChannel(0) !== currentChan0) {
         this.onUnrecoverableError(
