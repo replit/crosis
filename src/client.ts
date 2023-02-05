@@ -23,9 +23,14 @@ const MAX_RETRY_COUNT = 10;
 
 enum ClientCloseReason {
   /**
-   * called `client.close`
+   * Called `client.close`, expected to stay closed.
    */
   Intentional = 'Intentional',
+  /**
+   * Called `client.close`, but we're going to try to reconnect
+   * at the client's convenience.
+   */
+  Temporary = 'Temporary',
   /**
    * The websocket connection died
    */
@@ -39,6 +44,9 @@ enum ClientCloseReason {
 type CloseResult =
   | {
       closeReason: ClientCloseReason.Intentional;
+    }
+  | {
+      closeReason: ClientCloseReason.Temporary;
     }
   | {
       closeReason: ClientCloseReason.Disconnected;
@@ -700,9 +708,15 @@ export class Client<Ctx = null> {
    *   - If a channel never opened, its {@link OpenChannelCb | open channel callback}
    *     will be called with an error
    *   - Otherwise returned cleanup callback is called
+   *
+   *  - expectReconnect: if true, the client will expects to try to reconnect,
+   *  e.g., a temporary network issue with an explicit reconnect handler.
    */
-  public close = (): void => {
-    this.debug({ type: 'breadcrumb', message: 'user close' });
+  public close = ({ expectReconnect } = { expectReconnect: false }): void => {
+    this.debug({
+      type: 'breadcrumb',
+      message: expectReconnect ? 'user temporary close' : 'user close',
+    });
 
     if (!this.chan0Cb || !this.connectOptions) {
       const error = new Error('Must call client.open before closing');
@@ -712,11 +726,19 @@ export class Client<Ctx = null> {
       throw error;
     }
 
-    // If the close is intentional, let's unset the metadata, the client
-    // may be re-used to connect to another repl
+    // If the close is intentional, let's unset the metadata
+    // the client may be re-used to connect to another repl.
+    // If it is temporary, the client should reuse the metadata
+    // when it reconnects.
     this.connectionMetadata = null;
 
-    this.handleClose({ closeReason: ClientCloseReason.Intentional });
+    if (expectReconnect) {
+      this.handleClose({
+        closeReason: ClientCloseReason.Temporary,
+      });
+    } else {
+      this.handleClose({ closeReason: ClientCloseReason.Intentional });
+    }
   };
 
   /**
@@ -1253,9 +1275,9 @@ export class Client<Ctx = null> {
 
           // defer closing if the user decides to call client.close inside chan0Cb
           const originalClose = this.close;
-          this.close = () =>
+          this.close = (args) =>
             setTimeout(() => {
-              originalClose();
+              originalClose(args);
             }, 0);
 
           this.chan0CleanupCb = this.chan0Cb({
@@ -1545,7 +1567,9 @@ export class Client<Ctx = null> {
       this.fetchTokenAbortController = null;
     }
 
-    const willClientReconnect = closeResult.closeReason === ClientCloseReason.Disconnected;
+    const willClientReconnect =
+      closeResult.closeReason === ClientCloseReason.Disconnected ||
+      closeResult.closeReason === ClientCloseReason.Temporary;
 
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;

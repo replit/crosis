@@ -73,6 +73,7 @@ export type DebugLogBreadcrumb<Ctx> =
         | 'openChanres'
         | 'connected!'
         | 'user close'
+        | 'user temporary close'
         | 'cancel timeout'
         | 'reset timeout'
         | 'connect timeout'
