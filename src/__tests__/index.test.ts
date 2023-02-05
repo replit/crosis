@@ -998,6 +998,71 @@ concurrent('client reconnects unexpected disconnects', (done) => {
   );
 });
 
+concurrent(
+  'client handles user handled (expectReconnect = true) reconnects',
+  (done: jest.DoneCallback) => {
+    const client = getClient(done);
+
+    let disconnectTriggered = false;
+    let timesConnected = 0;
+    let timesClosedUnintentionally = 0;
+    let timesClosedIntentionally = 0;
+
+    const connectArgs = {
+      fetchConnectionMetadata: getConnectionMetadata,
+      WebSocketClass: WebSocket,
+      context: null,
+    };
+
+    client.open(
+      connectArgs,
+      wrapWithDone(done, ({ channel, error }) => {
+        expect(error).toEqual(null);
+        expect(channel?.status).toEqual('open');
+
+        timesConnected += 1;
+
+        if (!disconnectTriggered) {
+          client.close({ expectReconnect: true });
+
+          setTimeout(() => {
+            // reconnecting like this impacts the outer client as expected.
+            // despite being a bit weird to look at in this test. the actual
+            // use of the persistent client is not like this.
+
+            client.open(connectArgs, ({ error: error2 }) => {
+              expect(error2).toEqual(null);
+
+              disconnectTriggered = true;
+            });
+          });
+        } else {
+          client.close();
+        }
+
+        return (closeReason) => {
+          if (closeReason.initiator !== 'client') {
+            throw new Error('Expected "client" initiator');
+          }
+
+          if (closeReason.willReconnect) {
+            timesClosedUnintentionally += 1;
+          } else if (closeReason.willReconnect === false) {
+            timesClosedIntentionally += 1;
+          }
+
+          if (timesConnected === 2) {
+            expect(timesClosedUnintentionally).toEqual(1);
+            expect(timesClosedIntentionally).toEqual(1);
+
+            done();
+          }
+        };
+      }),
+    );
+  },
+);
+
 concurrent('client is closed while reconnecting', (done) => {
   const onOpen = jest.fn();
 
