@@ -1336,6 +1336,13 @@ concurrent('emits boot status messages', (done) => {
   let count = 0;
   client.onBootStatus(
     wrapWithDone(done, (bootStatus) => {
+      if (bootStatus.stage === api.BootStatus.Stage.PROXY) {
+        // we're just going to ignore any proxy steps for the sake of counting
+        // the order of the other steps; they're optional and potentially
+        // stochastic.
+        return;
+      }
+
       count++;
 
       if (count === 1) {
