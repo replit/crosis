@@ -41,7 +41,7 @@ function genConnectionMetadata(options) {
       seconds: Math.floor(now / 1000) + 60 * 60,
     },
     cluster: 'global',
-    persistence: api.ReplToken.Persistence.NONE,
+    persistence: api.repl.Persistence.NONE,
     format: api.ReplToken.WireFormat.PROTOBUF,
     repl,
     resourceLimits: {
