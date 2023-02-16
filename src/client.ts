@@ -752,7 +752,9 @@ export class Client<Ctx = null> {
     this.debug({ type: 'breadcrumb', message: 'destroy' });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      this.close();
+      this.close({
+        expectReconnect: false,
+      });
     }
 
     this.debug = () => {};
