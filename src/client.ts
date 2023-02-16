@@ -27,8 +27,7 @@ enum ClientCloseReason {
    */
   Intentional = 'Intentional',
   /**
-   * Called `client.close`, but we're going to try to reconnect
-   * at the client's convenience.
+   * Called `client.close`, but we're going to try to reconnect.
    */
   Temporary = 'Temporary',
   /**
@@ -103,7 +102,7 @@ export class Client<Ctx = null> {
    * Supplied to us as the second argument when calling `client.open`.
    * Any time we connect we will call this callback with the control channel.
    * If we disconnect before ever connecting and we won't retry;
-   * i.e. user called `client.close` or an unrecoverable error occured,
+   * i.e. user called `client.close` or an unrecoverable error occurred,
    * we will call this function with an error.
    * This has the same api as the second argument to openChannel.
    *
@@ -123,7 +122,7 @@ export class Client<Ctx = null> {
 
   /**
    * Anytime `openChannel` is called, we throw the request in here. This is used to maintain
-   * the `openChannel` calls accross reconnects and use to orchestrate channel opening and closing
+   * the `openChannel` calls across reconnects and use to orchestrate channel opening and closing
    *
    * @hidden
    */
@@ -131,7 +130,7 @@ export class Client<Ctx = null> {
 
   /**
    * This is purely for optimization reasons, we don't wanna look through the channelRequests
-   * array to find the channel everytime. Instead we pull it out quickly from this map.
+   * array to find the channel every time. Instead we pull it out quickly from this map.
    * Any channel here (except for channel 0) should have a corresponding `channelRequest`
    * and the request should be in an `isOpen` true state with a corresponding channel id
    *
@@ -333,7 +332,7 @@ export class Client<Ctx = null> {
    *
    * You can return an optional clean up function from the open callback to be used as a signal
    * for the channel closing, regardless of whether it is going to reconnect or not. The cleanup
-   * function will be called with [[ChannelCloseReason]] which contians some useful information
+   * function will be called with [[ChannelCloseReason]] which contains some useful information
    * about reconnection and why we closed.
    *
    * If [[Client.close]] is called, it will close all channels and they won't reconnect. However,
@@ -679,7 +678,7 @@ export class Client<Ctx = null> {
     }
 
     // Next up: we will check if there are any channels with the same name
-    // that are queued up for opening. We have defered the opening of the channel
+    // that are queued up for opening. We have deferred the opening of the channel
     // until after the current open one closes (see `openChannel`) because the
     // protocol doesn't allow opening multiple channels with the same name
 
@@ -743,7 +742,7 @@ export class Client<Ctx = null> {
 
   /**
    * Destroy closes the connection, so all the rules of `close` apply here.
-   * The only difference is that `destroy` renders the client unsuable afterwards.
+   * The only difference is that `destroy` renders the client unusable afterwards.
    * It will also cleanup all saved `openChannel` calls freeing the callbacks and
    * avoiding leaks.
    */
@@ -1715,7 +1714,7 @@ export class Client<Ctx = null> {
     ws.onclose = null;
     ws.onopen = null;
 
-    // Replace exististing error handler so an error doesn't get thrown.
+    // Replace existing error handler so an error doesn't get thrown.
     // We got here after either `handleClose` so it is safe to ignore
     //  any potential remaining errors
     ws.onerror = () => {};
