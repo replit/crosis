@@ -1672,7 +1672,7 @@ export class Client<Ctx = null> {
 
     this.connectionState = ConnectionState.DISCONNECTED;
 
-    if (closeResult.closeReason !== ClientCloseReason.Disconnected) {
+    if (!willClientReconnect) {
       // Client is done being used until the next `open` call.
 
       this.chan0Cb = null;
@@ -1680,8 +1680,6 @@ export class Client<Ctx = null> {
 
       return;
     }
-
-    // ClientCloseReason.Temporary will result in the user manually calling open again.
 
     this.debug({
       type: 'breadcrumb',
