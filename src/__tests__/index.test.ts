@@ -367,7 +367,7 @@ concurrent('channel closing itself when client willReconnect', (done) => {
         // This cleanup function gets called because we triggered an unintentional
         // disconnect above (`client.ws.onclose()`). Since this is unintentional
         // the client will reconnect itself. But this outer `openChannel`callback will NOT
-        // get called a second time when the cleint re-connects since we are deliberately
+        // get called a second time when the client re-connects since we are deliberately
         // closing it on the next line.
         close();
       });
@@ -1000,13 +1000,8 @@ concurrent('client reconnects unexpected disconnects', (done) => {
 
 concurrent(
   'client handles user handled (expectReconnect = true) reconnects',
-  (done: jest.DoneCallback) => {
+  async (done: jest.DoneCallback) => {
     const client = getClient(done);
-
-    let disconnectTriggered = false;
-    let timesConnected = 0;
-    let timesClosedUnintentionally = 0;
-    let timesClosedIntentionally = 0;
 
     const connectArgs = {
       fetchConnectionMetadata: getConnectionMetadata,
@@ -1014,52 +1009,54 @@ concurrent(
       context: null,
     };
 
-    client.open(
-      connectArgs,
-      wrapWithDone(done, ({ channel, error }) => {
-        expect(error).toEqual(null);
-        expect(channel?.status).toEqual('open');
+    await new Promise<Channel>((resolve) => {
+      client.open(
+        connectArgs,
+        wrapWithDone(done, ({ channel, error }) => {
+          expect(error).toEqual(null);
+          expect(channel?.status).toEqual('open');
 
-        timesConnected += 1;
+          if (!channel) {
+            throw new Error('Expected channel to be defined');
+          }
+          resolve(channel);
 
-        if (!disconnectTriggered) {
-          client.close({ expectReconnect: true });
+          return (closeReason) => {
+            if (closeReason.initiator !== 'client') {
+              throw new Error('Expected "client" initiator');
+            }
 
-          setTimeout(() => {
-            // reconnecting like this impacts the outer client as expected.
-            // despite being a bit weird to look at in this test. the actual
-            // use of the persistent client is not like this.
+            expect(closeReason.willReconnect).toEqual(true);
+          };
+        }),
+      );
+    });
 
-            client.open(connectArgs, ({ error: error2 }) => {
-              expect(error2).toEqual(null);
+    client.close({
+      expectReconnect: true,
+    });
 
-              disconnectTriggered = true;
-            });
-          });
-        } else {
+    await new Promise((resolve) => {
+      client.open(
+        connectArgs,
+        wrapWithDone(done, ({ channel, error }) => {
+          expect(error).toEqual(null);
+          expect(channel?.status).toEqual('open');
           client.close();
-        }
 
-        return (closeReason) => {
-          if (closeReason.initiator !== 'client') {
-            throw new Error('Expected "client" initiator');
-          }
+          return (closeReason) => {
+            if (closeReason.initiator !== 'client') {
+              throw new Error('Expected "client" initiator');
+            }
 
-          if (closeReason.willReconnect) {
-            timesClosedUnintentionally += 1;
-          } else if (closeReason.willReconnect === false) {
-            timesClosedIntentionally += 1;
-          }
+            expect(closeReason.willReconnect).toEqual(false);
+            resolve(null);
+          };
+        }),
+      );
+    });
 
-          if (timesConnected === 2) {
-            expect(timesClosedUnintentionally).toEqual(1);
-            expect(timesClosedIntentionally).toEqual(1);
-
-            done();
-          }
-        };
-      }),
-    );
+    done();
   },
 );
 
