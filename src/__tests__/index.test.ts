@@ -367,7 +367,7 @@ concurrent('channel closing itself when client willReconnect', (done) => {
         // This cleanup function gets called because we triggered an unintentional
         // disconnect above (`client.ws.onclose()`). Since this is unintentional
         // the client will reconnect itself. But this outer `openChannel`callback will NOT
-        // get called a second time when the cleint re-connects since we are deliberately
+        // get called a second time when the client re-connects since we are deliberately
         // closing it on the next line.
         close();
       });
@@ -997,6 +997,58 @@ concurrent('client reconnects unexpected disconnects', (done) => {
     }),
   );
 });
+
+concurrent(
+  'client handles user handled (expectReconnect = true) reconnects',
+  async (done: jest.DoneCallback) => {
+    const client = getClient(done);
+
+    const connectArgs = {
+      fetchConnectionMetadata: getConnectionMetadata,
+      WebSocketClass: WebSocket,
+      context: null,
+    };
+
+    let hasClosed = false;
+
+    await new Promise<Channel>((resolve) => {
+      client.open(
+        connectArgs,
+        wrapWithDone(done, ({ channel, error }) => {
+          expect(error).toEqual(null);
+          expect(channel?.status).toEqual('open');
+
+          if (!channel) {
+            throw new Error('Expected channel to be defined');
+          }
+          resolve(channel);
+
+          if (!hasClosed) {
+            client.close({
+              expectReconnect: true,
+            });
+          } else {
+            client.close();
+          }
+
+          return (closeReason) => {
+            if (closeReason.initiator !== 'client') {
+              throw new Error('Expected "client" initiator');
+            }
+
+            if (hasClosed) {
+              expect(closeReason.willReconnect).toEqual(false);
+              done();
+            } else {
+              expect(closeReason.willReconnect).toEqual(true);
+              hasClosed = true;
+            }
+          };
+        }),
+      );
+    });
+  },
+);
 
 concurrent('client is closed while reconnecting', (done) => {
   const onOpen = jest.fn();

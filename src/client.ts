@@ -23,9 +23,13 @@ const MAX_RETRY_COUNT = 10;
 
 enum ClientCloseReason {
   /**
-   * called `client.close`
+   * Called `client.close`, expected to stay closed.
    */
   Intentional = 'Intentional',
+  /**
+   * Called `client.close`, but we're going to try to reconnect.
+   */
+  Temporary = 'Temporary',
   /**
    * The websocket connection died
    */
@@ -39,6 +43,9 @@ enum ClientCloseReason {
 type CloseResult =
   | {
       closeReason: ClientCloseReason.Intentional;
+    }
+  | {
+      closeReason: ClientCloseReason.Temporary;
     }
   | {
       closeReason: ClientCloseReason.Disconnected;
@@ -95,7 +102,7 @@ export class Client<Ctx = null> {
    * Supplied to us as the second argument when calling `client.open`.
    * Any time we connect we will call this callback with the control channel.
    * If we disconnect before ever connecting and we won't retry;
-   * i.e. user called `client.close` or an unrecoverable error occured,
+   * i.e. user called `client.close` or an unrecoverable error occurred,
    * we will call this function with an error.
    * This has the same api as the second argument to openChannel.
    *
@@ -115,7 +122,7 @@ export class Client<Ctx = null> {
 
   /**
    * Anytime `openChannel` is called, we throw the request in here. This is used to maintain
-   * the `openChannel` calls accross reconnects and use to orchestrate channel opening and closing
+   * the `openChannel` calls across reconnects and use to orchestrate channel opening and closing
    *
    * @hidden
    */
@@ -123,7 +130,7 @@ export class Client<Ctx = null> {
 
   /**
    * This is purely for optimization reasons, we don't wanna look through the channelRequests
-   * array to find the channel everytime. Instead we pull it out quickly from this map.
+   * array to find the channel every time. Instead we pull it out quickly from this map.
    * Any channel here (except for channel 0) should have a corresponding `channelRequest`
    * and the request should be in an `isOpen` true state with a corresponding channel id
    *
@@ -325,7 +332,7 @@ export class Client<Ctx = null> {
    *
    * You can return an optional clean up function from the open callback to be used as a signal
    * for the channel closing, regardless of whether it is going to reconnect or not. The cleanup
-   * function will be called with [[ChannelCloseReason]] which contians some useful information
+   * function will be called with [[ChannelCloseReason]] which contains some useful information
    * about reconnection and why we closed.
    *
    * If [[Client.close]] is called, it will close all channels and they won't reconnect. However,
@@ -671,7 +678,7 @@ export class Client<Ctx = null> {
     }
 
     // Next up: we will check if there are any channels with the same name
-    // that are queued up for opening. We have defered the opening of the channel
+    // that are queued up for opening. We have deferred the opening of the channel
     // until after the current open one closes (see `openChannel`) because the
     // protocol doesn't allow opening multiple channels with the same name
 
@@ -700,9 +707,15 @@ export class Client<Ctx = null> {
    *   - If a channel never opened, its {@link OpenChannelCb | open channel callback}
    *     will be called with an error
    *   - Otherwise returned cleanup callback is called
+   *
+   *  - expectReconnect: if true, the client will expects to try to reconnect,
+   *  e.g., a temporary network issue with an explicit reconnect handler.
    */
-  public close = (): void => {
-    this.debug({ type: 'breadcrumb', message: 'user close' });
+  public close = ({ expectReconnect } = { expectReconnect: false }): void => {
+    this.debug({
+      type: 'breadcrumb',
+      message: expectReconnect ? 'user temporary close' : 'user close',
+    });
 
     if (!this.chan0Cb || !this.connectOptions) {
       const error = new Error('Must call client.open before closing');
@@ -712,16 +725,24 @@ export class Client<Ctx = null> {
       throw error;
     }
 
-    // If the close is intentional, let's unset the metadata, the client
-    // may be re-used to connect to another repl
+    // If the close is intentional, let's unset the metadata
+    // the client may be re-used to connect to another repl.
+    // If it is temporary, the client should reuse the metadata
+    // when it reconnects.
     this.connectionMetadata = null;
 
-    this.handleClose({ closeReason: ClientCloseReason.Intentional });
+    if (expectReconnect) {
+      this.handleClose({
+        closeReason: ClientCloseReason.Temporary,
+      });
+    } else {
+      this.handleClose({ closeReason: ClientCloseReason.Intentional });
+    }
   };
 
   /**
    * Destroy closes the connection, so all the rules of `close` apply here.
-   * The only difference is that `destroy` renders the client unsuable afterwards.
+   * The only difference is that `destroy` renders the client unusable afterwards.
    * It will also cleanup all saved `openChannel` calls freeing the callbacks and
    * avoiding leaks.
    */
@@ -730,7 +751,9 @@ export class Client<Ctx = null> {
     this.debug({ type: 'breadcrumb', message: 'destroy' });
 
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
-      this.close();
+      this.close({
+        expectReconnect: false,
+      });
     }
 
     this.debug = () => {};
@@ -1253,9 +1276,9 @@ export class Client<Ctx = null> {
 
           // defer closing if the user decides to call client.close inside chan0Cb
           const originalClose = this.close;
-          this.close = () =>
+          this.close = (args) =>
             setTimeout(() => {
-              originalClose();
+              originalClose(args);
             }, 0);
 
           this.chan0CleanupCb = this.chan0Cb({
@@ -1545,7 +1568,9 @@ export class Client<Ctx = null> {
       this.fetchTokenAbortController = null;
     }
 
-    const willClientReconnect = closeResult.closeReason === ClientCloseReason.Disconnected;
+    const willClientReconnect =
+      closeResult.closeReason === ClientCloseReason.Disconnected ||
+      closeResult.closeReason === ClientCloseReason.Temporary;
 
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
@@ -1649,7 +1674,8 @@ export class Client<Ctx = null> {
     this.connectionState = ConnectionState.DISCONNECTED;
 
     if (!willClientReconnect) {
-      // Client is done being used until the next `open` call
+      // Client is done being used until the next `open` call.
+
       this.chan0Cb = null;
       this.connectOptions = null;
 
@@ -1688,7 +1714,7 @@ export class Client<Ctx = null> {
     ws.onclose = null;
     ws.onopen = null;
 
-    // Replace exististing error handler so an error doesn't get thrown.
+    // Replace existing error handler so an error doesn't get thrown.
     // We got here after either `handleClose` so it is safe to ignore
     //  any potential remaining errors
     ws.onerror = () => {};
