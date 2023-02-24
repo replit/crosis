@@ -277,11 +277,10 @@ export interface ChannelOptions<Ctx> {
 /**
  * See [[Client.openChannel]]
  */
-export type OpenChannelCb<Ctx> = (
-  res:
-    | { error: null; channel: Channel; context: Ctx }
-    | { error: Error; channel: null; context: Ctx | null },
-) => void | ((reason: ChannelCloseReason) => void);
+export type OpenChannelCb<Ctx> = (res: {
+  channel: Channel;
+  context: Ctx;
+}) => void | ((reason: ChannelCloseReason) => void);
 
 export interface RequestResult extends api.Command {
   channelClosed?: ChannelCloseReason;
