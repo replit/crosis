@@ -84,12 +84,6 @@ client.open({ context, fetchConnectionMetadata }, function onOpen({ channel, con
 
 // See docs for exec service here https://crosis-doc.util.repl.co/services#exec
 const closeChannel = client.openChannel({ service: 'exec' }, function open({ channel, context }) {
-  if (!channel) {
-    // Closed before ever connecting. Due to `client.close` being called, `closeChannel` being called
-    // or an unrecoverable, that can be handled by setting `client.setUnrecoverableErr
-    return;
-  }
-
   channel.onCommand((cmd) => {
     if (cmd.output) {
       terminal.write(cmd.output);
