@@ -1059,47 +1059,6 @@ concurrent('client is closed while reconnecting', (done) => {
   );
 });
 
-// concurrent('closing before ever connecting', (done) => {
-//   const client = getClient(done);
-//   client.onDebugLog((log) => {
-//     if (log.type === 'breadcrumb' && log.message === 'connecting') {
-//       setTimeout(() => {
-//         client.close();
-//       });
-//     }
-//   });
-
-//   const open = jest.fn();
-//   const openError = jest.fn();
-//   const close = jest.fn();
-
-//   client.open(
-//     {
-//       fetchConnectionMetadata: getConnectionMetadata,
-//       WebSocketClass: WebSocket,
-//       context: null,
-//     },
-//     wrapWithDone(done, ({ error }) => {
-//       if (error) {
-//         openError();
-//         expect(open).not.toHaveBeenCalled();
-//         expect(openError).toHaveBeenCalledTimes(1);
-//         expect(close).not.toHaveBeenCalled();
-
-//         // the client will not ever successfully connect, so this cannot be
-//         // called in the callback.
-//         done();
-//       } else {
-//         open();
-//       }
-
-//       return () => {
-//         close();
-//       };
-//     }),
-//   );
-// });
-
 concurrent(
   'fallback to polling',
   (done) => {
