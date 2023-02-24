@@ -39,6 +39,8 @@ describe('retry handling', () => {
     const addr = 'ws://localhost:' + port;
     const server = new WS(addr + '/wsv2/');
 
+    const onConnect = jest.fn();
+
     let tryCount = 0;
     const connectionMetadata = genConnectionMetadataWithGurl(addr);
     client.open(
@@ -54,14 +56,16 @@ describe('retry handling', () => {
         WebSocketClass: WebSocket,
         context: ctx,
       },
-      ({ error }) => {
+      onConnect,
+    );
+
+    client.onDebugLog((log) => {
+      if (log.type === 'breadcrumb' && log.message === 'unrecoverable error') {
         expect(tryCount).toBe(1);
-        expect(error?.message).toBe('Failed to open');
 
         done();
-        return () => {};
-      },
-    );
+      }
+    });
 
     server.on('connection', function () {
       server.close({ code: CloseCode.USER_ERROR, reason: 'user error', wasClean: true });
