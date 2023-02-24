@@ -738,45 +738,44 @@ concurrent('client rejects opening same channel twice', (done) => {
   done();
 });
 
-// concurrent(
-//   'allows opening channel with the same name after closing others and client is disconnected',
-//   (done) => {
-//     const client = getClient(done);
+concurrent(
+  'allows opening channel with the same name after closing others and client is disconnected',
+  (done) => {
+    const client = getClient(done);
 
-//     const name = Math.random().toString();
+    const name = Math.random().toString();
 
-//     let calledFirstWithError = false;
-//     const close = client.openChannel({ name, service: 'exec' }, ({ error }) => {
-//       calledFirstWithError = Boolean(error);
-//     });
+    const firstOnConnect = jest.fn();
+    const close = client.openChannel({ name, service: 'exec' }, firstOnConnect);
+    close();
 
-//     close();
-//     // open same name synchronously
-//     client.openChannel(
-//       { name, service: 'exec' },
-//       wrapWithDone(done, ({ channel }) => {
-//         expect(channel).toBeTruthy();
-//         expect(calledFirstWithError).toBeTruthy();
-//         client.close();
+    // open same name synchronously
+    client.openChannel(
+      { name, service: 'exec' },
+      wrapWithDone(done, ({ channel }) => {
+        expect(channel).toBeTruthy();
+        expect(firstOnConnect).not.toHaveBeenCalled();
 
-//         done();
-//       }),
-//     );
+        client.close();
 
-//     client.open(
-//       {
-//         fetchConnectionMetadata: () =>
-//           Promise.resolve({
-//             ...genConnectionMetadata(),
-//             error: null,
-//           }),
-//         WebSocketClass: WebSocket,
-//         context: null,
-//       },
-//       () => {},
-//     );
-//   },
-// );
+        done();
+      }),
+    );
+
+    client.open(
+      {
+        fetchConnectionMetadata: () =>
+          Promise.resolve({
+            ...genConnectionMetadata(),
+            error: null,
+          }),
+        WebSocketClass: WebSocket,
+        context: null,
+      },
+      () => {},
+    );
+  },
+);
 
 concurrent(
   'allows opening channel with the same name after others are closing others and client is connected',
