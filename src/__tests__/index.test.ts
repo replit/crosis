@@ -585,66 +585,67 @@ concurrent('channel skips opening', (done) => {
   );
 });
 
-// concurrent('channel skips opening conditionally', (done) => {
-//   let unexpectedDisconnectTriggered = false;
-//   let clientOpenCount = 0;
-//   let channelOpenCount = 0;
+concurrent('channel skips opening conditionally', (done) => {
+  let unexpectedDisconnectTriggered = false;
+  let clientOpenCount = 0;
+  let channelOpenCount = 0;
 
-//   const client = getClient(done);
+  const client = getClient(done);
 
-//   client.open(
-//     {
-//       fetchConnectionMetadata: getConnectionMetadata,
-//       WebSocketClass: WebSocket,
-//       context: null,
-//     },
-//     wrapWithDone(done, ({ channel }) => {
-//       clientOpenCount += 1;
-//       expect(channel?.status).toBe('open');
+  client.open(
+    {
+      fetchConnectionMetadata: getConnectionMetadata,
+      WebSocketClass: WebSocket,
+      context: null,
+    },
+    wrapWithDone(done, ({ channel }) => {
+      clientOpenCount += 1;
+      expect(channel?.status).toBe('open');
 
-//       if (unexpectedDisconnectTriggered) {
-//         client.close();
-//       }
+      if (unexpectedDisconnectTriggered) {
+        client.close();
+      }
 
-//       return wrapWithDone(done, ({ willReconnect }) => {
-//         if (willReconnect) {
-//           return;
-//         }
+      return wrapWithDone(done, ({ willReconnect }) => {
+        if (willReconnect) {
+          return;
+        }
 
-//         expect(clientOpenCount).toEqual(2);
-//         expect(channelOpenCount).toEqual(1);
+        expect(clientOpenCount).toEqual(2);
+        expect(channelOpenCount).toEqual(1);
 
-//         done();
-//       });
-//     }),
-//   );
+        done();
+      });
+    }),
+  );
 
-//   client.openChannel(
-//     {
-//       skip: () => channelOpenCount > 0,
-//       service: 'shell',
-//     },
-//     wrapWithDone(done, ({ channel }) => {
-//       if (!unexpectedDisconnectTriggered) {
-//         setTimeout(() => {
-//           // eslint-disable-next-line
-//           // @ts-ignore: trigger unintentional disconnect
-//           client.ws.close();
-//           unexpectedDisconnectTriggered = true;
-//         });
+  client.openChannel(
+    {
+      skip: () => channelOpenCount > 0,
+      service: 'shell',
+    },
+    wrapWithDone(done, ({ channel }) => {
+      if (!unexpectedDisconnectTriggered) {
+        setTimeout(() => {
+          // eslint-disable-next-line
+          // @ts-ignore: trigger unintentional disconnect
+          client.ws.close();
+          unexpectedDisconnectTriggered = true;
+        });
 
-//         expect(channel?.status).toBe('open');
+        expect(channel?.status).toBe('open');
 
-//         channelOpenCount += 1;
+        channelOpenCount += 1;
 
-//         return;
-//       }
+        return;
+      }
 
-//       expect(error).toBeTruthy();
-//       expect(error?.message).toBe('Failed to open');
-//     }),
-//   );
-// });
+      // We do not expect to call onConnect when we failed to open the channel
+      // (because we never reopen the connection in this test).
+      done(new Error('Expected not to get here.'));
+    }),
+  );
+});
 
 concurrent('openChannel before open', (done) => {
   const client = getClient(done);
