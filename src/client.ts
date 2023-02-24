@@ -164,7 +164,7 @@ export class Client<Ctx = null> {
 
   /**
    * The connection might require multiple retries to be established.
-   * Anytime we need to retry, we should also add an incremental back off,
+   * Anytime we need to retry, we should also add an incremental backoff,
    * we do that using `setTimeout`. When the client closes before our
    * retry is initiated, we clear this timeout.
    *
