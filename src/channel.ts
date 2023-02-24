@@ -46,7 +46,7 @@ export class Channel {
    * Make shift event emitter listener array. Any time `onCommand`
    * is called we push the callback into this array.
    * When we receive a command from the client through
-   * `handleCommand` we call all the callbakcs in this array
+   * `handleCommand` we call all the callbacks in this array
    *
    * @hidden
    */
@@ -161,7 +161,7 @@ export class Channel {
   /**
    * @hidden should only be called by [[Client]]
    *
-   * Called when the channel recieves a message
+   * Called when the channel receives a message
    */
   public handleCommand = (cmd: api.Command): void => {
     this.onCommandListeners.forEach((l) => l(cmd));

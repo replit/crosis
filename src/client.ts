@@ -558,7 +558,7 @@ export class Client<Ctx = null> {
         send: this.send,
       });
       this.channels[id] = channel;
-      // TODO we should stop relying on mutating the same channelrequest
+      // TODO we should stop relying on mutating the same channelRequest
       (channelRequest as ChannelRequest<Ctx>).channelId = id;
       (channelRequest as ChannelRequest<Ctx>).isOpen = true;
 
@@ -813,7 +813,7 @@ export class Client<Ctx = null> {
   };
 
   /**
-   * Adds a listener for bootstatus messages coming in from the backend
+   * Adds a listener for BootStatus messages coming in from the backend
    * before we acquire and connect to the container.
    */
   public onBootStatus = (bootStatusFunc: (command: api.BootStatus) => void): (() => void) => {
@@ -935,8 +935,8 @@ export class Client<Ctx = null> {
     });
     this.channels[0] = chan0;
 
-    // We'll emit bootstatus throughout the lifetime of the channel
-    // bootstatus messages may come in after container state is ready
+    // We'll emit bootStatus throughout the lifetime of the channel
+    // bootStatus messages may come in after container state is ready
     // and so we don't want to dispose this listener until the current
     // connection is completely disposed, which automatically disposes
     // this channel and attached listeners
@@ -1087,7 +1087,7 @@ export class Client<Ctx = null> {
     /**
      * Failure can happen due to a number of reasons
      * 1- Abrupt socket closure
-     * 2- Timedout connection request
+     * 2- Timed out connection request
      * 3- ContainerState.SLEEP command
      * 4- User calling `close` before we connect
      */
@@ -1209,15 +1209,15 @@ export class Client<Ctx = null> {
      * Every time we get a message we reset the connection timeout (if it exists)
      * this is because it signifies that the connection will eventually work.
      *
-     * If we ever get a ContainterState READY we can officially
+     * If we ever get a ContainerState READY we can officially
      * say that the connection is successful and we open chan0 and other `chanReq`s
      *
-     * If we ever get ContainterState SLEEP it means that something went wrong
+     * If we ever get ContainerState SLEEP it means that something went wrong
      * and connection should be dropped
      */
     const unlistenChan0 = chan0.onCommand((cmd: api.Command) => {
       didReceiveAnyCommand = true;
-      // Everytime we get a message on channel0
+      // Every time we get a message on channel0
       // we will reset the timeout
       resetTimeout();
 
@@ -1232,7 +1232,7 @@ export class Client<Ctx = null> {
       }
 
       if (cmd.containerState.state == null) {
-        this.onUnrecoverableError(new Error('Got containterState but state was not defined'));
+        this.onUnrecoverableError(new Error('Got containerState but state was not defined'));
 
         return;
       }
@@ -1314,7 +1314,7 @@ export class Client<Ctx = null> {
       onFailed = null;
 
       // Cleanup related to this connection try. If we retry connecting a new `WebSocket` instance
-      // will be used in additon to new `cancelTimeout` and `unlistenChan0` functions.
+      // will be used in addition to new `cancelTimeout` and `unlistenChan0` functions.
       this.cleanupSocket();
       cancelTimeout();
       unlistenChan0();
