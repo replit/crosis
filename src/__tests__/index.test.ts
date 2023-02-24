@@ -830,7 +830,7 @@ concurrent(
             expect(channel).toBeTruthy();
 
             if (!channel) {
-              throw new Error('apease typescript');
+              throw new Error('appease typescript');
             }
 
             firstChannel = channel;
@@ -908,7 +908,7 @@ concurrent('opens multiple anonymous channels while client is connected', (done)
         { service: 'exec' },
         wrapWithDone(done, ({ channel }) => {
           if (firstOpened) {
-            doneOnce(new Error('exepected channel to open only once'));
+            doneOnce(new Error('expected channel to open only once'));
 
             return;
           }
@@ -926,7 +926,7 @@ concurrent('opens multiple anonymous channels while client is connected', (done)
         { service: 'exec' },
         wrapWithDone(done, ({ channel }) => {
           if (secondOpened) {
-            doneOnce(new Error('exepected channel to open only once'));
+            doneOnce(new Error('expected channel to open only once'));
 
             return;
           }
@@ -1230,7 +1230,7 @@ concurrent(
           setTimeout(() => {
             done();
             // ample time for the other timeout to clear up
-            // and reak havoc if it was to do that.
+            // and wreak havoc if it was to do that.
           }, timeout + 100);
         });
       }
