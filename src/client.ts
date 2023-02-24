@@ -1651,6 +1651,11 @@ export class Client<Ctx = null> {
       this.chan0Cb = null;
       this.connectOptions = null;
 
+      this.debug({
+        type: 'breadcrumb',
+        message: 'client closed',
+      });
+
       return;
     }
 

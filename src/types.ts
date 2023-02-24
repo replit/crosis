@@ -74,6 +74,7 @@ export type DebugLogBreadcrumb<Ctx> =
         | 'connected!'
         | 'user close'
         | 'user temporary close'
+        | 'client closed'
         | 'cancel timeout'
         | 'reset timeout'
         | 'connect timeout'
