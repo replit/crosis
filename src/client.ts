@@ -419,7 +419,7 @@ export class Client<Ctx = null> {
 
     this.channelRequests.push(channelRequest);
 
-    if (this.connectionState === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
+    if (this.getConnectionState() === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
       // If we're not connected, then the request to open will go out once we're connected.
       // If there are channels with the same name then this request is queued after the other
       // channel(s) with the same name is done closing
@@ -438,7 +438,7 @@ export class Client<Ctx = null> {
         // If we're connected, it means there's an inflight open request
         // then we'll be sending a close request right after it's done opening
         // so that we can use the channel ID when closing
-        if (this.connectionState !== ConnectionState.CONNECTED) {
+        if (this.getConnectionState() !== ConnectionState.CONNECTED) {
           this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
         }
 
@@ -751,7 +751,7 @@ export class Client<Ctx = null> {
     this.destroyed = true;
     this.debug({ type: 'breadcrumb', message: 'destroy' });
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+    if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
       this.close({
         expectReconnect: false,
       });
@@ -916,7 +916,7 @@ export class Client<Ctx = null> {
       },
     });
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+    if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
       const error = new Error('Client must be disconnected to connect');
       this.onUnrecoverableError(error);
 
@@ -1078,7 +1078,7 @@ export class Client<Ctx = null> {
         return;
       }
 
-      if (this.connectionState !== ConnectionState.CONNECTING) {
+      if (this.getConnectionState() !== ConnectionState.CONNECTING) {
         this.onUnrecoverableError(new Error('Client was closed before connecting'));
 
         return;
@@ -1536,7 +1536,7 @@ export class Client<Ctx = null> {
 
     // Update socket closure to do something else
     const onClose = (event: CloseEvent | Event) => {
-      if (this.connectionState === ConnectionState.DISCONNECTED) {
+      if (this.getConnectionState() === ConnectionState.DISCONNECTED) {
         this.onUnrecoverableError(
           new Error('Got a close event on socket but client is in disconnected state'),
         );
@@ -1571,7 +1571,7 @@ export class Client<Ctx = null> {
     if (closeResult.closeReason !== ClientCloseReason.Error) {
       // If we got here as a result of an error we'll ignore these assertions to avoid
       // infinite recursion in onUnrecoverableError
-      if (this.connectionState === ConnectionState.DISCONNECTED) {
+      if (this.getConnectionState() === ConnectionState.DISCONNECTED) {
         this.onUnrecoverableError(
           new Error('handleClose is called but client already disconnected'),
         );
@@ -1770,7 +1770,7 @@ export class Client<Ctx = null> {
 
     this.redirectInitiatorURL = null;
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+    if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
       try {
         this.handleClose({
           closeReason: ClientCloseReason.Error,
