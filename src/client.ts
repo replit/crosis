@@ -1643,6 +1643,8 @@ export class Client<Ctx = null> {
     } else if (!this.chan0Cb && closeResult.closeReason !== ClientCloseReason.Error) {
       // if we got here as a result of an error we're not gonna call onUnrecoverableError again
       this.onUnrecoverableError(new Error('open should have been called before `handleClose`'));
+
+      return;
     }
 
     this.connectionState = ConnectionState.DISCONNECTED;
