@@ -81,7 +81,14 @@ export class Client<Ctx = null> {
    * or the client closed permanently. Otherwise it'll be
    * CONNECTED or CONNECTING
    */
-  public connectionState: ConnectionState;
+  private connectionState: ConnectionState;
+
+  /**
+   * A list of listeners for connection state changes.
+   *
+   * @hidden
+   */
+  private connectionStateChangeFuncs: Array<(state: ConnectionState) => void>;
 
   /**
    * The websocket used for communication with the container.
@@ -228,6 +235,7 @@ export class Client<Ctx = null> {
     this.chan0Cb = null;
     this.chan0CleanupCb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
+    this.connectionStateChangeFuncs = [];
     this.debugFuncs = [];
     this.bootStatusFuncs = [];
     this.userUnrecoverableErrorHandler = null;
@@ -806,6 +814,47 @@ export class Client<Ctx = null> {
   };
 
   /**
+   * Calls all the listeners for connection state updates. All connection state
+   * updates should go through this function.
+   *
+   * @hidden
+   */
+  private setConnectionState = (connectionState: ConnectionState): void => {
+    this.connectionState = connectionState;
+    this.connectionStateChangeFuncs.forEach((f) => f(connectionState));
+  };
+
+  /**
+   * Sets a listener for connection state changes.
+   *
+   * @returns cleanup function that removes the listener
+   */
+  public onConnectionStateChange = (
+    connectionStateChangeFunc: (connectionState: ConnectionState) => void,
+  ): (() => void) => {
+    this.connectionStateChangeFuncs.push(connectionStateChangeFunc);
+
+    return () => {
+      const idx = this.connectionStateChangeFuncs.indexOf(connectionStateChangeFunc);
+      if (idx > -1) {
+        this.connectionStateChangeFuncs.splice(idx, 1);
+      }
+    };
+  };
+
+  /**
+   * Gets the current connection state.
+   *
+   * The listener functions are only called when the connection state changes.
+   * This function can be used to get the current state ahead of setting up a
+   * listener.
+   *
+   * @returns the current ConnectionState
+   * */
+
+  public getConnectionState = (): ConnectionState => this.connectionState;
+
+  /**
    * Adds a listener for BootStatus messages coming in from the backend
    * before we acquire and connect to the container.
    */
@@ -918,7 +967,7 @@ export class Client<Ctx = null> {
       return;
     }
 
-    this.connectionState = ConnectionState.CONNECTING;
+    this.setConnectionState(ConnectionState.CONNECTING);
 
     const chan0 = new Channel({
       id: 0,
@@ -1404,7 +1453,8 @@ export class Client<Ctx = null> {
       });
       chan0.handleClose({ initiator: 'client', willReconnect: true });
       delete this.channels[0];
-      this.connectionState = ConnectionState.DISCONNECTED;
+
+      this.setConnectionState(ConnectionState.DISCONNECTED);
       this.connect({ tryCount, websocketFailureCount });
     }, this.connectOptions.getNextRetryDelayMs(tryCount));
   };
@@ -1474,7 +1524,7 @@ export class Client<Ctx = null> {
    * @hidden
    */
   private handleConnect = () => {
-    this.connectionState = ConnectionState.CONNECTED;
+    this.setConnectionState(ConnectionState.CONNECTED);
 
     this.debug({ type: 'breadcrumb', message: 'connected!' });
 
@@ -1645,7 +1695,7 @@ export class Client<Ctx = null> {
       this.onUnrecoverableError(new Error('open should have been called before `handleClose`'));
     }
 
-    this.connectionState = ConnectionState.DISCONNECTED;
+    this.setConnectionState(ConnectionState.DISCONNECTED);
 
     if (!willClientReconnect) {
       // Client is done being used until the next `open` call.
