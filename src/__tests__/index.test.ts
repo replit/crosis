@@ -561,7 +561,7 @@ concurrent('channel skips opening', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    wrapWithDone(done, ({}) => {
+    wrapWithDone(done, () => {
       setTimeout(() => {
         expect(skipfn).toHaveBeenCalledTimes(1);
         expect(skipfn).toHaveBeenCalledWith(ctx);

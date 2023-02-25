@@ -572,7 +572,6 @@ export class Client<Ctx = null> {
 
       (channelRequest as ChannelRequest<Ctx>).cleanupCb = openChannelCb({
         channel,
-
         context: this.connectOptions.context,
       });
     });
