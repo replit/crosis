@@ -758,6 +758,7 @@ export class Client<Ctx = null> {
     }
 
     this.debug = () => {};
+    this.connectionStateChangeFuncs = [];
     this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
     this.destroyed = true;
