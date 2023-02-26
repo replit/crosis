@@ -1543,10 +1543,6 @@ export class Client<Ctx = null> {
     this.ws.onclose = onClose;
     this.ws.onerror = onClose;
 
-    this.channelRequests.forEach((channelRequest) => {
-      this.requestOpenChannel(channelRequest);
-    });
-
     // defer closing if the user decides to call client.close inside a callback.
     const originalClose = this.close;
     this.close = (args) =>
@@ -1559,6 +1555,10 @@ export class Client<Ctx = null> {
     // original behavior of state being CONNECTED inside the chan0Cb.
     this.setConnectionState(ConnectionState.CONNECTED);
     this.debug({ type: 'breadcrumb', message: 'connected!' });
+
+    this.channelRequests.forEach((channelRequest) => {
+      this.requestOpenChannel(channelRequest);
+    });
 
     // chan0Cb definitely has a callback.
     this.chan0CleanupCb = this.chan0Cb({
