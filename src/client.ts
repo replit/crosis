@@ -851,7 +851,6 @@ export class Client<Ctx = null> {
    *
    * @returns the current ConnectionState
    * */
-
   public getConnectionState = (): ConnectionState => this.connectionState;
 
   /**
