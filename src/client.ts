@@ -1295,39 +1295,7 @@ export class Client<Ctx = null> {
 
           cancelTimeout();
 
-          if (!this.connectOptions) {
-            this.onUnrecoverableError(new Error('Expected connectionOptions'));
-
-            return;
-          }
-
-          if (!chan0) {
-            this.onUnrecoverableError(new Error('Expected chan0 to be truthy'));
-
-            return;
-          }
-
-          if (!this.chan0Cb) {
-            this.onUnrecoverableError(new Error('Expected chan0Cb to be truthy'));
-
-            return;
-          }
-
-          this.handleConnect();
-
-          // defer closing if the user decides to call client.close inside chan0Cb
-          const originalClose = this.close;
-          this.close = (args) =>
-            setTimeout(() => {
-              originalClose(args);
-            }, 0);
-
-          this.chan0CleanupCb = this.chan0Cb({
-            channel: chan0,
-            context: this.connectOptions.context,
-          });
-
-          this.close = originalClose;
+          this.handleConnect(chan0);
 
           break;
         }
@@ -1522,13 +1490,27 @@ export class Client<Ctx = null> {
    *
    * @hidden
    */
-  private handleConnect = () => {
-    this.setConnectionState(ConnectionState.CONNECTED);
-
-    this.debug({ type: 'breadcrumb', message: 'connected!' });
-
+  private handleConnect = (chan0: Channel) => {
     if (!this.ws) {
       this.onUnrecoverableError(new Error('Expected Websocket instance'));
+
+      return;
+    }
+
+    if (!this.connectOptions) {
+      this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+      return;
+    }
+
+    if (!chan0) {
+      this.onUnrecoverableError(new Error('Expected chan0 to be truthy'));
+
+      return;
+    }
+
+    if (!this.chan0Cb) {
+      this.onUnrecoverableError(new Error('Expected chan0Cb to be truthy'));
 
       return;
     }
@@ -1563,6 +1545,27 @@ export class Client<Ctx = null> {
     this.channelRequests.forEach((channelRequest) => {
       this.requestOpenChannel(channelRequest);
     });
+
+    // defer closing if the user decides to call client.close inside a callback.
+    const originalClose = this.close;
+    this.close = (args) =>
+      setTimeout(() => {
+        originalClose(args);
+      }, 0);
+
+    // connection state possibly has a listener, so it needs the deferred close.
+    // note that CONNECTED fires _before_ the chan0Cb to match the
+    // original behavior of state being CONNECTED inside the chan0Cb.
+    this.setConnectionState(ConnectionState.CONNECTED);
+    this.debug({ type: 'breadcrumb', message: 'connected!' });
+
+    // chan0Cb definitely has a callback.
+    this.chan0CleanupCb = this.chan0Cb({
+      channel: chan0,
+      context: this.connectOptions.context,
+    });
+
+    this.close = originalClose;
   };
 
   /** @hidden */
