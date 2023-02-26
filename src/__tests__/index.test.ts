@@ -69,10 +69,9 @@ concurrent('client connect', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    wrapWithDone(done, ({ channel, error, context }) => {
+    wrapWithDone(done, ({ channel, context }) => {
       expect(channel?.status).toBe('open');
       expect(context).toBe(ctx);
-      expect(error).toEqual(null);
 
       client.close();
 
@@ -109,11 +108,10 @@ concurrent('client connect with connection metadata retry', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    wrapWithDone(done, ({ channel, error, context }) => {
+    wrapWithDone(done, ({ channel, context }) => {
       expect(tryCount).toBe(2);
       expect(channel?.status).toBe('open');
       expect(context).toBe(ctx);
-      expect(error).toEqual(null);
 
       client.close();
 
@@ -147,10 +145,9 @@ concurrent('client retries', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(tryCount).toBe(2);
       expect(channel?.status).toBe('open');
-      expect(error).toEqual(null);
 
       client.close();
 
@@ -165,12 +162,22 @@ concurrent('client retries and caches tokens', (done) => {
   const client = getClient(done);
 
   const fetchConnectionMetadata = jest.fn();
+  const onConnect = jest.fn();
 
   let reconnectCount = 0;
   client.onDebugLog((log) => {
+    if (log.type === 'breadcrumb' && log.message === 'client closed') {
+      expect(fetchConnectionMetadata).toHaveBeenCalledTimes(1);
+      expect(onConnect).not.toHaveBeenCalled();
+      done();
+
+      return;
+    }
+
     if (log.type !== 'breadcrumb' || log.message !== 'retrying') {
       return;
     }
+
     reconnectCount += 1;
     if (reconnectCount >= 2) {
       setTimeout(() => {
@@ -195,18 +202,7 @@ concurrent('client retries and caches tokens', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    ({ error }) => {
-      expect(fetchConnectionMetadata).toHaveBeenCalledTimes(1);
-
-      expect(error).toBeTruthy();
-      expect(error?.message).toBe('Failed to open');
-
-      // the client will not ever successfully connect, so this cannot be
-      // called in the callback.
-      done();
-
-      return () => {};
-    },
+    onConnect,
   );
 });
 
@@ -214,9 +210,18 @@ concurrent('client retries but does not cache tokens', (done) => {
   const client = getClient(done);
 
   const fetchConnectionMetadata = jest.fn();
+  const onConnect = jest.fn();
 
   let reconnectCount = 0;
   client.onDebugLog((log) => {
+    if (log.type === 'breadcrumb' && log.message === 'client closed') {
+      expect(fetchConnectionMetadata.mock.calls.length).toBeGreaterThan(1);
+      expect(onConnect).not.toHaveBeenCalled();
+      done();
+
+      return;
+    }
+
     if (log.type !== 'breadcrumb' || log.message !== 'retrying') {
       return;
     }
@@ -243,18 +248,7 @@ concurrent('client retries but does not cache tokens', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ error }) => {
-      expect(fetchConnectionMetadata.mock.calls.length).toBeGreaterThan(1);
-
-      expect(error).toBeTruthy();
-      expect(error?.message).toBe('Failed to open');
-
-      // the client will not ever successfully connect, so this cannot be
-      // called in the callback.
-      done();
-
-      return () => {};
-    }),
+    onConnect,
   );
 });
 
@@ -267,9 +261,8 @@ concurrent('client requests new connection metadata after intentional close', (d
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
-      expect(error).toEqual(null);
 
       client.close();
 
@@ -289,9 +282,8 @@ concurrent('client requests new connection metadata after intentional close', (d
               WebSocketClass: WebSocket,
               context: null,
             },
-            ({ channel: c2, error: e2 }) => {
+            ({ channel: c2 }) => {
               expect(c2?.status).toBe('open');
-              expect(e2).toEqual(null);
               expect(didCallFetchConnectionMetadata).toBeTruthy();
 
               client.close();
@@ -325,9 +317,8 @@ concurrent('channel closing itself when client willReconnect', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       clientOpenCount += 1;
-      expect(error).toEqual(null);
       expect(channel?.status).toBe('open');
 
       if (!disconnectTriggered) {
@@ -357,9 +348,8 @@ concurrent('channel closing itself when client willReconnect', (done) => {
 
   const close = client.openChannel(
     { service: 'shell' },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       channelOpenCount += 1;
-      expect(error).toBe(null);
       expect(channel?.status).toBe('open');
 
       return wrapWithDone(done, ({ willReconnect }) => {
@@ -386,8 +376,7 @@ concurrent('channel open and close', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
-      expect(error).toEqual(null);
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
 
       return wrapWithDone(done, () => {
@@ -400,9 +389,8 @@ concurrent('channel open and close', (done) => {
 
   const close = client.openChannel(
     { service: 'shell' },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
-      expect(error).toBe(null);
 
       setTimeout(() => {
         close();
@@ -432,8 +420,7 @@ concurrent('channel accepts a thunk for service', (done) => {
       WebSocketClass: WebSocket,
       context,
     },
-    wrapWithDone(done, ({ channel, error }) => {
-      expect(error).toEqual(null);
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
 
       return wrapWithDone(done, () => {
@@ -452,9 +439,8 @@ concurrent('channel accepts a thunk for service', (done) => {
         return 'exec';
       }),
     },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
-      expect(error).toBe(null);
 
       setTimeout(
         wrapWithDone(done, () => {
@@ -485,8 +471,7 @@ concurrent('channel open and close from within openChannelCb synchronously', (do
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
-      expect(error).toEqual(null);
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
 
       return wrapWithDone(done, () => {
@@ -499,9 +484,8 @@ concurrent('channel open and close from within openChannelCb synchronously', (do
 
   const close = client.openChannel(
     { service: 'shell' },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
-      expect(error).toBe(null);
 
       close();
 
@@ -529,8 +513,7 @@ concurrent('channel open and close from within openChannelCb synchronously', (do
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
-      expect(error).toEqual(null);
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
 
       return () => {
@@ -543,9 +526,8 @@ concurrent('channel open and close from within openChannelCb synchronously', (do
 
   const close = client.openChannel(
     { service: 'shell' },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
-      expect(error).toBe(null);
 
       close();
 
@@ -579,9 +561,7 @@ concurrent('channel skips opening', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    wrapWithDone(done, ({ error }) => {
-      expect(error).toBeNull();
-
+    wrapWithDone(done, () => {
       setTimeout(() => {
         expect(skipfn).toHaveBeenCalledTimes(1);
         expect(skipfn).toHaveBeenCalledWith(ctx);
@@ -618,10 +598,10 @@ concurrent('channel skips opening conditionally', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       clientOpenCount += 1;
       expect(channel?.status).toBe('open');
-      expect(error).toEqual(null);
+
       if (unexpectedDisconnectTriggered) {
         client.close();
       }
@@ -644,7 +624,7 @@ concurrent('channel skips opening conditionally', (done) => {
       skip: () => channelOpenCount > 0,
       service: 'shell',
     },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       if (!unexpectedDisconnectTriggered) {
         setTimeout(() => {
           // eslint-disable-next-line
@@ -653,7 +633,6 @@ concurrent('channel skips opening conditionally', (done) => {
           unexpectedDisconnectTriggered = true;
         });
 
-        expect(error).toBe(null);
         expect(channel?.status).toBe('open');
 
         channelOpenCount += 1;
@@ -661,8 +640,9 @@ concurrent('channel skips opening conditionally', (done) => {
         return;
       }
 
-      expect(error).toBeTruthy();
-      expect(error?.message).toBe('Failed to open');
+      // We do not expect to call onConnect when we failed to open the channel
+      // (because we never reopen the connection in this test).
+      done(new Error('Expected not to get here.'));
     }),
   );
 });
@@ -766,18 +746,17 @@ concurrent(
 
     const name = Math.random().toString();
 
-    let calledFirstWithError = false;
-    const close = client.openChannel({ name, service: 'exec' }, ({ error }) => {
-      calledFirstWithError = Boolean(error);
-    });
-
+    const firstOnConnect = jest.fn();
+    const close = client.openChannel({ name, service: 'exec' }, firstOnConnect);
     close();
+
     // open same name synchronously
     client.openChannel(
       { name, service: 'exec' },
       wrapWithDone(done, ({ channel }) => {
         expect(channel).toBeTruthy();
-        expect(calledFirstWithError).toBeTruthy();
+        expect(firstOnConnect).not.toHaveBeenCalled();
+
         client.close();
 
         done();
@@ -814,13 +793,7 @@ concurrent(
         WebSocketClass: WebSocket,
         context: null,
       },
-      wrapWithDone(done, ({ error }) => {
-        if (error) {
-          done(error);
-
-          return () => {};
-        }
-
+      wrapWithDone(done, () => {
         const name = Math.random().toString();
 
         let firstChannel: Channel;
@@ -959,8 +932,7 @@ concurrent('client reconnects unexpected disconnects', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
-      expect(error).toEqual(null);
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toEqual('open');
 
       timesConnected += 1;
@@ -1014,8 +986,7 @@ concurrent(
     await new Promise<Channel>((resolve) => {
       client.open(
         connectArgs,
-        wrapWithDone(done, ({ channel, error }) => {
-          expect(error).toEqual(null);
+        wrapWithDone(done, ({ channel }) => {
           expect(channel?.status).toEqual('open');
 
           if (!channel) {
@@ -1088,47 +1059,6 @@ concurrent('client is closed while reconnecting', (done) => {
   );
 });
 
-concurrent('closing before ever connecting', (done) => {
-  const client = getClient(done);
-  client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'connecting') {
-      setTimeout(() => {
-        client.close();
-      });
-    }
-  });
-
-  const open = jest.fn();
-  const openError = jest.fn();
-  const close = jest.fn();
-
-  client.open(
-    {
-      fetchConnectionMetadata: getConnectionMetadata,
-      WebSocketClass: WebSocket,
-      context: null,
-    },
-    wrapWithDone(done, ({ error }) => {
-      if (error) {
-        openError();
-        expect(open).not.toHaveBeenCalled();
-        expect(openError).toHaveBeenCalledTimes(1);
-        expect(close).not.toHaveBeenCalled();
-
-        // the client will not ever successfully connect, so this cannot be
-        // called in the callback.
-        done();
-      } else {
-        open();
-      }
-
-      return () => {
-        close();
-      };
-    }),
-  );
-});
-
 concurrent(
   'fallback to polling',
   (done) => {
@@ -1154,8 +1084,7 @@ concurrent(
         context: null,
         pollingHost: 'gp-v2.replit.com',
       },
-      wrapWithDone(done, ({ channel, error }) => {
-        expect(error).toBeNull();
+      wrapWithDone(done, ({ channel }) => {
         expect(channel).not.toBeNull();
         expect(didLogFallback).toBe(true);
         client.close();
@@ -1173,7 +1102,17 @@ concurrent(
   'does not fallback to polling if host is unset',
   (done) => {
     const client = getClient(done);
+
+    const onConnect = jest.fn();
     client.setUnrecoverableErrorHandler(() => {});
+    client.onDebugLog((log) => {
+      if (log.type === 'breadcrumb' && log.message === 'client closed') {
+        expect(didLogFallback).toBe(false);
+        expect(onConnect).not.toHaveBeenCalled();
+
+        done();
+      }
+    });
 
     const WebsocketThatNeverConnects = getWebsocketClassThatNeverConnects();
 
@@ -1201,13 +1140,7 @@ concurrent(
         WebSocketClass: WebsocketThatNeverConnects,
         context: null,
       },
-      wrapWithDone(done, ({ channel, error }) => {
-        expect(didLogFallback).toBe(false);
-        expect(channel).toBeNull();
-        expect(error).not.toBeNull();
-
-        done();
-      }),
+      onConnect,
     );
   },
   40000,
@@ -1258,7 +1191,7 @@ concurrent('fetch token fail', (done) => {
 
   client.setUnrecoverableErrorHandler(
     wrapWithDone(done, (e) => {
-      expect(chan0Cb).toHaveBeenCalledTimes(1);
+      expect(chan0Cb).toHaveBeenCalledTimes(0);
       expect(e.message).toContain('fail');
 
       done();
@@ -1282,6 +1215,17 @@ concurrent('fetch abort signal works as expected', (done) => {
   const client = getClient(done);
 
   const onAbort = jest.fn();
+  const onConnect = jest.fn();
+
+  client.onDebugLog((log) => {
+    if (log.type === 'breadcrumb' && log.message === 'client closed') {
+      // wait for the abort signal to be handled
+      expect(onAbort).toHaveBeenCalledTimes(1);
+      expect(onConnect).not.toHaveBeenCalled();
+
+      done();
+    }
+  });
 
   client.open(
     {
@@ -1303,18 +1247,7 @@ concurrent('fetch abort signal works as expected', (done) => {
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
-      expect(channel).toBe(null);
-      expect(error).toBeTruthy();
-      expect(error?.message).toBe('Failed to open');
-      expect(onAbort).toHaveBeenCalledTimes(1);
-
-      // The client will not ever successfully connect, so this cannot be
-      // called in the callback.
-      done();
-
-      return () => {};
-    }),
+    onConnect,
   );
 });
 
@@ -1350,14 +1283,7 @@ concurrent('can close and open in synchronously without aborting fetch token', (
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   resolveFetchToken!({ error: FetchConnectionMetadataError.Aborted });
   expect(onAbort).toHaveBeenCalledTimes(1);
-  expect(firstChan0Cb).toHaveBeenCalledTimes(1);
-  expect(firstChan0Cb).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      channel: null,
-      context: null,
-      error: expect.any(Error),
-    }),
-  );
+  expect(firstChan0Cb).toHaveBeenCalledTimes(0);
 
   client.open(
     {
@@ -1365,14 +1291,13 @@ concurrent('can close and open in synchronously without aborting fetch token', (
       WebSocketClass: WebSocket,
       context: null,
     },
-    wrapWithDone(done, ({ channel, error }) => {
+    wrapWithDone(done, ({ channel }) => {
       expect(channel?.status).toBe('open');
-      expect(error).toEqual(null);
 
       client.close();
 
       return wrapWithDone(done, () => {
-        expect(firstChan0Cb).toHaveBeenCalledTimes(1);
+        expect(firstChan0Cb).toHaveBeenCalledTimes(0);
 
         done();
       });

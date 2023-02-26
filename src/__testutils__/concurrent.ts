@@ -8,6 +8,7 @@ export function concurrent(
     () =>
       // eslint-disable-next-line no-async-promise-executor
       new Promise<void>(async (resolve, reject) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         function done(err?: any) {
           if (err) {
             reject(err);

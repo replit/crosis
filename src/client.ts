@@ -81,7 +81,14 @@ export class Client<Ctx = null> {
    * or the client closed permanently. Otherwise it'll be
    * CONNECTED or CONNECTING
    */
-  public connectionState: ConnectionState;
+  private connectionState: ConnectionState;
+
+  /**
+   * A list of listeners for connection state changes.
+   *
+   * @hidden
+   */
+  private connectionStateChangeFuncs: Array<(state: ConnectionState) => void>;
 
   /**
    * The websocket used for communication with the container.
@@ -228,6 +235,7 @@ export class Client<Ctx = null> {
     this.chan0Cb = null;
     this.chan0CleanupCb = null;
     this.connectionState = ConnectionState.DISCONNECTED;
+    this.connectionStateChangeFuncs = [];
     this.debugFuncs = [];
     this.bootStatusFuncs = [];
     this.userUnrecoverableErrorHandler = null;
@@ -411,7 +419,7 @@ export class Client<Ctx = null> {
 
     this.channelRequests.push(channelRequest);
 
-    if (this.connectionState === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
+    if (this.getConnectionState() === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
       // If we're not connected, then the request to open will go out once we're connected.
       // If there are channels with the same name then this request is queued after the other
       // channel(s) with the same name is done closing
@@ -430,14 +438,8 @@ export class Client<Ctx = null> {
         // If we're connected, it means there's an inflight open request
         // then we'll be sending a close request right after it's done opening
         // so that we can use the channel ID when closing
-        if (this.connectionState !== ConnectionState.CONNECTED) {
+        if (this.getConnectionState() !== ConnectionState.CONNECTED) {
           this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
-
-          channelRequest.openChannelCb({
-            error: new Error('Channel closed before opening'),
-            channel: null,
-            context: this.connectOptions ? this.connectOptions.context : null,
-          });
         }
 
         return;
@@ -578,7 +580,6 @@ export class Client<Ctx = null> {
 
       (channelRequest as ChannelRequest<Ctx>).cleanupCb = openChannelCb({
         channel,
-        error: null,
         context: this.connectOptions.context,
       });
     });
@@ -750,7 +751,7 @@ export class Client<Ctx = null> {
     this.destroyed = true;
     this.debug({ type: 'breadcrumb', message: 'destroy' });
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+    if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
       this.close({
         expectReconnect: false,
       });
@@ -811,6 +812,46 @@ export class Client<Ctx = null> {
       }
     };
   };
+
+  /**
+   * Calls all the listeners for connection state updates. All connection state
+   * updates should go through this function.
+   *
+   * @hidden
+   */
+  private setConnectionState = (connectionState: ConnectionState): void => {
+    this.connectionState = connectionState;
+    this.connectionStateChangeFuncs.forEach((f) => f(connectionState));
+  };
+
+  /**
+   * Sets a listener for connection state changes.
+   *
+   * @returns cleanup function that removes the listener
+   */
+  public onConnectionStateChange = (
+    connectionStateChangeFunc: (connectionState: ConnectionState) => void,
+  ): (() => void) => {
+    this.connectionStateChangeFuncs.push(connectionStateChangeFunc);
+
+    return () => {
+      const idx = this.connectionStateChangeFuncs.indexOf(connectionStateChangeFunc);
+      if (idx > -1) {
+        this.connectionStateChangeFuncs.splice(idx, 1);
+      }
+    };
+  };
+
+  /**
+   * Gets the current connection state.
+   *
+   * The listener functions are only called when the connection state changes.
+   * This function can be used to get the current state ahead of setting up a
+   * listener.
+   *
+   * @returns the current ConnectionState
+   * */
+  public getConnectionState = (): ConnectionState => this.connectionState;
 
   /**
    * Adds a listener for BootStatus messages coming in from the backend
@@ -874,7 +915,7 @@ export class Client<Ctx = null> {
       },
     });
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+    if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
       const error = new Error('Client must be disconnected to connect');
       this.onUnrecoverableError(error);
 
@@ -925,7 +966,7 @@ export class Client<Ctx = null> {
       return;
     }
 
-    this.connectionState = ConnectionState.CONNECTING;
+    this.setConnectionState(ConnectionState.CONNECTING);
 
     const chan0 = new Channel({
       id: 0,
@@ -1036,7 +1077,7 @@ export class Client<Ctx = null> {
         return;
       }
 
-      if (this.connectionState !== ConnectionState.CONNECTING) {
+      if (this.getConnectionState() !== ConnectionState.CONNECTING) {
         this.onUnrecoverableError(new Error('Client was closed before connecting'));
 
         return;
@@ -1283,7 +1324,6 @@ export class Client<Ctx = null> {
 
           this.chan0CleanupCb = this.chan0Cb({
             channel: chan0,
-            error: null,
             context: this.connectOptions.context,
           });
 
@@ -1412,7 +1452,8 @@ export class Client<Ctx = null> {
       });
       chan0.handleClose({ initiator: 'client', willReconnect: true });
       delete this.channels[0];
-      this.connectionState = ConnectionState.DISCONNECTED;
+
+      this.setConnectionState(ConnectionState.DISCONNECTED);
       this.connect({ tryCount, websocketFailureCount });
     }, this.connectOptions.getNextRetryDelayMs(tryCount));
   };
@@ -1482,7 +1523,7 @@ export class Client<Ctx = null> {
    * @hidden
    */
   private handleConnect = () => {
-    this.connectionState = ConnectionState.CONNECTED;
+    this.setConnectionState(ConnectionState.CONNECTED);
 
     this.debug({ type: 'breadcrumb', message: 'connected!' });
 
@@ -1494,7 +1535,7 @@ export class Client<Ctx = null> {
 
     // Update socket closure to do something else
     const onClose = (event: CloseEvent | Event) => {
-      if (this.connectionState === ConnectionState.DISCONNECTED) {
+      if (this.getConnectionState() === ConnectionState.DISCONNECTED) {
         this.onUnrecoverableError(
           new Error('Got a close event on socket but client is in disconnected state'),
         );
@@ -1529,7 +1570,7 @@ export class Client<Ctx = null> {
     if (closeResult.closeReason !== ClientCloseReason.Error) {
       // If we got here as a result of an error we'll ignore these assertions to avoid
       // infinite recursion in onUnrecoverableError
-      if (this.connectionState === ConnectionState.DISCONNECTED) {
+      if (this.getConnectionState() === ConnectionState.DISCONNECTED) {
         this.onUnrecoverableError(
           new Error('handleClose is called but client already disconnected'),
         );
@@ -1593,14 +1634,6 @@ export class Client<Ctx = null> {
           willReconnect: willChannelReconnect,
         });
         delete this.channels[channelRequest.channelId];
-      } else if (!willChannelReconnect) {
-        // channel won't reconnect and was never opened
-        // we'll call the open channel callback with an error
-        channelRequest.openChannelCb({
-          channel: null,
-          error: new Error('Failed to open'),
-          context: this.connectOptions ? this.connectOptions.context : null,
-        });
       }
 
       const { cleanupCb, closeRequested } = channelRequest;
@@ -1656,28 +1689,31 @@ export class Client<Ctx = null> {
         willReconnect: willClientReconnect,
       });
       this.chan0CleanupCb = null;
-    } else if (!willClientReconnect) {
-      if (this.chan0Cb) {
-        this.chan0Cb({
-          channel: null,
-          error: new Error('Failed to open'),
-          context: this.connectOptions ? this.connectOptions.context : null,
-        });
-      } else if (closeResult.closeReason !== ClientCloseReason.Error) {
-        // if we got here as a result of an error we're not gonna call onUnrecoverableError again
-        this.onUnrecoverableError(new Error('open should have been called before `handleClose`'));
+    } else if (!this.chan0Cb && closeResult.closeReason !== ClientCloseReason.Error) {
+      // if we got here as a result of an error we're not gonna call onUnrecoverableError again
+      this.onUnrecoverableError(
+        new Error(
+          '`open` should have been called before `handleClose` (no cleanup or callback function, ' +
+            (willClientReconnect ? 'would reconnect' : 'would not reconnect') +
+            ')',
+        ),
+      );
 
-        return;
-      }
+      return;
     }
 
-    this.connectionState = ConnectionState.DISCONNECTED;
+    this.setConnectionState(ConnectionState.DISCONNECTED);
 
     if (!willClientReconnect) {
       // Client is done being used until the next `open` call.
 
       this.chan0Cb = null;
       this.connectOptions = null;
+
+      this.debug({
+        type: 'breadcrumb',
+        message: 'client closed',
+      });
 
       return;
     }
@@ -1741,7 +1777,7 @@ export class Client<Ctx = null> {
 
     this.redirectInitiatorURL = null;
 
-    if (this.connectionState !== ConnectionState.DISCONNECTED) {
+    if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
       try {
         this.handleClose({
           closeReason: ClientCloseReason.Error,
