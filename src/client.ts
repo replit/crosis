@@ -1543,7 +1543,8 @@ export class Client<Ctx = null> {
     this.ws.onclose = onClose;
     this.ws.onerror = onClose;
 
-    // defer closing if the user decides to call client.close inside a callback.
+    // defer closing until the full connect sequence is complete
+    // in case the user decides to call client.close inside a callback.
     const originalClose = this.close;
     this.close = (args) =>
       setTimeout(() => {
@@ -1551,8 +1552,8 @@ export class Client<Ctx = null> {
       }, 0);
 
     // connection state possibly has a listener, so it needs the deferred close.
-    // note that CONNECTED fires _before_ the chan0Cb to match the
-    // original behavior of state being CONNECTED inside the chan0Cb.
+    // note that CONNECTED is set _before_ the chan0Cb to match the
+    // pre-10.1 behavior of state being CONNECTED inside the chan0Cb.
     this.setConnectionState(ConnectionState.CONNECTED);
     this.debug({ type: 'breadcrumb', message: 'connected!' });
 
@@ -1560,7 +1561,6 @@ export class Client<Ctx = null> {
       this.requestOpenChannel(channelRequest);
     });
 
-    // chan0Cb definitely has a callback.
     this.chan0CleanupCb = this.chan0Cb({
       channel: chan0,
       context: this.connectOptions.context,
