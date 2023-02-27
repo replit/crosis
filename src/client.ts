@@ -758,6 +758,7 @@ export class Client<Ctx = null> {
     }
 
     this.debug = () => {};
+    this.connectionStateChangeFuncs = [];
     this.userUnrecoverableErrorHandler = null;
     this.channelRequests = [];
     this.destroyed = true;
@@ -1295,39 +1296,7 @@ export class Client<Ctx = null> {
 
           cancelTimeout();
 
-          if (!this.connectOptions) {
-            this.onUnrecoverableError(new Error('Expected connectionOptions'));
-
-            return;
-          }
-
-          if (!chan0) {
-            this.onUnrecoverableError(new Error('Expected chan0 to be truthy'));
-
-            return;
-          }
-
-          if (!this.chan0Cb) {
-            this.onUnrecoverableError(new Error('Expected chan0Cb to be truthy'));
-
-            return;
-          }
-
-          this.handleConnect();
-
-          // defer closing if the user decides to call client.close inside chan0Cb
-          const originalClose = this.close;
-          this.close = (args) =>
-            setTimeout(() => {
-              originalClose(args);
-            }, 0);
-
-          this.chan0CleanupCb = this.chan0Cb({
-            channel: chan0,
-            context: this.connectOptions.context,
-          });
-
-          this.close = originalClose;
+          this.handleConnect(chan0);
 
           break;
         }
@@ -1522,13 +1491,27 @@ export class Client<Ctx = null> {
    *
    * @hidden
    */
-  private handleConnect = () => {
-    this.setConnectionState(ConnectionState.CONNECTED);
-
-    this.debug({ type: 'breadcrumb', message: 'connected!' });
-
+  private handleConnect = (chan0: Channel) => {
     if (!this.ws) {
       this.onUnrecoverableError(new Error('Expected Websocket instance'));
+
+      return;
+    }
+
+    if (!this.connectOptions) {
+      this.onUnrecoverableError(new Error('Expected connectionOptions'));
+
+      return;
+    }
+
+    if (!chan0) {
+      this.onUnrecoverableError(new Error('Expected chan0 to be truthy'));
+
+      return;
+    }
+
+    if (!this.chan0Cb) {
+      this.onUnrecoverableError(new Error('Expected chan0Cb to be truthy'));
 
       return;
     }
@@ -1560,9 +1543,30 @@ export class Client<Ctx = null> {
     this.ws.onclose = onClose;
     this.ws.onerror = onClose;
 
+    // defer closing until the full connect sequence is complete
+    // in case the user decides to call client.close inside a callback.
+    const originalClose = this.close;
+    this.close = (args) =>
+      setTimeout(() => {
+        originalClose(args);
+      }, 0);
+
+    // connection state possibly has a listener, so it needs the deferred close.
+    // note that CONNECTED is set _before_ the chan0Cb to match the
+    // pre-10.1 behavior of state being CONNECTED inside the chan0Cb.
+    this.setConnectionState(ConnectionState.CONNECTED);
+    this.debug({ type: 'breadcrumb', message: 'connected!' });
+
     this.channelRequests.forEach((channelRequest) => {
       this.requestOpenChannel(channelRequest);
     });
+
+    this.chan0CleanupCb = this.chan0Cb({
+      channel: chan0,
+      context: this.connectOptions.context,
+    });
+
+    this.close = originalClose;
   };
 
   /** @hidden */
