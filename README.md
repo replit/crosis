@@ -66,12 +66,6 @@ const user = { name: 'tim' };
 const context = { user, repl };
 
 client.open({ context, fetchConnectionMetadata }, function onOpen({ channel, context }) {
-  if (!channel) {
-    // Closed before ever connecting. Due to `client.close` being called
-    // or an unrecoverable, that can be handled by setting `client.setUnrecoverableError`
-    return;
-  }
-
   //  The client is now connected (or reconnected in the event that it encountered an unexpected disconnect)
   // `channel` here is channel0 (more info at https://crosis-doc.util.repl.co/protov2)
   // - send commands using `channel.send`
