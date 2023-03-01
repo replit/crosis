@@ -7,6 +7,7 @@ import {
   ConnectionState,
   FetchConnectionMetadataResult,
   CloseCode,
+  ClientCloseReason,
 } from './types';
 import type {
   ConnectOptions,
@@ -20,25 +21,6 @@ import type {
 // Maximum amount of retries before connecting back to the
 // redirect initiator (only effective after a redirect)
 const MAX_RETRY_COUNT = 10;
-
-enum ClientCloseReason {
-  /**
-   * Called `client.close`, expected to stay closed.
-   */
-  Intentional = 'Intentional',
-  /**
-   * Called `client.close`, but we're going to try to reconnect.
-   */
-  Temporary = 'Temporary',
-  /**
-   * The websocket connection died
-   */
-  Disconnected = 'Disconnected',
-  /**
-   * The client encountered an unrecoverable/invariant error
-   */
-  Error = 'Error',
-}
 
 type CloseResult =
   | {
@@ -1594,6 +1576,15 @@ export class Client<Ctx = null> {
       }
     }
 
+    this.debug({
+      type: 'breadcrumb',
+      message: 'handle close',
+      data: {
+        closeReason: closeResult.closeReason,
+        connectionState: this.getConnectionState(),
+      },
+    });
+
     this.cleanupSocket();
 
     if (this.retryTimeoutId) {
@@ -1616,6 +1607,19 @@ export class Client<Ctx = null> {
     const willClientReconnect =
       closeResult.closeReason === ClientCloseReason.Disconnected ||
       closeResult.closeReason === ClientCloseReason.Temporary;
+
+    for (const channel of Object.values(this.channels)) {
+      this.debug({
+        type: 'breadcrumb',
+        message: 'channels on close',
+        data: {
+          id: channel.id,
+          status: channel.status,
+          service: channel.service,
+          name: channel.name,
+        },
+      });
+    }
 
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
@@ -1675,9 +1679,26 @@ export class Client<Ctx = null> {
     }
 
     if (Object.keys(this.channels).length !== 0) {
+      // this should never happen, because the channelRequests should have
+      // triggered cleanup of all this, so dump a bunch of breadcrumbs to
+      // help chase down how we got here.
+      for (const channel of Object.values(this.channels)) {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'out of sync channel',
+          data: {
+            id: channel.id,
+            status: channel.status,
+            service: channel.service,
+            name: channel.name,
+          },
+        });
+      }
+
       this.channels = {};
       if (closeResult.closeReason !== ClientCloseReason.Error) {
         // if we got here as a result of an error we're not gonna call onUnrecoverableError again
+
         this.onUnrecoverableError(
           new Error('channels object should be empty after channelRequests and chan0 cleanup'),
         );

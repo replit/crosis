@@ -65,6 +65,25 @@ export interface OpenOptions<Ctx> extends Partial<ConnectOptions<Ctx>> {
   context: Ctx;
 }
 
+export enum ClientCloseReason {
+  /**
+   * Called `client.close`, expected to stay closed.
+   */
+  Intentional = 'Intentional',
+  /**
+   * Called `client.close`, but we're going to try to reconnect.
+   */
+  Temporary = 'Temporary',
+  /**
+   * The websocket connection died
+   */
+  Disconnected = 'Disconnected',
+  /**
+   * The client encountered an unrecoverable/invariant error
+   */
+  Error = 'Error',
+}
+
 export type DebugLogBreadcrumb<Ctx> =
   | {
       type: 'breadcrumb';
@@ -209,6 +228,24 @@ export type DebugLogBreadcrumb<Ctx> =
       message: 'calling send on a closed client';
       data: {
         channelId: number;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'out of sync channel' | 'channels on close';
+      data: {
+        id: number | null;
+        status: string;
+        service: string | undefined;
+        name: ChannelOptions<Ctx>['name'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'handle close';
+      data: {
+        closeReason: ClientCloseReason;
+        connectionState: ConnectionState;
       };
     };
 
