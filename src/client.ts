@@ -1680,24 +1680,26 @@ export class Client<Ctx = null> {
     }
 
     if (Object.keys(this.channels).length !== 0) {
+      // this should never happen, because the channelRequests should have
+      // triggered cleanup of all this, so dump a bunch of breadcrumbs to
+      // help chase down how we got here.
+      for (const key in this.channels) {
+        const channel = this.channels[key];
+        this.debug({
+          type: 'breadcrumb',
+          message: 'out of sync channel',
+          data: {
+            id: channel.id,
+            status: channel.status,
+            service: channel.service,
+            name: channel.name,
+          },
+        });
+      }
+
       this.channels = {};
       if (closeResult.closeReason !== ClientCloseReason.Error) {
         // if we got here as a result of an error we're not gonna call onUnrecoverableError again
-        // but we are going to dump a bunch of breadcrumbs to help chase down how we got here.
-
-        for (const key in this.channels) {
-          const channel = this.channels[key];
-          this.debug({
-            type: 'breadcrumb',
-            message: 'out of sync channel',
-            data: {
-              id: channel.id,
-              status: channel.status,
-              service: channel.service,
-              name: channel.name,
-            },
-          });
-        }
 
         this.onUnrecoverableError(
           new Error('channels object should be empty after channelRequests and chan0 cleanup'),
