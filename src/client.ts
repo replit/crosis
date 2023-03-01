@@ -1608,8 +1608,7 @@ export class Client<Ctx = null> {
       closeResult.closeReason === ClientCloseReason.Disconnected ||
       closeResult.closeReason === ClientCloseReason.Temporary;
 
-    for (const key in this.channels) {
-      const channel = this.channels[key];
+    for (const channel of Object.values(this.channels)) {
       this.debug({
         type: 'breadcrumb',
         message: 'channels on close',
@@ -1683,8 +1682,7 @@ export class Client<Ctx = null> {
       // this should never happen, because the channelRequests should have
       // triggered cleanup of all this, so dump a bunch of breadcrumbs to
       // help chase down how we got here.
-      for (const key in this.channels) {
-        const channel = this.channels[key];
+      for (const channel of Object.values(this.channels)) {
         this.debug({
           type: 'breadcrumb',
           message: 'out of sync channel',
