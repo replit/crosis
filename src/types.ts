@@ -310,6 +310,12 @@ export type DebugLog<Ctx> =
         };
         cmd: api.Command;
       };
+    }
+  | {
+      type: 'error';
+      error: {
+        message: 'channels out of sync';
+      };
     };
 
 /**

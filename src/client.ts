@@ -1737,15 +1737,12 @@ export class Client<Ctx = null> {
       }
 
       this.channels = {};
-      if (closeResult.closeReason !== ClientCloseReason.Error) {
-        // if we got here as a result of an error we're not gonna call onUnrecoverableError again
-
-        this.onUnrecoverableError(
-          new Error('channels object should be empty after channelRequests and chan0 cleanup'),
-        );
-
-        return;
-      }
+      this.debug({
+        type: 'error',
+        error: {
+          message: 'channels out of sync',
+        },
+      });
     }
 
     if (this.chan0CleanupCb) {
