@@ -279,8 +279,8 @@ export type DebugLogBreadcrumb<Ctx> =
       message: 'close channel deemed unnecessary';
       data: {
         connectionState: ConnectionState;
-        channelId: number;
-        service: string | undefined;
+        channelId: number | null;
+        service: string;
         channelsCount: number;
         requestsCount: number;
       };
