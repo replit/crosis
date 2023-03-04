@@ -313,9 +313,7 @@ export type DebugLog<Ctx> =
     }
   | {
       type: 'error';
-      error: {
-        message: 'channels out of sync';
-      };
+      message: 'channels out of sync';
     };
 
 /**

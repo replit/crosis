@@ -1739,9 +1739,7 @@ export class Client<Ctx = null> {
       this.channels = {};
       this.debug({
         type: 'error',
-        error: {
-          message: 'channels out of sync',
-        },
+        message: 'channels out of sync',
       });
     }
 
