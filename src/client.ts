@@ -400,12 +400,22 @@ export class Client<Ctx = null> {
     };
 
     this.channelRequests.push(channelRequest);
+    const serviceName = typeof options.service === 'string' ? options.service : 'from thunk';
 
     if (this.getConnectionState() === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
       // If we're not connected, then the request to open will go out once we're connected.
       // If there are channels with the same name then this request is queued after the other
       // channel(s) with the same name is done closing
       this.requestOpenChannel(channelRequest);
+    } else {
+      this.debug({
+        type: 'breadcrumb',
+        message: 'open channel delayed',
+        data: {
+          connectionState: this.getConnectionState(),
+          service: serviceName,
+        },
+      });
     }
 
     const closeChannel = () => {
@@ -416,6 +426,18 @@ export class Client<Ctx = null> {
       channelRequest.closeRequested = true;
 
       if (!channelRequest.isOpen) {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'close channel deemed unnecessary',
+          data: {
+            channelsCount: Object.keys(this.channels).length,
+            requestsCount: this.channelRequests.length,
+            connectionState: this.getConnectionState(),
+            channelId: channelRequest.channelId,
+            service: serviceName,
+          },
+        });
+
         // Channel is not open and we're not connected, let's just remove it from our list.
         // If we're connected, it means there's an inflight open request
         // then we'll be sending a close request right after it's done opening
@@ -445,6 +467,17 @@ export class Client<Ctx = null> {
 
     const { skip } = options;
     if (skip && skip(this.connectOptions.context)) {
+      const serviceName = typeof options.service === 'string' ? options.service : 'from thunk';
+
+      this.debug({
+        type: 'breadcrumb',
+        message: 'open channel skipped',
+        data: {
+          service: serviceName,
+          name: options.name,
+        },
+      });
+
       return;
     }
 
@@ -512,7 +545,15 @@ export class Client<Ctx = null> {
 
       const { id, state, error } = cmd.openChanRes;
 
-      this.debug({ type: 'breadcrumb', message: 'openChanres' });
+      this.debug({
+        type: 'breadcrumb',
+        message: 'openChanres',
+        data: {
+          id,
+          state,
+          error,
+        },
+      });
 
       if (!this.connectOptions) {
         this.onUnrecoverableError(new Error('Expected connectionOptions'));
