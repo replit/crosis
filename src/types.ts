@@ -89,7 +89,6 @@ export type DebugLogBreadcrumb<Ctx> =
       type: 'breadcrumb';
       message:
         | 'constructor'
-        | 'openChanres'
         | 'connected!'
         | 'user close'
         | 'user temporary close'
@@ -117,6 +116,15 @@ export type DebugLogBreadcrumb<Ctx> =
         websocketFailureCount: number;
         readyState: WebSocket['readyState'] | undefined;
         chan0CbExists: boolean;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'openChanres';
+      data: {
+        id: number;
+        state: api.OpenChannelRes['state'];
+        error: string;
       };
     }
   | {
@@ -232,7 +240,17 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'out of sync channel' | 'channels on close';
+      message: 'out of sync channel';
+      data: {
+        id: number | null;
+        status: string;
+        service: string | undefined;
+        name: ChannelOptions<Ctx>['name'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'channels on close';
       data: {
         id: number | null;
         status: string;
@@ -246,6 +264,33 @@ export type DebugLogBreadcrumb<Ctx> =
       data: {
         closeReason: ClientCloseReason;
         connectionState: ConnectionState;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'open channel delayed';
+      data: {
+        connectionState: ConnectionState;
+        service: string | undefined;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'close channel deemed unnecessary';
+      data: {
+        connectionState: ConnectionState;
+        channelId: number | null;
+        service: string;
+        channelsCount: number;
+        requestsCount: number;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'open channel skipped';
+      data: {
+        service: string | undefined;
+        name: ChannelOptions<Ctx>['name'];
       };
     };
 
@@ -265,6 +310,10 @@ export type DebugLog<Ctx> =
         };
         cmd: api.Command;
       };
+    }
+  | {
+      type: 'error';
+      message: 'channels out of sync';
     };
 
 /**
