@@ -95,7 +95,7 @@ export class Channel {
    */
   public onCommand = (listener: (cmd: api.Command) => void): (() => void) => {
     if (this.status === 'closed') {
-      const e = new Error('Trying to listen to commands on a closed channel');
+      const e = new Error('Trying to listen to commands on a closed channel for ' + this.service);
       this.onUnrecoverableError(e);
 
       throw e;
@@ -115,14 +115,16 @@ export class Channel {
    */
   public send = (cmdJson: api.ICommand): void => {
     if (this.status === 'closed') {
-      const e = new Error('Calling send on closed channel');
+      const e = new Error('Calling send on closed channel for ' + this.service);
       this.onUnrecoverableError(e);
 
       throw e;
     }
 
     if (this.status === 'closing') {
-      const e = new Error('Cannot send any more commands after a close request');
+      const e = new Error(
+        'Cannot send any more commands after a close request on channel for ' + this.service,
+      );
       this.onUnrecoverableError(e);
 
       throw e;
