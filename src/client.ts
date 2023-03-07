@@ -1607,9 +1607,9 @@ export class Client<Ctx = null> {
     // in case the user decides to call client.close inside a callback.
     const originalClose = this.close;
     this.close = (args) =>
-      setTimeout(() => {
+      setImmediate(() => {
         originalClose(args);
-      }, 0);
+      });
 
     // connection state possibly has a listener, so it needs the deferred close.
     // note that CONNECTED is set _before_ the chan0Cb to match the
