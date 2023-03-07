@@ -1,6 +1,6 @@
 {
   "name": "@replit/crosis",
-  "version": "10.1.3",
+  "version": "10.2.0",
   "description": "Goval connection and channel manager",
   "files": [
     "/dist"
