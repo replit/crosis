@@ -575,6 +575,12 @@ export class Client<Ctx = null> {
         return;
       }
 
+      if (!this.channelRequests.includes(channelRequest)) {
+        this.onUnrecoverableError(new Error('channel request disposed but got an open response'));
+
+        return;
+      }
+
       const channel = new Channel({
         id,
         name: channelRequest.options.name,
