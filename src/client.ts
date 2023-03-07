@@ -400,6 +400,7 @@ export class Client<Ctx = null> {
     };
 
     this.channelRequests.push(channelRequest);
+
     const serviceName = typeof options.service === 'string' ? options.service : 'from thunk';
 
     if (this.getConnectionState() === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
@@ -420,6 +421,15 @@ export class Client<Ctx = null> {
 
     const closeChannel = () => {
       if (channelRequest.closeRequested) {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'abandoning close request',
+          data: {
+            channelId: channelRequest.channelId,
+            service: serviceName,
+          },
+        });
+
         return;
       }
 
@@ -500,6 +510,9 @@ export class Client<Ctx = null> {
         ? options.service
         : options.service(this.connectOptions.context);
 
+    // Random base36 int
+    const ref = Number(Math.random().toString().split('.')[1]).toString(36);
+
     this.debug({
       type: 'breadcrumb',
       message: 'requestOpenChannel',
@@ -507,13 +520,11 @@ export class Client<Ctx = null> {
         name: options.name,
         service,
         action,
+        ref,
       },
     });
 
     const chan0 = this.getChannel(0);
-
-    // Random base36 int
-    const ref = Number(Math.random().toString().split('.')[1]).toString(36);
 
     // Not using Channel.request here because we want to
     // resolve the response synchronously. We can receive
@@ -552,6 +563,7 @@ export class Client<Ctx = null> {
           id,
           state,
           error,
+          ref,
         },
       });
 
@@ -1665,24 +1677,49 @@ export class Client<Ctx = null> {
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
 
+      const serviceName =
+        typeof channelRequest.options.service === 'string'
+          ? channelRequest.options.service
+          : 'from thunk';
+
       this.debug({
         type: 'breadcrumb',
         message: 'handle channel close',
         data: {
+          channelId: channelRequest.channelId,
+          serviceName,
+          closeRequested: channelRequest.closeRequested,
           channelRequestIsOpen: channelRequest.isOpen,
           willChannelReconnect,
           hasWs: Boolean(this.ws),
-          channelId: channelRequest.channelId,
         },
       });
 
       if (channelRequest.isOpen) {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'closing: request open',
+          data: {
+            channelId: channelRequest.channelId,
+            service: serviceName,
+          },
+        });
+
         const channel = this.getChannel(channelRequest.channelId);
         channel.handleClose({
           initiator: 'client',
           willReconnect: willChannelReconnect,
         });
         delete this.channels[channelRequest.channelId];
+      } else {
+        this.debug({
+          type: 'breadcrumb',
+          message: 'closing: request not open',
+          data: {
+            channelId: channelRequest.channelId,
+            service: serviceName,
+          },
+        });
       }
 
       const { cleanupCb, closeRequested } = channelRequest;
@@ -1707,6 +1744,15 @@ export class Client<Ctx = null> {
       if (closeRequested || channelRequest.closeRequested) {
         // Channel closed earlier but we couldn't process the close request
         // or closed during cleanupCb that we just called
+        this.debug({
+          type: 'breadcrumb',
+          message: 'filtering channel requests',
+          data: {
+            requests: this.channelRequests.length,
+            closeRequested,
+          },
+        });
+
         this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
       }
     });

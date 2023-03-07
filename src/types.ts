@@ -125,6 +125,7 @@ export type DebugLogBreadcrumb<Ctx> =
         id: number;
         state: api.OpenChannelRes['state'];
         error: string;
+        ref: string;
       };
     }
   | {
@@ -134,6 +135,7 @@ export type DebugLogBreadcrumb<Ctx> =
         name: ChannelOptions<Ctx>['name'];
         service: ChannelOptions<Ctx>['service'];
         action: ChannelOptions<Ctx>['action'];
+        ref: string;
       };
     }
   | {
@@ -225,10 +227,12 @@ export type DebugLogBreadcrumb<Ctx> =
       type: 'breadcrumb';
       message: 'handle channel close';
       data: {
+        channelId: number | null;
+        serviceName: string | undefined;
+        closeRequested: boolean;
         channelRequestIsOpen: boolean;
         willChannelReconnect: boolean;
         hasWs: boolean;
-        channelId: number | null;
       };
     }
   | {
@@ -291,6 +295,30 @@ export type DebugLogBreadcrumb<Ctx> =
       data: {
         service: string | undefined;
         name: ChannelOptions<Ctx>['name'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'abandoning close request';
+      data: {
+        service: string;
+        channelId: number | null;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'closing: request open';
+      data: {
+        service: string;
+        channelId: number | null;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'closing: request not open';
+      data: {
+        service: string;
+        channelId: number | null;
       };
     };
 
