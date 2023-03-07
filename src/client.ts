@@ -874,7 +874,7 @@ export class Client<Ctx = null> {
    */
   private setConnectionState = (connectionState: ConnectionState): void => {
     this.connectionState = connectionState;
-    setImmediate(() => {
+    setTimeout(() => {
       // We need to defer these so that the connection state is announced to
       // a listener _after_ the changes for the connection state have been
       // applied. For example, if a user listens for connection state changes
@@ -882,7 +882,7 @@ export class Client<Ctx = null> {
       // channel requests will be processed before the listener is called.
 
       this.connectionStateChangeFuncs.forEach((f) => f(connectionState));
-    });
+    }, 0);
   };
 
   /**
@@ -1607,9 +1607,9 @@ export class Client<Ctx = null> {
     // in case the user decides to call client.close inside a callback.
     const originalClose = this.close;
     this.close = (args) =>
-      setImmediate(() => {
+      setTimeout(() => {
         originalClose(args);
-      });
+      }, 0);
 
     // connection state possibly has a listener, so it needs the deferred close.
     // note that CONNECTED is set _before_ the chan0Cb to match the
