@@ -587,6 +587,23 @@ export class Client<Ctx = null> {
         return;
       }
 
+      if (this.channels[id] != null) {
+        const serviceName =
+          typeof channelRequest.options.service === 'string'
+            ? channelRequest.options.service
+            : 'from thunk';
+
+        this.debug({
+          type: 'breadcrumb',
+          message: 'requestOpenChannel: channel already exists',
+          data: {
+            id,
+            name: channelRequest.options.name,
+            service: serviceName,
+          },
+        });
+      }
+
       const channel = new Channel({
         id,
         name: channelRequest.options.name,

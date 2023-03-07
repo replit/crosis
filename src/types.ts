@@ -320,6 +320,23 @@ export type DebugLogBreadcrumb<Ctx> =
         service: string;
         channelId: number | null;
       };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'filtering channel requests';
+      data: {
+        requests: number;
+        closeRequested: boolean;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestOpenChannel: channel already exists';
+      data: {
+        id: number;
+        name: ChannelOptions<Ctx>['name'];
+        service: string;
+      };
     };
 
 /**
