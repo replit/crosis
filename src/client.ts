@@ -874,7 +874,15 @@ export class Client<Ctx = null> {
    */
   private setConnectionState = (connectionState: ConnectionState): void => {
     this.connectionState = connectionState;
-    this.connectionStateChangeFuncs.forEach((f) => f(connectionState));
+    setImmediate(() => {
+      // We need to defer these so that the connection state is announced to
+      // a listener _after_ the changes for the connection state have been
+      // applied. For example, if a user listens for connection state changes
+      // and then calls `client.openChannel` in the listener, outstanding
+      // channel requests will be processed before the listener is called.
+
+      this.connectionStateChangeFuncs.forEach((f) => f(connectionState));
+    });
   };
 
   /**
