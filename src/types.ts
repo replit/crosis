@@ -91,15 +91,15 @@ export type DebugLogBreadcrumb<Ctx> =
         | 'constructor'
         | 'status:open'
         | 'status:connected'
+        | 'status:closed'
+        | 'status:reconnecting'
+        | 'status:destroy'
         | 'close:intentional'
         | 'close:temporary'
-        | 'status:closed'
         | 'timeout:cancel'
         | 'timeout:reset'
         | 'timeout:hit'
-        | 'polling fallback' // TBD.
-        | 'status:reconnecting'
-        | 'status:destroy';
+        | 'websocket:polling fallback';
     }
   | {
       type: 'breadcrumb';
@@ -114,66 +114,7 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'openChanres';
-      data: {
-        id: number;
-        state: api.OpenChannelRes['state'];
-        error: string;
-        ref: string;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'requestOpenChannel';
-      data?: {
-        name: ChannelOptions<Ctx>['name'];
-        service: ChannelOptions<Ctx>['service'];
-        action: ChannelOptions<Ctx>['action'];
-        ref: string;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'requestChannelClose';
-      data: {
-        id: number;
-        name: ChannelOptions<Ctx>['name'];
-        service: ChannelOptions<Ctx>['service'];
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'requestChannelClose:chan0Closed';
-      data: {
-        id: number;
-        name: ChannelOptions<Ctx>['name'];
-        service: ChannelOptions<Ctx>['service'];
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'requestChannelClose:closeChanRes';
-      data: {
-        id: number;
-        name: ChannelOptions<Ctx>['name'];
-        service: ChannelOptions<Ctx>['service'];
-        closeStatus: api.CloseChannelRes.Status;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'retrying';
-      data: {
-        connectionState: ConnectionState;
-        connectTries: number;
-        websocketFailureCount: number;
-        error: Error;
-        wsReadyState?: WebSocket['readyState'];
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'redirectInitiatorFallback';
+      message: 'status:retrying';
       data: {
         connectionState: ConnectionState;
         connectTries: number;
@@ -205,14 +146,74 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'unrecoverable error';
-      data: {
-        message: string;
+      message: 'requestOpenChannel';
+      data?: {
+        name: ChannelOptions<Ctx>['name'];
+        service: ChannelOptions<Ctx>['service'];
+        action: ChannelOptions<Ctx>['action'];
+        ref: string;
       };
     }
   | {
       type: 'breadcrumb';
-      message: 'handling redirect';
+      message: 'requestOpenChannel:openChanRes';
+      data: {
+        id: number;
+        state: api.OpenChannelRes['state'];
+        error: string;
+        ref: string;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestOpenChannel:explicit skip';
+      data: {
+        service: ChannelOptions<Ctx>['service'];
+        name: ChannelOptions<Ctx>['name'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestCloseChannel';
+      data: {
+        id: number;
+        name: ChannelOptions<Ctx>['name'];
+        service: ChannelOptions<Ctx>['service'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestCloseChannel:chan0Closed';
+      data: {
+        id: number;
+        name: ChannelOptions<Ctx>['name'];
+        service: ChannelOptions<Ctx>['service'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestCloseChannel:closeChanRes';
+      data: {
+        id: number;
+        name: ChannelOptions<Ctx>['name'];
+        service: ChannelOptions<Ctx>['service'];
+        closeStatus: api.CloseChannelRes.Status;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'client:redirectInitiatorFallback';
+      data: {
+        connectionState: ConnectionState;
+        connectTries: number;
+        websocketFailureCount: number;
+        error: Error;
+        wsReadyState?: WebSocket['readyState'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'client:handleRedirect';
       data: {
         connectionMetadata: GovalMetadata | null;
       };
@@ -251,17 +252,7 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'channels on close';
-      data: {
-        id: number | null;
-        status: string;
-        service: ChannelOptions<Ctx>['service'];
-        name: ChannelOptions<Ctx>['name'];
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'open channel delayed';
+      message: 'client:openChannel:delayed';
       data: {
         service: ChannelOptions<Ctx>['service'];
         name: ChannelOptions<Ctx>['name'];
@@ -270,7 +261,7 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'close channel deemed unnecessary';
+      message: 'client:closeChannel:channel not open';
       data: {
         channelId: number | null;
         service: ChannelOptions<Ctx>['service'];
@@ -280,15 +271,7 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'open channel skipped';
-      data: {
-        service: ChannelOptions<Ctx>['service'];
-        name: ChannelOptions<Ctx>['name'];
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'abandoning close request';
+      message: 'client:closeChannel:already requested';
       data: {
         channelId: number | null;
         service: ChannelOptions<Ctx>['service'];
@@ -297,11 +280,9 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'requestOpenChannel: channel already exists';
+      message: 'onUnrecoverableError';
       data: {
-        channelId: number;
-        service: ChannelOptions<Ctx>['service'];
-        name: ChannelOptions<Ctx>['name'];
+        message: string;
       };
     };
 
