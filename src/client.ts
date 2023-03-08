@@ -1808,10 +1808,12 @@ export class Client<Ctx = null> {
       }
 
       this.channels = {};
-      this.debug({
-        type: 'error',
-        message: 'channels out of sync',
-      });
+
+      this.onUnrecoverableError(
+        new Error('channels out of sync, should have been cleaned up by channelRequests'),
+      );
+
+      return;
     }
 
     if (this.chan0CleanupCb) {
