@@ -307,30 +307,6 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'closing: request open';
-      data: {
-        service: string;
-        channelId: number | null;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'closing: request not open';
-      data: {
-        service: string;
-        channelId: number | null;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'filtering channel requests';
-      data: {
-        requests: number;
-        closeRequested: boolean;
-      };
-    }
-  | {
-      type: 'breadcrumb';
       message: 'requestOpenChannel: channel already exists';
       data: {
         id: number;

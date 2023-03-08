@@ -1686,19 +1686,6 @@ export class Client<Ctx = null> {
       closeResult.closeReason === ClientCloseReason.Disconnected ||
       closeResult.closeReason === ClientCloseReason.Temporary;
 
-    for (const channel of Object.values(this.channels)) {
-      this.debug({
-        type: 'breadcrumb',
-        message: 'channels on close',
-        data: {
-          id: channel.id,
-          status: channel.status,
-          service: channel.service,
-          name: channel.name,
-        },
-      });
-    }
-
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
 
@@ -1721,30 +1708,12 @@ export class Client<Ctx = null> {
       });
 
       if (channelRequest.isOpen) {
-        this.debug({
-          type: 'breadcrumb',
-          message: 'closing: request open',
-          data: {
-            channelId: channelRequest.channelId,
-            service: serviceName,
-          },
-        });
-
         const channel = this.getChannel(channelRequest.channelId);
         channel.handleClose({
           initiator: 'client',
           willReconnect: willChannelReconnect,
         });
         delete this.channels[channelRequest.channelId];
-      } else {
-        this.debug({
-          type: 'breadcrumb',
-          message: 'closing: request not open',
-          data: {
-            channelId: channelRequest.channelId,
-            service: serviceName,
-          },
-        });
       }
 
       const { cleanupCb, closeRequested } = channelRequest;
@@ -1769,15 +1738,6 @@ export class Client<Ctx = null> {
       if (closeRequested || channelRequest.closeRequested) {
         // Channel closed earlier but we couldn't process the close request
         // or closed during cleanupCb that we just called
-        this.debug({
-          type: 'breadcrumb',
-          message: 'filtering channel requests',
-          data: {
-            requests: this.channelRequests.length,
-            closeRequested,
-          },
-        });
-
         this.channelRequests = this.channelRequests.filter((cr) => cr !== channelRequest);
       }
     });
