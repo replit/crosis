@@ -89,27 +89,21 @@ export type DebugLogBreadcrumb<Ctx> =
       type: 'breadcrumb';
       message:
         | 'constructor'
-        | 'connected!'
-        | 'user close'
-        | 'user temporary close'
-        | 'client closed'
-        | 'cancel timeout'
-        | 'reset timeout'
-        | 'connect timeout'
-        | 'polling fallback'
-        | 'reconnecting'
-        | 'destroy';
+        | 'status:open'
+        | 'status:connected'
+        | 'close:intentional'
+        | 'close:temporary'
+        | 'status:closed'
+        | 'timeout:cancel'
+        | 'timeout:reset'
+        | 'timeout:hit'
+        | 'polling fallback' // TBD.
+        | 'status:reconnecting'
+        | 'status:destroy';
     }
   | {
       type: 'breadcrumb';
-      message: 'open';
-      data: {
-        polling: false;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'connecting';
+      message: 'status:connecting';
       data: {
         connectionState: ConnectionState;
         connectTries: number;
@@ -190,19 +184,19 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'containerState';
+      message: 'container:state';
       data: api.ContainerState.State;
     }
   | {
       type: 'breadcrumb';
-      message: 'wsclose';
+      message: 'websocket:close';
       data?: {
         event: CloseEvent | Event;
       };
     }
   | {
       type: 'breadcrumb';
-      message: 'cleanupSocket';
+      message: 'websocket:cleanup';
       data: {
         hasWs: boolean;
         readyState: WebSocket['readyState'] | null;
@@ -225,10 +219,20 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'handle channel close';
+      message: 'client:handleClose';
+      data: {
+        closeReason: ClientCloseReason;
+        connectionState: ConnectionState;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'client:handleClose:closing channel';
       data: {
         channelId: number | null;
-        serviceName: string | undefined;
+        service: ChannelOptions<Ctx>['service'];
+        name: ChannelOptions<Ctx>['name'];
+
         closeRequested: boolean;
         channelRequestIsOpen: boolean;
         willChannelReconnect: boolean;
@@ -237,16 +241,9 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'calling send on a closed client';
+      message: 'client:handleClose:out of sync';
       data: {
-        channelId: number;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'out of sync channel';
-      data: {
-        id: number | null;
+        channelId: number | null;
         status: string;
         service: string | undefined;
         name: ChannelOptions<Ctx>['name'];
@@ -258,42 +255,34 @@ export type DebugLogBreadcrumb<Ctx> =
       data: {
         id: number | null;
         status: string;
-        service: string | undefined;
+        service: ChannelOptions<Ctx>['service'];
         name: ChannelOptions<Ctx>['name'];
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'handle close';
-      data: {
-        closeReason: ClientCloseReason;
-        connectionState: ConnectionState;
       };
     }
   | {
       type: 'breadcrumb';
       message: 'open channel delayed';
       data: {
+        service: ChannelOptions<Ctx>['service'];
+        name: ChannelOptions<Ctx>['name'];
         connectionState: ConnectionState;
-        service: string | undefined;
       };
     }
   | {
       type: 'breadcrumb';
       message: 'close channel deemed unnecessary';
       data: {
-        connectionState: ConnectionState;
         channelId: number | null;
-        service: string;
-        channelsCount: number;
-        requestsCount: number;
+        service: ChannelOptions<Ctx>['service'];
+        name: ChannelOptions<Ctx>['name'];
+        connectionState: ConnectionState;
       };
     }
   | {
       type: 'breadcrumb';
       message: 'open channel skipped';
       data: {
-        service: string | undefined;
+        service: ChannelOptions<Ctx>['service'];
         name: ChannelOptions<Ctx>['name'];
       };
     }
@@ -301,17 +290,18 @@ export type DebugLogBreadcrumb<Ctx> =
       type: 'breadcrumb';
       message: 'abandoning close request';
       data: {
-        service: string;
         channelId: number | null;
+        service: ChannelOptions<Ctx>['service'];
+        name: ChannelOptions<Ctx>['name'];
       };
     }
   | {
       type: 'breadcrumb';
       message: 'requestOpenChannel: channel already exists';
       data: {
-        id: number;
+        channelId: number;
+        service: ChannelOptions<Ctx>['service'];
         name: ChannelOptions<Ctx>['name'];
-        service: string;
       };
     };
 

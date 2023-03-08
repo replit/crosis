@@ -296,7 +296,6 @@ export class Client<Ctx = null> {
     this.debug({
       type: 'breadcrumb',
       message: 'open',
-      data: { polling: false },
     });
 
     this.chan0Cb = cb;
@@ -1496,14 +1495,6 @@ export class Client<Ctx = null> {
     const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
 
     if (this.ws == null) {
-      this.debug({
-        type: 'breadcrumb',
-        message: 'calling send on a closed client',
-        data: {
-          channelId: cmd.channel,
-        },
-      });
-
       this.onUnrecoverableError(new Error('Calling send on a closed client'));
 
       return;
@@ -1577,7 +1568,7 @@ export class Client<Ctx = null> {
 
       this.debug({
         type: 'breadcrumb',
-        message: 'wsclose',
+        message: 'websocket:close',
         data: {
           event,
         },
@@ -1604,7 +1595,7 @@ export class Client<Ctx = null> {
     // note that CONNECTED is set _before_ the chan0Cb to match the
     // pre-10.1 behavior of state being CONNECTED inside the chan0Cb.
     this.setConnectionState(ConnectionState.CONNECTED);
-    this.debug({ type: 'breadcrumb', message: 'connected!' });
+    this.debug({ type: 'breadcrumb', message: 'status:connected' });
 
     this.channelRequests.forEach((channelRequest) => {
       this.requestOpenChannel(channelRequest);
@@ -1645,7 +1636,7 @@ export class Client<Ctx = null> {
 
     this.debug({
       type: 'breadcrumb',
-      message: 'handle close',
+      message: 'client:handleClose',
       data: {
         closeReason: closeResult.closeReason,
         connectionState: this.getConnectionState(),
@@ -1678,17 +1669,14 @@ export class Client<Ctx = null> {
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
 
-      const serviceName =
-        typeof channelRequest.options.service === 'string'
-          ? channelRequest.options.service
-          : 'from thunk';
-
       this.debug({
         type: 'breadcrumb',
-        message: 'handle channel close',
+        message: 'client:handleClose:closing channel',
         data: {
           channelId: channelRequest.channelId,
-          serviceName,
+          service: channelRequest.options.service,
+          name: channelRequest.options.name,
+
           closeRequested: channelRequest.closeRequested,
           channelRequestIsOpen: channelRequest.isOpen,
           willChannelReconnect,
@@ -1746,9 +1734,9 @@ export class Client<Ctx = null> {
       for (const channel of Object.values(this.channels)) {
         this.debug({
           type: 'breadcrumb',
-          message: 'out of sync channel',
+          message: 'client:handleClose:out of sync',
           data: {
-            id: channel.id,
+            channelId: channel.id,
             status: channel.status,
             service: channel.service,
             name: channel.name,
