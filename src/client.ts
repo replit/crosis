@@ -1128,7 +1128,12 @@ export class Client<Ctx = null> {
       }
 
       if (this.getConnectionState() !== ConnectionState.CONNECTING) {
-        this.onUnrecoverableError(new Error('Client was closed before connecting'));
+        this.onUnrecoverableError(
+          new Error(
+            'Client in wrong state during connect(); connected=' +
+              (this.getConnectionState() === ConnectionState.CONNECTED ? 'true' : 'false'),
+          ),
+        );
 
         return;
       }
