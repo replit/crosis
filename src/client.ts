@@ -1128,9 +1128,12 @@ export class Client<Ctx = null> {
       }
 
       if (this.getConnectionState() !== ConnectionState.CONNECTING) {
+        // between the time we started the connect call and now the client changed state.
+        // without hitting the abort controller.
+
         this.onUnrecoverableError(
           new Error(
-            'Client in wrong state during connect(); connected=' +
+            'Client entered wrong state during connect(); connected=' +
               (this.getConnectionState() === ConnectionState.CONNECTED ? 'true' : 'false'),
           ),
         );
