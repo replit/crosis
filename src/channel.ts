@@ -95,7 +95,12 @@ export class Channel {
    */
   public onCommand = (listener: (cmd: api.Command) => void): (() => void) => {
     if (this.status === 'closed') {
-      const e = new Error('Trying to listen to commands on a closed channel for ' + this.service);
+      const e = new Error(
+        'Trying to listen to commands on a closed channel ' +
+          (this.name ? `(${this.name})` : '') +
+          ' for ' +
+          (this.id === 0 ? 'channel 0' : this.service),
+      );
       this.onUnrecoverableError(e);
 
       throw e;
