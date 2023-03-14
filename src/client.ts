@@ -1128,7 +1128,15 @@ export class Client<Ctx = null> {
       }
 
       if (this.getConnectionState() !== ConnectionState.CONNECTING) {
-        this.onUnrecoverableError(new Error('Client was closed before connecting'));
+        // between the time we started the connect call and now the client changed state.
+        // without hitting the abort controller.
+
+        this.onUnrecoverableError(
+          new Error(
+            'Client entered wrong state during connect(); connected=' +
+              (this.getConnectionState() === ConnectionState.CONNECTED ? 'true' : 'false'),
+          ),
+        );
 
         return;
       }
