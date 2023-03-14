@@ -295,8 +295,7 @@ export class Client<Ctx = null> {
 
     this.debug({
       type: 'breadcrumb',
-      message: 'open',
-      data: { polling: false },
+      message: 'status:open',
     });
 
     this.chan0Cb = cb;
@@ -401,8 +400,6 @@ export class Client<Ctx = null> {
 
     this.channelRequests.push(channelRequest);
 
-    const serviceName = typeof options.service === 'string' ? options.service : 'from thunk';
-
     if (this.getConnectionState() === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
       // If we're not connected, then the request to open will go out once we're connected.
       // If there are channels with the same name then this request is queued after the other
@@ -411,10 +408,11 @@ export class Client<Ctx = null> {
     } else {
       this.debug({
         type: 'breadcrumb',
-        message: 'open channel delayed',
+        message: 'client:openChannel:delayed',
         data: {
           connectionState: this.getConnectionState(),
-          service: serviceName,
+          service: channelRequest.options.service,
+          name: channelRequest.options.name,
         },
       });
     }
@@ -423,10 +421,11 @@ export class Client<Ctx = null> {
       if (channelRequest.closeRequested) {
         this.debug({
           type: 'breadcrumb',
-          message: 'abandoning close request',
+          message: 'client:closeChannel:already requested',
           data: {
             channelId: channelRequest.channelId,
-            service: serviceName,
+            service: channelRequest.options.service,
+            name: channelRequest.options.name,
           },
         });
 
@@ -438,13 +437,12 @@ export class Client<Ctx = null> {
       if (!channelRequest.isOpen) {
         this.debug({
           type: 'breadcrumb',
-          message: 'close channel deemed unnecessary',
+          message: 'client:closeChannel:channel not open',
           data: {
-            channelsCount: Object.keys(this.channels).length,
-            requestsCount: this.channelRequests.length,
             connectionState: this.getConnectionState(),
             channelId: channelRequest.channelId,
-            service: serviceName,
+            service: channelRequest.options.service,
+            name: channelRequest.options.name,
           },
         });
 
@@ -477,13 +475,11 @@ export class Client<Ctx = null> {
 
     const { skip } = options;
     if (skip && skip(this.connectOptions.context)) {
-      const serviceName = typeof options.service === 'string' ? options.service : 'from thunk';
-
       this.debug({
         type: 'breadcrumb',
-        message: 'open channel skipped',
+        message: 'requestOpenChannel:explicit skip',
         data: {
-          service: serviceName,
+          service: options.service,
           name: options.name,
         },
       });
@@ -558,7 +554,7 @@ export class Client<Ctx = null> {
 
       this.debug({
         type: 'breadcrumb',
-        message: 'openChanres',
+        message: 'requestOpenChannel:openChanRes',
         data: {
           id,
           state,
@@ -651,7 +647,7 @@ export class Client<Ctx = null> {
 
     this.debug({
       type: 'breadcrumb',
-      message: 'requestChannelClose',
+      message: 'requestCloseChannel',
       data: {
         id: channelId,
         name: channelRequest.options.name,
@@ -669,7 +665,7 @@ export class Client<Ctx = null> {
     if (res.channelClosed) {
       this.debug({
         type: 'breadcrumb',
-        message: 'requestChannelClose:chan0Closed',
+        message: 'requestCloseChannel:chan0Closed',
         data: {
           id: channelId,
           name: channelRequest.options.name,
@@ -701,7 +697,7 @@ export class Client<Ctx = null> {
 
       this.debug({
         type: 'breadcrumb',
-        message: 'requestChannelClose:closeChanRes',
+        message: 'requestCloseChannel:closeChanRes',
         data: {
           id: channelId,
           name: channelRequest.options.name,
@@ -756,7 +752,7 @@ export class Client<Ctx = null> {
   public close = ({ expectReconnect } = { expectReconnect: false }): void => {
     this.debug({
       type: 'breadcrumb',
-      message: expectReconnect ? 'user temporary close' : 'user close',
+      message: expectReconnect ? 'close:temporary' : 'close:intentional',
     });
 
     if (!this.chan0Cb || !this.connectOptions) {
@@ -790,7 +786,7 @@ export class Client<Ctx = null> {
    */
   public destroy = (): void => {
     this.destroyed = true;
-    this.debug({ type: 'breadcrumb', message: 'destroy' });
+    this.debug({ type: 'breadcrumb', message: 'status:destroy' });
 
     if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
       this.close({
@@ -955,7 +951,7 @@ export class Client<Ctx = null> {
   }) => {
     this.debug({
       type: 'breadcrumb',
-      message: 'connecting',
+      message: 'status:connecting',
       data: {
         connectionState: this.connectionState,
         connectTries: tryCount,
@@ -1146,7 +1142,7 @@ export class Client<Ctx = null> {
       // Report that we fellback to polling
       this.debug({
         type: 'breadcrumb',
-        message: 'polling fallback',
+        message: 'websocket:polling fallback',
       });
     }
 
@@ -1262,7 +1258,7 @@ export class Client<Ctx = null> {
     const { timeout } = this.connectOptions;
     if (timeout !== null) {
       cancelTimeout = () => {
-        this.debug({ type: 'breadcrumb', message: 'cancel timeout' });
+        this.debug({ type: 'breadcrumb', message: 'timeout:cancel' });
 
         if (this.connectTimeoutId) {
           clearTimeout(this.connectTimeoutId);
@@ -1271,14 +1267,14 @@ export class Client<Ctx = null> {
       };
 
       resetTimeout = () => {
-        this.debug({ type: 'breadcrumb', message: 'reset timeout' });
+        this.debug({ type: 'breadcrumb', message: 'timeout:reset' });
 
         if (this.connectTimeoutId) {
           clearTimeout(this.connectTimeoutId);
         }
 
         this.connectTimeoutId = setTimeout(() => {
-          this.debug({ type: 'breadcrumb', message: 'connect timeout' });
+          this.debug({ type: 'breadcrumb', message: 'timeout:hit' });
 
           if (!onFailed) {
             this.onUnrecoverableError(
@@ -1332,7 +1328,7 @@ export class Client<Ctx = null> {
 
       this.debug({
         type: 'breadcrumb',
-        message: 'containerState',
+        message: 'container:state',
         data: state,
       });
 
@@ -1436,7 +1432,7 @@ export class Client<Ctx = null> {
     if (tryCount >= MAX_RETRY_COUNT && this.redirectInitiatorURL) {
       this.debug({
         type: 'breadcrumb',
-        message: 'redirectInitiatorFallback',
+        message: 'client:redirectInitiatorFallback',
         data: {
           connectionState: this.connectionState,
           connectTries: tryCount,
@@ -1445,6 +1441,7 @@ export class Client<Ctx = null> {
           wsReadyState: this.ws ? this.ws.readyState : undefined,
         },
       });
+
       return this.redirectInitiatorFallback();
     }
 
@@ -1459,7 +1456,7 @@ export class Client<Ctx = null> {
 
       this.debug({
         type: 'breadcrumb',
-        message: 'retrying',
+        message: 'status:retrying',
         data: {
           connectionState: this.connectionState,
           connectTries: tryCount,
@@ -1496,14 +1493,6 @@ export class Client<Ctx = null> {
     const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
 
     if (this.ws == null) {
-      this.debug({
-        type: 'breadcrumb',
-        message: 'calling send on a closed client',
-        data: {
-          channelId: cmd.channel,
-        },
-      });
-
       this.onUnrecoverableError(new Error('Calling send on a closed client'));
 
       return;
@@ -1577,7 +1566,7 @@ export class Client<Ctx = null> {
 
       this.debug({
         type: 'breadcrumb',
-        message: 'wsclose',
+        message: 'websocket:close',
         data: {
           event,
         },
@@ -1604,7 +1593,7 @@ export class Client<Ctx = null> {
     // note that CONNECTED is set _before_ the chan0Cb to match the
     // pre-10.1 behavior of state being CONNECTED inside the chan0Cb.
     this.setConnectionState(ConnectionState.CONNECTED);
-    this.debug({ type: 'breadcrumb', message: 'connected!' });
+    this.debug({ type: 'breadcrumb', message: 'status:connected' });
 
     this.channelRequests.forEach((channelRequest) => {
       this.requestOpenChannel(channelRequest);
@@ -1645,7 +1634,7 @@ export class Client<Ctx = null> {
 
     this.debug({
       type: 'breadcrumb',
-      message: 'handle close',
+      message: 'client:handleClose',
       data: {
         closeReason: closeResult.closeReason,
         connectionState: this.getConnectionState(),
@@ -1678,17 +1667,14 @@ export class Client<Ctx = null> {
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
 
-      const serviceName =
-        typeof channelRequest.options.service === 'string'
-          ? channelRequest.options.service
-          : 'from thunk';
-
       this.debug({
         type: 'breadcrumb',
-        message: 'handle channel close',
+        message: 'client:handleClose:closing channel',
         data: {
           channelId: channelRequest.channelId,
-          serviceName,
+          service: channelRequest.options.service,
+          name: channelRequest.options.name,
+
           closeRequested: channelRequest.closeRequested,
           channelRequestIsOpen: channelRequest.isOpen,
           willChannelReconnect,
@@ -1746,9 +1732,9 @@ export class Client<Ctx = null> {
       for (const channel of Object.values(this.channels)) {
         this.debug({
           type: 'breadcrumb',
-          message: 'out of sync channel',
+          message: 'client:handleClose:out of sync',
           data: {
-            id: channel.id,
+            channelId: channel.id,
             status: channel.status,
             service: channel.service,
             name: channel.name,
@@ -1795,7 +1781,7 @@ export class Client<Ctx = null> {
 
       this.debug({
         type: 'breadcrumb',
-        message: 'client closed',
+        message: 'status:closed',
       });
 
       return;
@@ -1803,7 +1789,7 @@ export class Client<Ctx = null> {
 
     this.debug({
       type: 'breadcrumb',
-      message: 'reconnecting',
+      message: 'status:reconnecting',
     });
 
     this.connect({ tryCount: 0, websocketFailureCount: 0 });
@@ -1815,7 +1801,7 @@ export class Client<Ctx = null> {
 
     this.debug({
       type: 'breadcrumb',
-      message: 'cleanupSocket',
+      message: 'websocket:cleanup',
       data: {
         hasWs: Boolean(ws),
         readyState: ws ? ws.readyState : null,
@@ -1841,7 +1827,7 @@ export class Client<Ctx = null> {
     if (ws.readyState === 0 || ws.readyState === 1) {
       this.debug({
         type: 'breadcrumb',
-        message: 'wsclose',
+        message: 'websocket:close',
       });
 
       ws.close();
@@ -1852,7 +1838,7 @@ export class Client<Ctx = null> {
   private onUnrecoverableError = (e: Error) => {
     this.debug({
       type: 'breadcrumb',
-      message: 'unrecoverable error',
+      message: 'onUnrecoverableError',
       data: {
         message: e.message,
       },
@@ -1932,7 +1918,7 @@ export class Client<Ctx = null> {
   private handleRedirect = (url: string) => {
     this.debug({
       type: 'breadcrumb',
-      message: 'handling redirect',
+      message: 'client:handleRedirect',
       data: {
         connectionMetadata: this.connectionMetadata,
       },

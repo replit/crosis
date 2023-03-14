@@ -166,7 +166,7 @@ concurrent('client retries and caches tokens', (done) => {
 
   let reconnectCount = 0;
   client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'client closed') {
+    if (log.type === 'breadcrumb' && log.message === 'status:closed') {
       expect(fetchConnectionMetadata).toHaveBeenCalledTimes(1);
       expect(onConnect).not.toHaveBeenCalled();
       done();
@@ -174,7 +174,7 @@ concurrent('client retries and caches tokens', (done) => {
       return;
     }
 
-    if (log.type !== 'breadcrumb' || log.message !== 'retrying') {
+    if (log.type !== 'breadcrumb' || log.message !== 'status:retrying') {
       return;
     }
 
@@ -214,7 +214,7 @@ concurrent('client retries but does not cache tokens', (done) => {
 
   let reconnectCount = 0;
   client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'client closed') {
+    if (log.type === 'breadcrumb' && log.message === 'status:closed') {
       expect(fetchConnectionMetadata.mock.calls.length).toBeGreaterThan(1);
       expect(onConnect).not.toHaveBeenCalled();
       done();
@@ -222,7 +222,7 @@ concurrent('client retries but does not cache tokens', (done) => {
       return;
     }
 
-    if (log.type !== 'breadcrumb' || log.message !== 'retrying') {
+    if (log.type !== 'breadcrumb' || log.message !== 'status:retrying') {
       return;
     }
     reconnectCount += 1;
@@ -1026,7 +1026,7 @@ concurrent('client is closed while reconnecting', (done) => {
 
   const client = getClient(done);
   client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'reconnecting') {
+    if (log.type === 'breadcrumb' && log.message === 'status:reconnecting') {
       setTimeout(() => {
         client.close();
       });
@@ -1068,7 +1068,7 @@ concurrent(
 
     let didLogFallback = false;
     client.onDebugLog((log) => {
-      if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
+      if (log.type === 'breadcrumb' && log.message === 'websocket:polling fallback') {
         didLogFallback = true;
       }
     });
@@ -1106,7 +1106,7 @@ concurrent(
     const onConnect = jest.fn();
     client.setUnrecoverableErrorHandler(() => {});
     client.onDebugLog((log) => {
-      if (log.type === 'breadcrumb' && log.message === 'client closed') {
+      if (log.type === 'breadcrumb' && log.message === 'status:closed') {
         expect(didLogFallback).toBe(false);
         expect(onConnect).not.toHaveBeenCalled();
 
@@ -1120,7 +1120,7 @@ concurrent(
     client.onDebugLog((log) => {
       if (
         log.type === 'breadcrumb' &&
-        log.message === 'connecting' &&
+        log.message === 'status:connecting' &&
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (log.data as Record<string, any>)?.connectTries === 4
       ) {
@@ -1128,7 +1128,7 @@ concurrent(
           client.destroy();
         });
       }
-      if (log.type === 'breadcrumb' && log.message === 'polling fallback') {
+      if (log.type === 'breadcrumb' && log.message === 'websocket:polling fallback') {
         didLogFallback = true;
       }
     });
@@ -1156,7 +1156,7 @@ concurrent(
     const timeout = 2000;
 
     client.onDebugLog((log) => {
-      if (log.type === 'breadcrumb' && log.message === 'connecting') {
+      if (log.type === 'breadcrumb' && log.message === 'status:connecting') {
         setTimeout(() => {
           client.close();
 
@@ -1218,7 +1218,7 @@ concurrent('fetch abort signal works as expected', (done) => {
   const onConnect = jest.fn();
 
   client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'client closed') {
+    if (log.type === 'breadcrumb' && log.message === 'status:closed') {
       // wait for the abort signal to be handled
       expect(onAbort).toHaveBeenCalledTimes(1);
       expect(onConnect).not.toHaveBeenCalled();

@@ -60,7 +60,7 @@ describe('retry handling', () => {
     );
 
     client.onDebugLog((log) => {
-      if (log.type === 'breadcrumb' && log.message === 'unrecoverable error') {
+      if (log.type === 'breadcrumb' && log.message === 'onUnrecoverableError') {
         expect(tryCount).toBe(1);
 
         done();
