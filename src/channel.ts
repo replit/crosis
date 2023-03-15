@@ -15,7 +15,7 @@ export class Channel {
   /**
    * The name of the service associated with the channel.
    */
-  public readonly service?: string;
+  public readonly service: string;
 
   /**
    * The current connection status of the channel.
@@ -71,7 +71,7 @@ export class Channel {
   }: {
     id: number;
     name?: string;
-    service?: string;
+    service: string;
     send: (cmd: api.Command) => void;
     onUnrecoverableError: (e: Error) => void;
   }) {
@@ -95,7 +95,12 @@ export class Channel {
    */
   public onCommand = (listener: (cmd: api.Command) => void): (() => void) => {
     if (this.status === 'closed') {
-      const e = new Error('Trying to listen to commands on a closed channel for ' + this.service);
+      const e = new Error(
+        'Trying to listen to commands on a closed channel ' +
+          (this.name ? `(${this.name})` : '') +
+          ' for ' +
+          this.service,
+      );
       this.onUnrecoverableError(e);
 
       throw e;

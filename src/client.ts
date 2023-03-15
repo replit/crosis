@@ -1021,6 +1021,7 @@ export class Client<Ctx = null> {
     const chan0 = new Channel({
       id: 0,
       name: 'chan0',
+      service: 'chan0',
       onUnrecoverableError: this.onUnrecoverableError,
       send: this.send,
     });
