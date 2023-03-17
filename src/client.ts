@@ -1477,6 +1477,14 @@ export class Client<Ctx = null> {
           wsReadyState: this.ws ? this.ws.readyState : undefined,
         },
       });
+
+      if (this.fetchTokenAbortController) {
+        // this can happen while we're fetching the token. if so, when we
+        // close chan0, we need to know we're aborted for that request.
+        this.fetchTokenAbortController.abort();
+        this.fetchTokenAbortController = null;
+      }
+
       chan0.handleClose({ initiator: 'client', willReconnect: true });
       delete this.channels[0];
 
