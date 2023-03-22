@@ -89,27 +89,21 @@ export type DebugLogBreadcrumb<Ctx> =
       type: 'breadcrumb';
       message:
         | 'constructor'
-        | 'connected!'
-        | 'user close'
-        | 'user temporary close'
-        | 'client closed'
-        | 'cancel timeout'
-        | 'reset timeout'
-        | 'connect timeout'
-        | 'polling fallback'
-        | 'reconnecting'
-        | 'destroy';
+        | 'status:open'
+        | 'status:connected'
+        | 'status:closed'
+        | 'status:reconnecting'
+        | 'status:destroy'
+        | 'close:intentional'
+        | 'close:temporary'
+        | 'timeout:cancel'
+        | 'timeout:reset'
+        | 'timeout:hit'
+        | 'websocket:polling fallback';
     }
   | {
       type: 'breadcrumb';
-      message: 'open';
-      data: {
-        polling: false;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'connecting';
+      message: 'status:connecting';
       data: {
         connectionState: ConnectionState;
         connectTries: number;
@@ -120,12 +114,34 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'openChanres';
+      message: 'status:retrying';
       data: {
-        id: number;
-        state: api.OpenChannelRes['state'];
-        error: string;
-        ref: string;
+        connectionState: ConnectionState;
+        connectTries: number;
+        websocketFailureCount: number;
+        error: Error;
+        wsReadyState?: WebSocket['readyState'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'container:state';
+      data: api.ContainerState.State;
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'websocket:close';
+      data?: {
+        event: CloseEvent | Event;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'websocket:cleanup';
+      data: {
+        hasWs: boolean;
+        readyState: WebSocket['readyState'] | null;
+        connectionState: ConnectionState;
       };
     }
   | {
@@ -140,7 +156,25 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'requestChannelClose';
+      message: 'requestOpenChannel:openChanRes';
+      data: {
+        id: number;
+        state: api.OpenChannelRes['state'];
+        error: string;
+        ref: string;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestOpenChannel:explicit skip';
+      data: {
+        service: ChannelOptions<Ctx>['service'];
+        name: ChannelOptions<Ctx>['name'];
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'requestCloseChannel';
       data: {
         id: number;
         name: ChannelOptions<Ctx>['name'];
@@ -149,7 +183,7 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'requestChannelClose:chan0Closed';
+      message: 'requestCloseChannel:chan0Closed';
       data: {
         id: number;
         name: ChannelOptions<Ctx>['name'];
@@ -158,7 +192,7 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'requestChannelClose:closeChanRes';
+      message: 'requestCloseChannel:closeChanRes';
       data: {
         id: number;
         name: ChannelOptions<Ctx>['name'];
@@ -168,7 +202,7 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'retrying';
+      message: 'client:redirectInitiatorFallback';
       data: {
         connectionState: ConnectionState;
         connectTries: number;
@@ -179,56 +213,27 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'redirectInitiatorFallback';
-      data: {
-        connectionState: ConnectionState;
-        connectTries: number;
-        websocketFailureCount: number;
-        error: Error;
-        wsReadyState?: WebSocket['readyState'];
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'containerState';
-      data: api.ContainerState.State;
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'wsclose';
-      data?: {
-        event: CloseEvent | Event;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'cleanupSocket';
-      data: {
-        hasWs: boolean;
-        readyState: WebSocket['readyState'] | null;
-        connectionState: ConnectionState;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'unrecoverable error';
-      data: {
-        message: string;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'handling redirect';
+      message: 'client:handleRedirect';
       data: {
         connectionMetadata: GovalMetadata | null;
       };
     }
   | {
       type: 'breadcrumb';
-      message: 'handle channel close';
+      message: 'client:handleClose';
+      data: {
+        closeReason: ClientCloseReason;
+        connectionState: ConnectionState;
+      };
+    }
+  | {
+      type: 'breadcrumb';
+      message: 'client:handleClose:closing channel';
       data: {
         channelId: number | null;
-        serviceName: string | undefined;
+        service: ChannelOptions<Ctx>['service'];
+        name: ChannelOptions<Ctx>['name'];
+
         closeRequested: boolean;
         channelRequestIsOpen: boolean;
         willChannelReconnect: boolean;
@@ -237,16 +242,9 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'calling send on a closed client';
+      message: 'client:handleClose:out of sync';
       data: {
-        channelId: number;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'out of sync channel';
-      data: {
-        id: number | null;
+        channelId: number | null;
         status: string;
         service: string | undefined;
         name: ChannelOptions<Ctx>['name'];
@@ -254,64 +252,37 @@ export type DebugLogBreadcrumb<Ctx> =
     }
   | {
       type: 'breadcrumb';
-      message: 'channels on close';
+      message: 'client:openChannel:delayed';
       data: {
-        id: number | null;
-        status: string;
-        service: string | undefined;
+        service: ChannelOptions<Ctx>['service'];
         name: ChannelOptions<Ctx>['name'];
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'handle close';
-      data: {
-        closeReason: ClientCloseReason;
         connectionState: ConnectionState;
       };
     }
   | {
       type: 'breadcrumb';
-      message: 'open channel delayed';
+      message: 'client:closeChannel:channel not open';
       data: {
-        connectionState: ConnectionState;
-        service: string | undefined;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'close channel deemed unnecessary';
-      data: {
-        connectionState: ConnectionState;
         channelId: number | null;
-        service: string;
-        channelsCount: number;
-        requestsCount: number;
-      };
-    }
-  | {
-      type: 'breadcrumb';
-      message: 'open channel skipped';
-      data: {
-        service: string | undefined;
+        service: ChannelOptions<Ctx>['service'];
         name: ChannelOptions<Ctx>['name'];
+        connectionState: ConnectionState;
       };
     }
   | {
       type: 'breadcrumb';
-      message: 'abandoning close request';
+      message: 'client:closeChannel:already requested';
       data: {
-        service: string;
         channelId: number | null;
+        service: ChannelOptions<Ctx>['service'];
+        name: ChannelOptions<Ctx>['name'];
       };
     }
   | {
       type: 'breadcrumb';
-      message: 'requestOpenChannel: channel already exists';
+      message: 'onUnrecoverableError';
       data: {
-        id: number;
-        name: ChannelOptions<Ctx>['name'];
-        service: string;
+        message: string;
       };
     };
 
