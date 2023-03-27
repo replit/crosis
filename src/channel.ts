@@ -114,6 +114,26 @@ export class Channel {
     };
   };
 
+  private wrapError = (e: CrosisError, cmd: api.ICommand): CrosisError => {
+    return new CrosisError(
+      e.message,
+      {
+        ...e.extras,
+        command: cmd,
+        // ref identifies if this was a request or a send.
+        commandRef: cmd.ref,
+        // keys retained separately to address potential privacy filtering.
+        commandKeys: Object.keys(cmd),
+        channelName: this.name,
+        channelId: this.id,
+      },
+      {
+        ...e.tags,
+        service: this.service,
+      },
+    );
+  };
+
   /**
    * Sends a command on the channel
    *
@@ -121,15 +141,16 @@ export class Channel {
    */
   public send = (cmdJson: api.ICommand): void => {
     if (this.status === 'closed') {
-      const e = new CrosisError('Calling send on closed channel for ' + this.service);
+      const e = this.wrapError(new CrosisError('Calling send on closed channel.'), cmdJson);
       this.onUnrecoverableError(e);
 
       throw e;
     }
 
     if (this.status === 'closing') {
-      const e = new CrosisError(
-        'Cannot send any more commands after a close request on channel for ' + this.service,
+      const e = this.wrapError(
+        new CrosisError('Cannot send any more commands after a close request on channel'),
+        cmdJson,
       );
       this.onUnrecoverableError(e);
 
