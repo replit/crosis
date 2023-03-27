@@ -1081,6 +1081,13 @@ export class Client<Ctx = null> {
           err = new CrosisError('Unknown error when fetching connection metadata');
         }
 
+        // wrap the error with some context.
+        err = new CrosisError(
+          err.message,
+          { ...err.extras, from: 'fetchConnectionMetadata' },
+          err.tags,
+        );
+
         this.onUnrecoverableError(err);
 
         return;
