@@ -1148,7 +1148,7 @@ export class Client<Ctx = null> {
       }
 
       if (connectionMetadata.error) {
-        this.onUnrecoverableError(connectionMetadata.error);
+        this.onUnrecoverableError(CrosisError.fromError(connectionMetadata.error));
 
         return;
       }

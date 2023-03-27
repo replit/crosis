@@ -15,4 +15,8 @@ export default class CrosisError extends Error {
     this.extras = extras;
     this.tags = tags;
   }
+
+  static fromError(error: Error): CrosisError {
+    return new CrosisError(error.message);
+  }
 }
