@@ -17,6 +17,7 @@ import type {
   DebugLog,
   OpenOptions,
 } from './types';
+import CrosisError from './util/CrosisError';
 
 // Maximum amount of retries before connecting back to the
 // redirect initiator (only effective after a redirect)
@@ -35,7 +36,7 @@ type CloseResult =
     }
   | {
       closeReason: ClientCloseReason.Error;
-      error: Error;
+      error: CrosisError;
     };
 
 type ChannelRequest<Ctx> =
@@ -149,7 +150,7 @@ export class Client<Ctx = null> {
    *
    * @hidden
    */
-  private userUnrecoverableErrorHandler: ((e: Error) => void) | null;
+  private userUnrecoverableErrorHandler: ((e: CrosisError) => void) | null;
 
   /**
    * The connection might require multiple retries to be established.
@@ -271,7 +272,7 @@ export class Client<Ctx = null> {
    */
   public open = (options: OpenOptions<Ctx>, cb: OpenChannelCb<Ctx>): void => {
     if (this.chan0Cb) {
-      const error = new Error('You must call `close` before opening the client again');
+      const error = new CrosisError('You must call `close` before opening the client again');
       this.onUnrecoverableError(error);
 
       // throw to stop the execution of the caller
@@ -279,7 +280,7 @@ export class Client<Ctx = null> {
     }
 
     if (this.destroyed) {
-      const error = new Error('Client has been destroyed and cannot be re-used');
+      const error = new CrosisError('Client has been destroyed and cannot be re-used');
       this.onUnrecoverableError(error);
 
       // throw to stop the execution of the caller
@@ -374,7 +375,7 @@ export class Client<Ctx = null> {
       // The protocol forbids opening a channel with the same name, so we're gonna prevent that early
       // so that we can give the caller a good stack trace to work with.
       // If the channel is queued for closure or is closing then we allow it.
-      const error = new Error(`Channel with name ${options.name} already opened`);
+      const error = new CrosisError(`Channel with name ${options.name} already opened`);
       this.onUnrecoverableError(error);
 
       // throw to stop the execution of the caller
@@ -382,7 +383,7 @@ export class Client<Ctx = null> {
     }
 
     if (this.destroyed) {
-      const error = new Error('Client has been destroyed and is unusable');
+      const error = new CrosisError('Client has been destroyed and is unusable');
       this.onUnrecoverableError(error);
 
       // throw to stop the execution of the caller
@@ -468,7 +469,7 @@ export class Client<Ctx = null> {
     const { options, openChannelCb } = channelRequest;
 
     if (!this.connectOptions) {
-      this.onUnrecoverableError(new Error('Expected connectionOptions'));
+      this.onUnrecoverableError(new CrosisError('Expected connectionOptions'));
 
       return;
     }
@@ -496,7 +497,7 @@ export class Client<Ctx = null> {
     }
 
     if (channelRequest.channelId) {
-      this.onUnrecoverableError(new Error('Unexpected channelId'));
+      this.onUnrecoverableError(new CrosisError('Unexpected channelId'));
 
       return;
     }
@@ -545,7 +546,7 @@ export class Client<Ctx = null> {
       dispose();
 
       if (cmd.openChanRes == null) {
-        this.onUnrecoverableError(new Error('Expected openChanRes on command'));
+        this.onUnrecoverableError(new CrosisError('Expected openChanRes on command'));
 
         return;
       }
@@ -564,27 +565,27 @@ export class Client<Ctx = null> {
       });
 
       if (!this.connectOptions) {
-        this.onUnrecoverableError(new Error('Expected connectionOptions'));
+        this.onUnrecoverableError(new CrosisError('Expected connectionOptions'));
 
         return;
       }
 
       if (state === api.OpenChannelRes.State.ERROR) {
         this.onUnrecoverableError(
-          new Error(`Channel open resulted with an error: ${error || 'with no message'}`),
+          new CrosisError(`Channel open resulted with an error: ${error || 'with no message'}`),
         );
 
         return;
       }
 
       if (typeof id !== 'number' || typeof state !== 'number') {
-        this.onUnrecoverableError(new Error('Expected state and channel id'));
+        this.onUnrecoverableError(new CrosisError('Expected state and channel id'));
 
         return;
       }
 
       if (this.channels[id] != null) {
-        this.onUnrecoverableError(new Error(`Channel with id ${id} already exists`));
+        this.onUnrecoverableError(new CrosisError(`Channel with id ${id} already exists`));
 
         return;
       }
@@ -625,7 +626,7 @@ export class Client<Ctx = null> {
   /** @hidden */
   private requestCloseChannel = async (channelRequest: ChannelRequest<Ctx>) => {
     if (!channelRequest.isOpen) {
-      this.onUnrecoverableError(new Error('Tried to request a channel close before opening'));
+      this.onUnrecoverableError(new CrosisError('Tried to request a channel close before opening'));
 
       return;
     }
@@ -639,7 +640,7 @@ export class Client<Ctx = null> {
 
     if (!chan0) {
       this.onUnrecoverableError(
-        new Error('Tried to request a channel close but there was no chan0'),
+        new CrosisError('Tried to request a channel close but there was no chan0'),
       );
 
       return;
@@ -674,7 +675,7 @@ export class Client<Ctx = null> {
       });
     } else {
       if (res.closeChanRes == null) {
-        this.onUnrecoverableError(new Error('Expected closeChanRes'));
+        this.onUnrecoverableError(new CrosisError('Expected closeChanRes'));
 
         return;
       }
@@ -682,14 +683,14 @@ export class Client<Ctx = null> {
       const { id } = res.closeChanRes;
 
       if (id == null) {
-        this.onUnrecoverableError(new Error(`Expected id, got ${id}`));
+        this.onUnrecoverableError(new CrosisError(`Expected id, got ${id}`));
 
         return;
       }
 
       if (id !== channelId) {
         this.onUnrecoverableError(
-          new Error(`Expected id from closeChanRes to be ${channelId} got ${id}`),
+          new CrosisError(`Expected id from closeChanRes to be ${channelId} got ${id}`),
         );
 
         return;
@@ -756,7 +757,7 @@ export class Client<Ctx = null> {
     });
 
     if (!this.chan0Cb || !this.connectOptions) {
-      const error = new Error('Must call client.open before closing');
+      const error = new CrosisError('Must call client.open before closing');
       this.onUnrecoverableError(error);
 
       // throw to stop the execution of the caller
@@ -817,7 +818,7 @@ export class Client<Ctx = null> {
     // });
 
     if (!chan) {
-      const error = new Error(`No channel with number ${id}`);
+      const error = new CrosisError(`No channel with number ${id}`);
 
       this.onUnrecoverableError(error);
 
@@ -922,7 +923,9 @@ export class Client<Ctx = null> {
    * clients want to do something different here.
    */
   public onFirewallDenied = () => {
-    this.onUnrecoverableError(new Error("Can't connect to unfirewalled repl from firewall mode"));
+    this.onUnrecoverableError(
+      new CrosisError("Can't connect to unfirewalled repl from firewall mode"),
+    );
   };
 
   /**
@@ -931,7 +934,7 @@ export class Client<Ctx = null> {
    * Unrecoverable errors are internal errors or invariance errors
    * caused by the user mis-using the client.
    */
-  public setUnrecoverableErrorHandler = (onUnrecoverableError: (e: Error) => void): void => {
+  public setUnrecoverableErrorHandler = (onUnrecoverableError: (e: CrosisError) => void): void => {
     this.userUnrecoverableErrorHandler = onUnrecoverableError;
   };
 
@@ -962,52 +965,54 @@ export class Client<Ctx = null> {
     });
 
     if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
-      const error = new Error('Client must be disconnected to connect');
+      const error = new CrosisError('Client must be disconnected to connect');
       this.onUnrecoverableError(error);
 
       throw error;
     }
 
     if (this.ws) {
-      const error = new Error('Unexpected existing websocket instance');
+      const error = new CrosisError('Unexpected existing websocket instance');
       this.onUnrecoverableError(error);
 
       throw error;
     }
 
     if (!this.connectOptions) {
-      const error = new Error('Expected connectionOptions');
+      const error = new CrosisError('Expected connectionOptions');
       this.onUnrecoverableError(error);
 
       throw error;
     }
 
     if (!this.chan0Cb) {
-      this.onUnrecoverableError(new Error('Expected chan0Cb'));
+      this.onUnrecoverableError(new CrosisError('Expected chan0Cb'));
 
       return;
     }
 
     if (this.chan0CleanupCb) {
-      this.onUnrecoverableError(new Error('Unexpected chan0CleanupCb, are you sure you closed'));
+      this.onUnrecoverableError(
+        new CrosisError('Unexpected chan0CleanupCb, are you sure you closed'),
+      );
 
       return;
     }
 
     if (this.channelRequests.some((cr) => cr.isOpen)) {
-      this.onUnrecoverableError(new Error('All channels should be closed when we connect'));
+      this.onUnrecoverableError(new CrosisError('All channels should be closed when we connect'));
 
       return;
     }
 
     if (Object.keys(this.channels).length) {
-      this.onUnrecoverableError(new Error('Found an an unexpected existing channels'));
+      this.onUnrecoverableError(new CrosisError('Found an an unexpected existing channels'));
 
       return;
     }
 
     if (this.connectTimeoutId) {
-      this.onUnrecoverableError(new Error('Unexpected connectTimeoutId'));
+      this.onUnrecoverableError(new CrosisError('Unexpected connectTimeoutId'));
 
       return;
     }
@@ -1044,7 +1049,7 @@ export class Client<Ctx = null> {
 
     if (!this.connectOptions.reuseConnectionMetadata || this.connectionMetadata === null) {
       if (this.fetchTokenAbortController) {
-        this.onUnrecoverableError(new Error('Expected fetchTokenAbortController to be null'));
+        this.onUnrecoverableError(new CrosisError('Expected fetchTokenAbortController to be null'));
 
         return;
       }
@@ -1058,7 +1063,7 @@ export class Client<Ctx = null> {
           abortController.signal,
         );
       } catch (e) {
-        let err: Error;
+        let err: CrosisError;
         if (e instanceof Error) {
           err = e;
         } else if (
@@ -1067,11 +1072,11 @@ export class Client<Ctx = null> {
           'message' in e &&
           typeof (e as Record<string, string>).message === 'string'
         ) {
-          err = new Error((e as Record<string, string>).message);
+          err = new CrosisError((e as Record<string, string>).message);
         } else if (typeof e === 'string') {
-          err = new Error(e);
+          err = new CrosisError(e);
         } else {
-          err = new Error('Unknown error when fetching connection metadata');
+          err = new CrosisError('Unknown error when fetching connection metadata');
         }
 
         this.onUnrecoverableError(err);
@@ -1090,7 +1095,7 @@ export class Client<Ctx = null> {
           // In cases where our abort signal has been called means `client.close` was called
           // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
           this.onUnrecoverableError(
-            new Error(
+            new CrosisError(
               'Expected abort returned from fetchConnectionMetadata to be truthy when the controller aborts',
             ),
           );
@@ -1101,7 +1106,9 @@ export class Client<Ctx = null> {
         // the user shouldn't return abort without the abort signal being called, if aborting is desired
         // client.close should be called
         this.onUnrecoverableError(
-          new Error('Abort should only be truthy returned when the abort signal is triggered'),
+          new CrosisError(
+            'Abort should only be truthy returned when the abort signal is triggered',
+          ),
         );
 
         return;
@@ -1118,7 +1125,7 @@ export class Client<Ctx = null> {
           tryCount: tryCount + 1,
           websocketFailureCount,
           chan0,
-          error: new Error('Retriable error'),
+          error: new CrosisError('Retriable error'),
         });
 
         return;
@@ -1129,7 +1136,7 @@ export class Client<Ctx = null> {
         // without hitting the abort controller.
 
         this.onUnrecoverableError(
-          new Error(
+          new CrosisError(
             'Client entered wrong state during connect(); connected=' +
               (this.getConnectionState() === ConnectionState.CONNECTED ? 'true' : 'false'),
           ),
@@ -1187,16 +1194,16 @@ export class Client<Ctx = null> {
      * 3- ContainerState.SLEEP command
      * 4- User calling `close` before we connect
      */
-    let onFailed: ((err: Error, retriable?: boolean) => void) | null = null;
+    let onFailed: ((err: CrosisError, retriable?: boolean) => void) | null = null;
 
     ws.onerror = () => {
       if (!onFailed) {
-        this.onUnrecoverableError(new Error('Got websocket error but no `onFailed` cb'));
+        this.onUnrecoverableError(new CrosisError('Got websocket error but no `onFailed` cb'));
 
         return;
       }
 
-      onFailed(new Error('WebSocket errored'));
+      onFailed(new CrosisError('WebSocket errored'));
     };
 
     /**
@@ -1204,7 +1211,7 @@ export class Client<Ctx = null> {
      */
     ws.onclose = (event: CloseEvent | Event) => {
       if (!onFailed) {
-        this.onUnrecoverableError(new Error('Got websocket closure but no `onFailed` cb'));
+        this.onUnrecoverableError(new CrosisError('Got websocket closure but no `onFailed` cb'));
 
         return;
       }
@@ -1242,7 +1249,7 @@ export class Client<Ctx = null> {
         }
       }
 
-      onFailed(new Error(errorMessage), retriable);
+      onFailed(new CrosisError(errorMessage), retriable);
     };
 
     ws.onopen = () => {
@@ -1287,13 +1294,13 @@ export class Client<Ctx = null> {
 
           if (!onFailed) {
             this.onUnrecoverableError(
-              new Error('Connecting timed out but there was no `onFailed` cb'),
+              new CrosisError('Connecting timed out but there was no `onFailed` cb'),
             );
 
             return;
           }
 
-          onFailed(new Error('timeout'));
+          onFailed(new CrosisError('timeout'));
         }, timeout);
       };
 
@@ -1328,7 +1335,7 @@ export class Client<Ctx = null> {
       }
 
       if (cmd.containerState.state == null) {
-        this.onUnrecoverableError(new Error('Got containerState but state was not defined'));
+        this.onUnrecoverableError(new CrosisError('Got containerState but state was not defined'));
 
         return;
       }
@@ -1356,12 +1363,12 @@ export class Client<Ctx = null> {
         }
         case StateEnum.SLEEP:
           if (!onFailed) {
-            this.onUnrecoverableError(new Error('Got SLEEP but there was no `onFailed` cb'));
+            this.onUnrecoverableError(new CrosisError('Got SLEEP but there was no `onFailed` cb'));
 
             return;
           }
 
-          onFailed(new Error('Got SLEEP as container state'));
+          onFailed(new CrosisError('Got SLEEP as container state'));
 
           break;
 
@@ -1372,7 +1379,7 @@ export class Client<Ctx = null> {
     const currentChan0 = this.getChannel(0);
     const currentConnectOptions = this.connectOptions;
 
-    onFailed = (error: Error, retriable = true) => {
+    onFailed = (error: CrosisError, retriable = true) => {
       // Make sure this function is not called multiple times.
       onFailed = null;
 
@@ -1384,7 +1391,7 @@ export class Client<Ctx = null> {
 
       if (this.connectOptions !== currentConnectOptions || this.getChannel(0) !== currentChan0) {
         this.onUnrecoverableError(
-          new Error('onFailed got called but client is in a different connecting context'),
+          new CrosisError('onFailed got called but client is in a different connecting context'),
         );
 
         return;
@@ -1418,22 +1425,22 @@ export class Client<Ctx = null> {
     tryCount: number;
     websocketFailureCount: number;
     chan0: Channel;
-    error: Error;
+    error: CrosisError;
   }) => {
     if (this.retryTimeoutId) {
-      this.onUnrecoverableError(new Error('Unexpected existing retryTimeoutId'));
+      this.onUnrecoverableError(new CrosisError('Unexpected existing retryTimeoutId'));
 
       return;
     }
 
     if (!this.chan0Cb) {
-      this.onUnrecoverableError(new Error('Expected chan0Cb when scheduling a retry'));
+      this.onUnrecoverableError(new CrosisError('Expected chan0Cb when scheduling a retry'));
 
       return;
     }
 
     if (!this.connectOptions) {
-      this.onUnrecoverableError(new Error('Expected connectOptions when scheduling a retry'));
+      this.onUnrecoverableError(new CrosisError('Expected connectOptions when scheduling a retry'));
 
       return;
     }
@@ -1456,7 +1463,7 @@ export class Client<Ctx = null> {
 
     this.retryTimeoutId = setTimeout(() => {
       if (!this.chan0Cb) {
-        this.onUnrecoverableError(new Error('Scheduled retry is called after we closed?'));
+        this.onUnrecoverableError(new CrosisError('Scheduled retry is called after we closed?'));
 
         return;
       }
@@ -1502,7 +1509,7 @@ export class Client<Ctx = null> {
     const buffer = cmdBuf.buffer.slice(cmdBuf.byteOffset, cmdBuf.byteOffset + cmdBuf.length);
 
     if (this.ws == null) {
-      this.onUnrecoverableError(new Error('Calling send on a closed client'));
+      this.onUnrecoverableError(new CrosisError('Calling send on a closed client'));
 
       return;
     }
@@ -1540,25 +1547,25 @@ export class Client<Ctx = null> {
    */
   private handleConnect = (chan0: Channel) => {
     if (!this.ws) {
-      this.onUnrecoverableError(new Error('Expected Websocket instance'));
+      this.onUnrecoverableError(new CrosisError('Expected Websocket instance'));
 
       return;
     }
 
     if (!this.connectOptions) {
-      this.onUnrecoverableError(new Error('Expected connectionOptions'));
+      this.onUnrecoverableError(new CrosisError('Expected connectionOptions'));
 
       return;
     }
 
     if (!chan0) {
-      this.onUnrecoverableError(new Error('Expected chan0 to be truthy'));
+      this.onUnrecoverableError(new CrosisError('Expected chan0 to be truthy'));
 
       return;
     }
 
     if (!this.chan0Cb) {
-      this.onUnrecoverableError(new Error('Expected chan0Cb to be truthy'));
+      this.onUnrecoverableError(new CrosisError('Expected chan0Cb to be truthy'));
 
       return;
     }
@@ -1567,7 +1574,7 @@ export class Client<Ctx = null> {
     const onClose = (event: CloseEvent | Event) => {
       if (this.getConnectionState() === ConnectionState.DISCONNECTED) {
         this.onUnrecoverableError(
-          new Error('Got a close event on socket but client is in disconnected state'),
+          new CrosisError('Got a close event on socket but client is in disconnected state'),
         );
 
         return;
@@ -1623,7 +1630,7 @@ export class Client<Ctx = null> {
       // infinite recursion in onUnrecoverableError
       if (this.getConnectionState() === ConnectionState.DISCONNECTED) {
         this.onUnrecoverableError(
-          new Error('handleClose is called but client already disconnected'),
+          new CrosisError('handleClose is called but client already disconnected'),
         );
 
         return;
@@ -1634,7 +1641,7 @@ export class Client<Ctx = null> {
         // websocket, we can't have both at the same time as the abort
         // controller is unset after we fetch the connection metadata.
         this.onUnrecoverableError(
-          new Error('fetchTokenAbortController and websocket exist simultaneously'),
+          new CrosisError('fetchTokenAbortController and websocket exist simultaneously'),
         );
 
         return;
@@ -1754,7 +1761,7 @@ export class Client<Ctx = null> {
       this.channels = {};
 
       this.onUnrecoverableError(
-        new Error('channels out of sync, should have been cleaned up by channelRequests'),
+        new CrosisError('channels out of sync, should have been cleaned up by channelRequests'),
       );
 
       return;
@@ -1770,7 +1777,7 @@ export class Client<Ctx = null> {
     } else if (!this.chan0Cb && closeResult.closeReason !== ClientCloseReason.Error) {
       // if we got here as a result of an error we're not gonna call onUnrecoverableError again
       this.onUnrecoverableError(
-        new Error(
+        new CrosisError(
           '`open` should have been called before `handleClose` (no cleanup or callback function, ' +
             (willClientReconnect ? 'would reconnect' : 'would not reconnect') +
             ')',
@@ -1844,7 +1851,7 @@ export class Client<Ctx = null> {
   };
 
   /** @hidden */
-  private onUnrecoverableError = (e: Error) => {
+  private onUnrecoverableError = (e: CrosisError) => {
     this.debug({
       type: 'breadcrumb',
       message: 'onUnrecoverableError',
@@ -1886,18 +1893,18 @@ export class Client<Ctx = null> {
   private redirectInitiatorFallback = () => {
     if (!this.connectionMetadata) {
       return this.onUnrecoverableError(
-        new Error("client's connectionMetadata is null when redirecting to initiator"),
+        new CrosisError("client's connectionMetadata is null when redirecting to initiator"),
       );
     }
     if (!this.connectOptions) {
       return this.onUnrecoverableError(
-        new Error("client's connectOptions is null when redirecting to initiator"),
+        new CrosisError("client's connectOptions is null when redirecting to initiator"),
       );
     }
 
     if (!this.chan0Cb) {
       return this.onUnrecoverableError(
-        new Error("client's chan0Cb is null when redirecting to initiator"),
+        new CrosisError("client's chan0Cb is null when redirecting to initiator"),
       );
     }
     const context = this.connectOptions.context;
@@ -1934,17 +1941,19 @@ export class Client<Ctx = null> {
     });
     if (!this.connectionMetadata) {
       return this.onUnrecoverableError(
-        new Error("client's connectionMetadata is null when redirecting"),
+        new CrosisError("client's connectionMetadata is null when redirecting"),
       );
     }
     if (!this.connectOptions) {
       return this.onUnrecoverableError(
-        new Error("client's connectOptions is null when redirecting"),
+        new CrosisError("client's connectOptions is null when redirecting"),
       );
     }
 
     if (!this.chan0Cb) {
-      return this.onUnrecoverableError(new Error("client's chan0Cb is null when redirecting"));
+      return this.onUnrecoverableError(
+        new CrosisError("client's chan0Cb is null when redirecting"),
+      );
     }
     const context = this.connectOptions.context;
     const chan0Cb = this.chan0Cb;

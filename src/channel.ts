@@ -1,5 +1,6 @@
 import { api } from '@replit/protocol';
 import type { ChannelCloseReason, RequestResult } from './types';
+import CrosisError from './util/CrosisError';
 
 export class Channel {
   /**
@@ -57,7 +58,7 @@ export class Channel {
    *
    * @hidden
    */
-  private onUnrecoverableError: (e: Error) => void;
+  private onUnrecoverableError: (e: CrosisError) => void;
 
   /**
    * @hidden should only be called by [[Client]]
@@ -73,7 +74,7 @@ export class Channel {
     name?: string;
     service: string;
     send: (cmd: api.Command) => void;
-    onUnrecoverableError: (e: Error) => void;
+    onUnrecoverableError: (e: CrosisError) => void;
   }) {
     this.id = id;
     this.name = name;
@@ -95,7 +96,7 @@ export class Channel {
    */
   public onCommand = (listener: (cmd: api.Command) => void): (() => void) => {
     if (this.status === 'closed') {
-      const e = new Error(
+      const e = new CrosisError(
         'Trying to listen to commands on a closed channel ' +
           (this.name ? `(${this.name})` : '') +
           ' for ' +
@@ -120,14 +121,14 @@ export class Channel {
    */
   public send = (cmdJson: api.ICommand): void => {
     if (this.status === 'closed') {
-      const e = new Error('Calling send on closed channel for ' + this.service);
+      const e = new CrosisError('Calling send on closed channel for ' + this.service);
       this.onUnrecoverableError(e);
 
       throw e;
     }
 
     if (this.status === 'closing') {
-      const e = new Error(
+      const e = new CrosisError(
         'Cannot send any more commands after a close request on channel for ' + this.service,
       );
       this.onUnrecoverableError(e);
