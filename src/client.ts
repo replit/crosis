@@ -1783,6 +1783,10 @@ export class Client<Ctx = null> {
           '`open` should have been called before `handleClose` (no cleanup or callback function, ' +
             (willClientReconnect ? 'would reconnect' : 'would not reconnect') +
             ')',
+          {
+            closeReason: closeResult.closeReason,
+            connectionState: this.getConnectionState(),
+          },
         ),
       );
 
