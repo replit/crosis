@@ -1064,8 +1064,10 @@ export class Client<Ctx = null> {
         );
       } catch (e) {
         let err: CrosisError;
-        if (e instanceof Error) {
+        if (e instanceof CrosisError) {
           err = e;
+        } else if (e instanceof Error) {
+          err = new CrosisError(e.message);
         } else if (
           e &&
           typeof e === 'object' &&
