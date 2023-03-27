@@ -96,11 +96,8 @@ export class Channel {
    */
   public onCommand = (listener: (cmd: api.Command) => void): (() => void) => {
     if (this.status === 'closed') {
-      const e = new CrosisError(
-        'Trying to listen to commands on a closed channel ' +
-          (this.name ? `(${this.name})` : '') +
-          ' for ' +
-          this.service,
+      const e = this.wrapError(
+        new CrosisError('Trying to listen to commands on a closed channel for ' + this.service),
       );
       this.onUnrecoverableError(e);
 
@@ -112,26 +109,6 @@ export class Channel {
     return () => {
       this.onCommandListeners = this.onCommandListeners.filter((l) => l !== listener);
     };
-  };
-
-  private wrapError = (e: CrosisError, cmd: api.ICommand): CrosisError => {
-    return new CrosisError(
-      e.message,
-      {
-        ...e.extras,
-        command: cmd,
-        // ref identifies if this was a request or a send.
-        commandRef: cmd.ref,
-        // keys retained separately to address potential privacy filtering.
-        commandKeys: Object.keys(cmd),
-        channelName: this.name,
-        channelId: this.id,
-      },
-      {
-        ...e.tags,
-        service: this.service,
-      },
-    );
   };
 
   /**
@@ -218,5 +195,38 @@ export class Channel {
 
     this.status = 'closed';
     this.onCommandListeners = [];
+  };
+
+  /**
+   * Append some extra information to an error, appropriate for being forwarded
+   * off to an error capture service.
+   *
+   * @param e - the error to wrap
+   * @param cmd  - the command that was being sent or received when the error occurred
+   * @returns the wrapped error
+   */
+  private wrapError = (e: CrosisError, cmd: api.ICommand | null = null): CrosisError => {
+    return new CrosisError(
+      e.message,
+      {
+        ...e.extras,
+        ...(cmd
+          ? {
+              command: cmd,
+              // ref identifies if this was a request or a send.
+              commandRef: cmd.ref,
+              // keys retained separately to address potential privacy filtering.
+              commandKeys: Object.keys(cmd),
+            }
+          : {}),
+
+        channelName: this.name,
+        channelId: this.id,
+      },
+      {
+        ...e.tags,
+        service: this.service,
+      },
+    );
   };
 }
