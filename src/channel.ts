@@ -118,7 +118,10 @@ export class Channel {
    */
   public send = (cmdJson: api.ICommand): void => {
     if (this.status === 'closed') {
-      const e = this.wrapError(new CrosisError('Calling send on closed channel.'), cmdJson);
+      const e = this.wrapError(
+        new CrosisError('Calling send on closed channel for ' + this.service),
+        cmdJson,
+      );
       this.onUnrecoverableError(e);
 
       throw e;
@@ -126,7 +129,9 @@ export class Channel {
 
     if (this.status === 'closing') {
       const e = this.wrapError(
-        new CrosisError('Cannot send any more commands after a close request on channel'),
+        new CrosisError(
+          'Cannot send any more commands after a close request on channel for ' + this.service,
+        ),
         cmdJson,
       );
       this.onUnrecoverableError(e);
