@@ -12,6 +12,7 @@ export default class CrosisError extends Error {
   ) {
     super(message);
 
+    this.name = 'CrosisError';
     this.extras = extras;
     this.tags = tags;
   }
