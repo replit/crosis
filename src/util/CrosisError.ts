@@ -17,6 +17,9 @@ export default class CrosisError extends Error {
   }
 
   static fromError(error: Error): CrosisError {
-    return new CrosisError(error.message);
+    const crosisError = new CrosisError(error.message);
+    crosisError.stack = error.stack;
+
+    return crosisError;
   }
 }
