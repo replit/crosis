@@ -1,5 +1,6 @@
 import type { api } from '@replit/protocol';
 import type { Channel } from './channel';
+import CrosisError from './util/CrosisError';
 
 export enum ConnectionState {
   CONNECTING = 0,
@@ -119,7 +120,7 @@ export type DebugLogBreadcrumb<Ctx> =
         connectionState: ConnectionState;
         connectTries: number;
         websocketFailureCount: number;
-        error: Error;
+        error: CrosisError;
         wsReadyState?: WebSocket['readyState'];
       };
     }
@@ -207,7 +208,7 @@ export type DebugLogBreadcrumb<Ctx> =
         connectionState: ConnectionState;
         connectTries: number;
         websocketFailureCount: number;
-        error: Error;
+        error: CrosisError;
         wsReadyState?: WebSocket['readyState'];
       };
     }

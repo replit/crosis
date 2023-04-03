@@ -1,5 +1,6 @@
 import * as urllib from 'url';
 import type { ConnectOptions, GovalMetadata } from '../types';
+import CrosisError from './CrosisError';
 
 const BACKOFF_FACTOR = 1.7;
 const MAX_BACKOFF = 15000;
@@ -34,7 +35,7 @@ export function getWebSocketClass(
 ): typeof WebSocket {
   if (WebSocketClass) {
     if (!isWebSocket(WebSocketClass)) {
-      throw new Error('Passed in WebSocket does not look like a standard WebSocket');
+      throw new CrosisError('Passed in WebSocket does not look like a standard WebSocket');
     }
 
     return WebSocketClass;
@@ -42,13 +43,13 @@ export function getWebSocketClass(
 
   if (typeof WebSocket !== 'undefined') {
     if (!isWebSocket(WebSocket)) {
-      throw new Error('Global WebSocket does not look like a standard WebSocket');
+      throw new CrosisError('Global WebSocket does not look like a standard WebSocket');
     }
 
     return WebSocket;
   }
 
-  throw new Error('Please pass in a WebSocket class or add it to global');
+  throw new CrosisError('Please pass in a WebSocket class or add it to global');
 }
 
 /**
