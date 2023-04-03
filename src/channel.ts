@@ -97,10 +97,9 @@ export class Channel {
   public onCommand = (listener: (cmd: api.Command) => void): (() => void) => {
     if (this.status === 'closed') {
       const e = new CrosisError(
-        'Trying to listen to commands on a closed channel ' +
-          (this.name ? `(${this.name})` : '') +
-          ' for ' +
-          this.service,
+        'Trying to listen to commands on a closed channel for ' + this.service,
+        this.getExtras(),
+        { service: this.service },
       );
       this.onUnrecoverableError(e);
 
@@ -121,7 +120,11 @@ export class Channel {
    */
   public send = (cmdJson: api.ICommand): void => {
     if (this.status === 'closed') {
-      const e = new CrosisError('Calling send on closed channel for ' + this.service);
+      const e = new CrosisError(
+        'Calling send on closed channel for ' + this.service,
+        this.getExtras(cmdJson),
+        { service: this.service },
+      );
       this.onUnrecoverableError(e);
 
       throw e;
@@ -130,7 +133,10 @@ export class Channel {
     if (this.status === 'closing') {
       const e = new CrosisError(
         'Cannot send any more commands after a close request on channel for ' + this.service,
+        this.getExtras(cmdJson),
+        { service: this.service },
       );
+
       this.onUnrecoverableError(e);
 
       throw e;
@@ -197,5 +203,29 @@ export class Channel {
 
     this.status = 'closed';
     this.onCommandListeners = [];
+  };
+
+  /**
+   * Generate some information to be appended to an error.
+   *
+   * @param cmd  - the command that was being sent or received when the error occurred
+   * @returns the extras field for the error.
+   */
+  private getExtras = (cmd: api.ICommand | null = null): Record<string, unknown> => {
+    const commandExtras = cmd
+      ? {
+          command: cmd,
+          // ref identifies if this was a request or a send.
+          commandRef: cmd.ref,
+          // keys retained separately to address potential privacy filtering.
+          commandKeys: Object.keys(cmd),
+        }
+      : {};
+
+    return {
+      ...commandExtras,
+      channelName: this.name,
+      channelId: this.id,
+    };
   };
 }

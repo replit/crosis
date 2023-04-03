@@ -1081,6 +1081,13 @@ export class Client<Ctx = null> {
           err = new CrosisError('Unknown error when fetching connection metadata');
         }
 
+        // wrap the error with some context.
+        err = new CrosisError(
+          err.message,
+          { ...err.extras, from: 'fetchConnectionMetadata' },
+          err.tags,
+        );
+
         this.onUnrecoverableError(err);
 
         return;
@@ -1783,6 +1790,10 @@ export class Client<Ctx = null> {
           '`open` should have been called before `handleClose` (no cleanup or callback function, ' +
             (willClientReconnect ? 'would reconnect' : 'would not reconnect') +
             ')',
+          {
+            closeReason: closeResult.closeReason,
+            connectionState: this.getConnectionState(),
+          },
         ),
       );
 
