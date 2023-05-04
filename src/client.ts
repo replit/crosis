@@ -39,6 +39,11 @@ type CloseResult =
       error: CrosisError;
     };
 
+export enum ChannelRequestPriority {
+  High = 'High',
+  Low = 'Low',
+}
+
 type ChannelRequest<Ctx> =
   | {
       options: ChannelOptions<Ctx>;
@@ -47,6 +52,7 @@ type ChannelRequest<Ctx> =
       closeRequested: boolean;
       channelId: number;
       cleanupCb: ReturnType<OpenChannelCb<Ctx>>;
+      priority?: ChannelRequestPriority;
     }
   | {
       options: ChannelOptions<Ctx>;
@@ -55,7 +61,40 @@ type ChannelRequest<Ctx> =
       closeRequested: boolean;
       channelId: null;
       cleanupCb: null;
+      priority?: ChannelRequestPriority;
     };
+
+export function sortByPriority<R extends Pick<ChannelRequest<unknown>, 'priority'>>(a: R, b: R) {
+  if (
+    (a.priority === ChannelRequestPriority.High && b.priority === ChannelRequestPriority.Low) ||
+    (a.priority === ChannelRequestPriority.High && b.priority === undefined)
+  ) {
+    return -1;
+  }
+
+  if (
+    (b.priority === ChannelRequestPriority.High && a.priority === ChannelRequestPriority.Low) ||
+    (b.priority === ChannelRequestPriority.High && a.priority === undefined)
+  ) {
+    return 1;
+  }
+
+  if (
+    (a.priority === ChannelRequestPriority.Low && b.priority === ChannelRequestPriority.High) ||
+    (a.priority === ChannelRequestPriority.Low && b.priority === undefined)
+  ) {
+    return 1;
+  }
+
+  if (
+    (b.priority === ChannelRequestPriority.Low && a.priority === ChannelRequestPriority.High) ||
+    (b.priority === ChannelRequestPriority.Low && a.priority === undefined)
+  ) {
+    return -1;
+  }
+
+  return 0;
+}
 
 export class Client<Ctx = null> {
   /**
@@ -1620,7 +1659,7 @@ export class Client<Ctx = null> {
     this.setConnectionState(ConnectionState.CONNECTED);
     this.debug({ type: 'breadcrumb', message: 'status:connected' });
 
-    this.channelRequests.forEach((channelRequest) => {
+    [...this.channelRequests].sort(sortByPriority).forEach((channelRequest) => {
       this.requestOpenChannel(channelRequest);
     });
 
