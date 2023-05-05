@@ -13,4 +13,5 @@ export {
   OpenChannelCb,
   ChannelCloseReason,
   RequestResult,
+  ChannelRequestPriority,
 } from './types';

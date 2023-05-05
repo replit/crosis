@@ -1,4 +1,5 @@
-import { ChannelRequestPriority, sortByPriority } from '../client';
+import { sortByPriority } from '../client';
+import { ChannelRequestPriority } from '../types';
 
 describe('sortByPriority', () => {
   [
@@ -10,12 +11,24 @@ describe('sortByPriority', () => {
       ],
     },
     {
-      input: [{ priority: ChannelRequestPriority.Low }, { priority: undefined }],
-      expected: [{ priority: undefined }, { priority: ChannelRequestPriority.Low }],
+      input: [
+        { priority: ChannelRequestPriority.Low },
+        { priority: ChannelRequestPriority.Medium },
+      ],
+      expected: [
+        { priority: ChannelRequestPriority.Medium },
+        { priority: ChannelRequestPriority.Low },
+      ],
     },
     {
-      input: [{ priority: undefined }, { priority: ChannelRequestPriority.High }],
-      expected: [{ priority: ChannelRequestPriority.High }, { priority: undefined }],
+      input: [
+        { priority: ChannelRequestPriority.Medium },
+        { priority: ChannelRequestPriority.High },
+      ],
+      expected: [
+        { priority: ChannelRequestPriority.High },
+        { priority: ChannelRequestPriority.Medium },
+      ],
     },
   ].forEach(({ input, expected }, index) => {
     it(`sorts by priority: ${index}`, () => {

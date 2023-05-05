@@ -8,6 +8,7 @@ import {
   FetchConnectionMetadataResult,
   CloseCode,
   ClientCloseReason,
+  ChannelRequestPriority,
 } from './types';
 import type {
   ConnectOptions,
@@ -39,11 +40,6 @@ type CloseResult =
       error: CrosisError;
     };
 
-export enum ChannelRequestPriority {
-  High = 'High',
-  Low = 'Low',
-}
-
 type ChannelRequest<Ctx> =
   | {
       options: ChannelOptions<Ctx>;
@@ -52,7 +48,7 @@ type ChannelRequest<Ctx> =
       closeRequested: boolean;
       channelId: number;
       cleanupCb: ReturnType<OpenChannelCb<Ctx>>;
-      priority?: ChannelRequestPriority;
+      priority: ChannelRequestPriority;
     }
   | {
       options: ChannelOptions<Ctx>;
@@ -61,39 +57,11 @@ type ChannelRequest<Ctx> =
       closeRequested: boolean;
       channelId: null;
       cleanupCb: null;
-      priority?: ChannelRequestPriority;
+      priority: ChannelRequestPriority;
     };
 
-export function sortByPriority<R extends Pick<ChannelRequest<unknown>, 'priority'>>(a: R, b: R) {
-  if (
-    (a.priority === ChannelRequestPriority.High && b.priority === ChannelRequestPriority.Low) ||
-    (a.priority === ChannelRequestPriority.High && b.priority === undefined)
-  ) {
-    return -1;
-  }
-
-  if (
-    (b.priority === ChannelRequestPriority.High && a.priority === ChannelRequestPriority.Low) ||
-    (b.priority === ChannelRequestPriority.High && a.priority === undefined)
-  ) {
-    return 1;
-  }
-
-  if (
-    (a.priority === ChannelRequestPriority.Low && b.priority === ChannelRequestPriority.High) ||
-    (a.priority === ChannelRequestPriority.Low && b.priority === undefined)
-  ) {
-    return 1;
-  }
-
-  if (
-    (b.priority === ChannelRequestPriority.Low && a.priority === ChannelRequestPriority.High) ||
-    (b.priority === ChannelRequestPriority.Low && a.priority === undefined)
-  ) {
-    return -1;
-  }
-
-  return 0;
+export function sortByPriority<R extends { priority: ChannelRequestPriority }>(a: R, b: R) {
+  return a.priority - b.priority;
 }
 
 export class Client<Ctx = null> {
@@ -436,9 +404,11 @@ export class Client<Ctx = null> {
       channelId: null,
       cleanupCb: null,
       closeRequested: false,
+      priority: options.priority ?? ChannelRequestPriority.Medium,
     };
 
     this.channelRequests.push(channelRequest);
+    this.channelRequests.sort(sortByPriority);
 
     if (this.getConnectionState() === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
       // If we're not connected, then the request to open will go out once we're connected.
@@ -1659,7 +1629,7 @@ export class Client<Ctx = null> {
     this.setConnectionState(ConnectionState.CONNECTED);
     this.debug({ type: 'breadcrumb', message: 'status:connected' });
 
-    [...this.channelRequests].sort(sortByPriority).forEach((channelRequest) => {
+    this.channelRequests.forEach((channelRequest) => {
       this.requestOpenChannel(channelRequest);
     });
 
