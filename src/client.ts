@@ -8,6 +8,7 @@ import {
   FetchConnectionMetadataResult,
   CloseCode,
   ClientCloseReason,
+  ChannelRequestPriority,
 } from './types';
 import type {
   ConnectOptions,
@@ -47,6 +48,7 @@ type ChannelRequest<Ctx> =
       closeRequested: boolean;
       channelId: number;
       cleanupCb: ReturnType<OpenChannelCb<Ctx>>;
+      priority: ChannelRequestPriority;
     }
   | {
       options: ChannelOptions<Ctx>;
@@ -55,7 +57,12 @@ type ChannelRequest<Ctx> =
       closeRequested: boolean;
       channelId: null;
       cleanupCb: null;
+      priority: ChannelRequestPriority;
     };
+
+export function sortByPriority<R extends { priority: ChannelRequestPriority }>(a: R, b: R) {
+  return a.priority - b.priority;
+}
 
 export class Client<Ctx = null> {
   /**
@@ -397,9 +404,11 @@ export class Client<Ctx = null> {
       channelId: null,
       cleanupCb: null,
       closeRequested: false,
+      priority: options.priority ?? ChannelRequestPriority.Medium,
     };
 
     this.channelRequests.push(channelRequest);
+    this.channelRequests.sort(sortByPriority);
 
     if (this.getConnectionState() === ConnectionState.CONNECTED && !sameNameChanRequests.length) {
       // If we're not connected, then the request to open will go out once we're connected.

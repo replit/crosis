@@ -340,6 +340,12 @@ interface ServiceThunk<Ctx> {
   (context: Ctx): string;
 }
 
+export enum ChannelRequestPriority {
+  High,
+  Medium,
+  Low,
+}
+
 /**
  * See [[Client.openChannel]]
  */
@@ -348,6 +354,7 @@ export interface ChannelOptions<Ctx> {
   service: string | ServiceThunk<Ctx>;
   action?: api.OpenChannel.Action;
   skip?: (context: Ctx) => boolean;
+  priority?: ChannelRequestPriority;
 }
 
 /**
