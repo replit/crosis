@@ -242,6 +242,7 @@ export class Client<Ctx = null> {
     this.fetchTokenAbortController = null;
     this.destroyed = false;
     this.connectionMetadata = null;
+    this.forceRefetchNextMetadata = false;
     this.redirectInitiatorURL = null;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
