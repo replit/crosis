@@ -158,33 +158,35 @@ concurrent('client retries', (done) => {
   );
 });
 
-concurrent('client retries and caches tokens', (done) => {
+concurrent('client retries and caches tokens when reuseConnectionMetadata: true', (done) => {
   const client = getClient(done);
 
   const fetchConnectionMetadata = jest.fn();
   const onConnect = jest.fn();
 
   let reconnectCount = 0;
-  client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'status:closed') {
-      expect(fetchConnectionMetadata).toHaveBeenCalledTimes(1);
-      expect(onConnect).not.toHaveBeenCalled();
-      done();
+  client.onDebugLog(
+    wrapWithDone(done, (log) => {
+      if (log.type === 'breadcrumb' && log.message === 'status:closed') {
+        expect(fetchConnectionMetadata).toHaveBeenCalledTimes(1);
+        expect(onConnect).not.toHaveBeenCalled();
+        done();
 
-      return;
-    }
+        return;
+      }
 
-    if (log.type !== 'breadcrumb' || log.message !== 'status:retrying') {
-      return;
-    }
+      if (log.type !== 'breadcrumb' || log.message !== 'status:retrying') {
+        return;
+      }
 
-    reconnectCount += 1;
-    if (reconnectCount >= 2) {
-      setTimeout(() => {
-        client.close();
-      });
-    }
-  });
+      reconnectCount += 1;
+      if (reconnectCount >= 2) {
+        setTimeout(() => {
+          client.close();
+        });
+      }
+    }),
+  );
 
   client.open(
     {
@@ -206,51 +208,122 @@ concurrent('client retries and caches tokens', (done) => {
   );
 });
 
-concurrent('client retries but does not cache tokens', (done) => {
-  const client = getClient(done);
+concurrent(
+  'client retries but does not cache tokens when reuseConnectionMetadata: false',
+  (done) => {
+    const client = getClient(done);
 
-  const fetchConnectionMetadata = jest.fn();
-  const onConnect = jest.fn();
+    const fetchConnectionMetadata = jest.fn();
+    const onConnect = jest.fn();
 
-  let reconnectCount = 0;
-  client.onDebugLog((log) => {
-    if (log.type === 'breadcrumb' && log.message === 'status:closed') {
-      expect(fetchConnectionMetadata.mock.calls.length).toBeGreaterThan(1);
-      expect(onConnect).not.toHaveBeenCalled();
-      done();
+    let reconnectCount = 0;
+    client.onDebugLog(
+      wrapWithDone(done, (log) => {
+        if (log.type === 'breadcrumb' && log.message === 'status:closed') {
+          expect(fetchConnectionMetadata.mock.calls.length).toBeGreaterThan(1);
+          expect(onConnect).not.toHaveBeenCalled();
+          done();
 
-      return;
-    }
+          return;
+        }
 
-    if (log.type !== 'breadcrumb' || log.message !== 'status:retrying') {
-      return;
-    }
-    reconnectCount += 1;
-    if (reconnectCount >= 2) {
-      setTimeout(() => {
-        client.close();
-      });
-    }
-  });
+        if (log.type !== 'breadcrumb' || log.message !== 'status:retrying') {
+          return;
+        }
+        reconnectCount += 1;
+        if (reconnectCount >= 2) {
+          setTimeout(() => {
+            client.close();
+          });
+        }
+      }),
+    );
 
-  client.open(
-    {
-      timeout: 1,
-      fetchConnectionMetadata: async () => {
-        fetchConnectionMetadata();
-        return {
-          token: 'test - bad connection metadata retries',
-          gurl: 'ws://invalid.example.com',
-          conmanURL: 'http://invalid.example.com',
-          error: null,
-        };
+    client.open(
+      {
+        timeout: 1,
+        fetchConnectionMetadata: async () => {
+          fetchConnectionMetadata();
+          return {
+            token: 'test - bad connection metadata retries',
+            gurl: 'ws://invalid.example.com',
+            conmanURL: 'http://invalid.example.com',
+            error: null,
+          };
+        },
+        WebSocketClass: WebSocket,
+        context: null,
       },
-      WebSocketClass: WebSocket,
-      context: null,
-    },
-    onConnect,
-  );
-});
+      onConnect,
+    );
+  },
+);
+
+concurrent(
+  'client retries but invalidates cached token when invalidateMetadata is called with reuseConnectionMetadata: true',
+  (done) => {
+    const client = getClient(done);
+
+    const fetchConnectionMetadata = jest.fn();
+    const onConnect = jest.fn();
+
+    let reconnectCount = 0;
+    client.onDebugLog(
+      wrapWithDone(done, (log) => {
+        if (log.type === 'breadcrumb' && log.message === 'status:closed') {
+          expect(onConnect).not.toHaveBeenCalled();
+          done();
+
+          return;
+        }
+
+        if (log.type !== 'breadcrumb' || log.message !== 'status:retrying') {
+          return;
+        }
+
+        reconnectCount += 1;
+
+        if (reconnectCount === 1) {
+          client.invalidateConnectionMetadataForNextReconnect();
+          expect(fetchConnectionMetadata.mock.calls.length).toBe(1);
+        }
+
+        if (reconnectCount === 2) {
+          // we invalidated last time, so should be called again
+          expect(fetchConnectionMetadata.mock.calls.length).toBe(2);
+        }
+
+        if (reconnectCount === 3) {
+          // we did not invalidate last time, so should not be called again
+          expect(fetchConnectionMetadata.mock.calls.length).toBe(2);
+
+          setTimeout(() => {
+            client.close();
+          });
+        }
+      }),
+    );
+
+    client.open(
+      {
+        timeout: 1,
+        reuseConnectionMetadata: true,
+        fetchConnectionMetadata: async () => {
+          fetchConnectionMetadata();
+          return {
+            token: 'test - bad connection metadata retries',
+            gurl: 'ws://invalid.example.com',
+            conmanURL: 'http://invalid.example.com',
+            error: null,
+          };
+        },
+        WebSocketClass: WebSocket,
+        context: null,
+      },
+      onConnect,
+    );
+  },
+);
 
 concurrent('client requests new connection metadata after intentional close', (done) => {
   const client = getClient(done);

@@ -205,6 +205,13 @@ export class Client<Ctx = null> {
   private connectionMetadata: GovalMetadata | null;
 
   /**
+   * Connection options provides a flag to reuse the connection metadata
+   * from the previous connection. This flag allows us to invalidate
+   * the metadata and force a refetch upon the next reconnect or retry.
+   */
+  private forceRefetchNextMetadata: boolean;
+
+  /**
    * URL of the origin of the previous redirect message.
    * This is used to restore the connection in case we get a failure after a redirect.
    * Example:
@@ -953,6 +960,13 @@ export class Client<Ctx = null> {
    */
   public getConnectionMetadata = (): GovalMetadata | null => this.connectionMetadata;
 
+  /**
+   * Invalidates the reuse of connection metadata for the next reconnect or retry attempt.
+   */
+  public invalidateConnectionMetadataForNextReconnect = (): void => {
+    this.forceRefetchNextMetadata = true;
+  };
+
   /** @hidden */
   private connect = async ({
     tryCount,
@@ -1056,7 +1070,11 @@ export class Client<Ctx = null> {
       }
     });
 
-    if (!this.connectOptions.reuseConnectionMetadata || this.connectionMetadata === null) {
+    if (
+      !this.connectOptions.reuseConnectionMetadata ||
+      this.connectionMetadata === null ||
+      this.forceRefetchNextMetadata
+    ) {
       if (this.fetchTokenAbortController) {
         this.onUnrecoverableError(new CrosisError('Expected fetchTokenAbortController to be null'));
 
@@ -1170,6 +1188,7 @@ export class Client<Ctx = null> {
       }
 
       this.connectionMetadata = connectionMetadata;
+      this.forceRefetchNextMetadata = false;
     }
 
     if (websocketFailureCount === 3 && this.connectOptions.pollingHost) {
