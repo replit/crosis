@@ -231,7 +231,10 @@ export class Channel {
         throw new TransactionError(e);
       } else if (behavior === 'ignore') {
         // do nothing
+        return;
       }
+
+      throw new Error('Invalid behavior');
     }
   };
 
