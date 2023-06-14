@@ -11,6 +11,18 @@ type CustomFallbackBehavior = (
 
 type TransactionBehavior = 'retry' | 'continue' | 'throw' | 'ignore' | CustomFallbackBehavior;
 
+class TransactionError extends Error {
+  constructor(private error: Error) {
+    super(error.message);
+  }
+}
+
+class InvariantViolation extends Error {
+  constructor(private error: Error) {
+    super(error.message);
+  }
+}
+
 export class Channel {
   /**
    * The channel's id, this is supplied to us by the container
@@ -182,6 +194,50 @@ export class Channel {
   };
 
   /**
+   * For cross channel.
+   *
+   * transactions(() => {
+   *   const useResult = channel.whatever();
+   *
+   *   useResult.something();
+   *
+   *   channel.another();
+   * }, 'retry');
+   */
+  static transaction = async (
+    fn: () => Promise<RequestResult>,
+    behavior: Omit<TransactionBehavior, 'continue'>,
+    invariant = (e: Error) => true,
+  ) => {
+    try {
+      // TODO: check status closed somehow?
+
+      const result = await fn();
+      return result;
+    } catch (e) {
+      if (!(e instanceof Error)) {
+        throw e;
+      }
+
+      if (!invariant(e)) {
+        throw new InvariantViolation(e);
+      }
+
+      if (behavior === 'retry') {
+        // TODO: add timeout/max retries.
+
+        return transaction(fn, behavior);
+      } else if (behavior === 'throw') {
+        throw new TransactionError(e);
+      } else if (behavior === 'ignore') {
+        // do nothing
+      }
+    }
+  };
+
+  /**
+   * For a given channel.
+   *
    * transaction([
    *  { exec: { args: ['git', 'init'] }}
    *  { exec: { args: ['git', 'add', '.'] }}
