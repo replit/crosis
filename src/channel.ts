@@ -2,6 +2,15 @@ import { api } from '@replit/protocol';
 import type { ChannelCloseReason, RequestResult } from './types';
 import CrosisError from './util/CrosisError';
 
+type CustomFallbackBehavior = (
+  cmds: api.ICommand[],
+  failedIndex: number,
+  successfulResults: RequestResult[],
+  failureResult: RequestResult,
+) => Promise<RequestResult[]>;
+
+type TransactionBehavior = 'retry' | 'continue' | 'throw' | 'ignore' | CustomFallbackBehavior;
+
 export class Channel {
   /**
    * The channel's id, this is supplied to us by the container
