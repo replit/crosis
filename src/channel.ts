@@ -230,7 +230,10 @@ export class Channel {
       } else if (behavior === 'throw') {
         throw new TransactionError(e);
       } else if (behavior === 'ignore') {
-        // do nothing
+        // do nothing, but also return nothing, because we have nothing.
+        // maybe a future concept could attach some partial/yielded results.
+        // up to the point we failed.
+
         return;
       }
 
