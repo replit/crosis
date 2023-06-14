@@ -182,6 +182,46 @@ export class Channel {
   };
 
   /**
+   * transaction([
+   *  { exec: { args: ['git', 'init'] }}
+   *  { exec: { args: ['git', 'add', '.'] }}
+   * ])
+   */
+  public transaction = async (
+    cmds: api.ICommand[],
+    behavior: TransactionBehavior,
+    // TODO: maybe async pattern options, like serialize/fire-and-forget
+  ): Promise<RequestResult[]> => {
+    const responses = [];
+    for (let i = 0; i < cmds.length; i++) {
+      const response = await this.request(cmds[i]);
+
+      if (response.channelClosed) {
+        if (behavior === 'retry') {
+          return this.transaction(cmds, behavior);
+        } else if (behavior === 'continue') {
+          return this.transaction(cmds.slice(i), behavior);
+        } else if (behavior === 'throw') {
+          throw new Error('Channel closed');
+        } else if (typeof behavior === 'function') {
+          return behavior(cmds, i, responses, response);
+        } else if (behavior === 'ignore') {
+          // the channel is closed, so we can't actually make any more requests
+          // so we just return the responses we have.
+
+          return responses;
+        }
+
+        throw new Error('Invalid behavior');
+      }
+
+      responses.push(response);
+    }
+
+    return responses;
+  };
+
+  /**
    * @hidden should only be called by [[Client]]
    *
    * Called when the channel receives a message
