@@ -1853,7 +1853,7 @@ export class Client<Ctx = null> {
 
     // Replace existing error handler so an error doesn't get thrown.
     // We got here after either `handleClose` so it is safe to ignore
-    //  any potential remaining errors
+    // any potential remaining errors
     ws.onerror = () => {};
 
     if (ws.readyState === 0 || ws.readyState === 1) {
