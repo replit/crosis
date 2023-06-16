@@ -919,8 +919,9 @@ export class Client<Ctx = null> {
 
   /**
    * Adds a listener for the "firewall denied" condition, which occurs when
-   * a user from firewalledreplit.com tries to connect to a repl which has
+   * a user from firewalledreplit.com tries to connect to a Repl which has
    * already been started in regular mode.
+   *
    * By default, throw an unrecoverable error, but this can be overridden if
    * clients want to do something different here.
    */
