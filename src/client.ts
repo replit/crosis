@@ -1126,7 +1126,7 @@ export class Client<Ctx = null> {
       }
 
       if (connectionMetadata.error === FetchConnectionMetadataError.Aborted) {
-        // Just return. The user called `client.close leading to a connectionMetadata abort
+        // Just return. The user called `client.close` leading to a connectionMetadata abort
         // chan0Cb will be called with with an error Channel close, no need to do anything here.
         return;
       }
