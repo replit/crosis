@@ -9,7 +9,7 @@ type CustomFallbackBehavior = (
   failureResult: RequestResult,
 ) => Promise<RequestResult[]>;
 
-type TransactionBehavior = 'retry' | 'continue' | 'throw' | 'ignore' | CustomFallbackBehavior;
+type TransactionBehavior = 'retry' | 'continue' | 'throw' | 'ignore';
 
 class TransactionError extends Error {
   constructor(private error: Error) {
@@ -259,8 +259,7 @@ export class Channel {
    */
   public transaction = async (
     cmds: api.ICommand[],
-    behavior: TransactionBehavior,
-    // TODO: maybe async pattern options, like serialize/fire-and-forget
+    behavior: TransactionBehavior | CustomFallbackBehavior,
   ): Promise<RequestResult[]> => {
     const responses = [];
     for (let i = 0; i < cmds.length; i++) {
