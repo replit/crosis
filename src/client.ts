@@ -747,8 +747,6 @@ export class Client<Ctx = null> {
    * - If there's an open WebSocket connection it will be closed
    * - Any open channels will be closed
    *   - Does not clear openChannel requests
-   *   - If a channel never opened, its {@link OpenChannelCb | open channel callback}
-   *     will be called with an error
    *   - Otherwise returned cleanup callback is called
    *
    *  - expectReconnect: if true, the client will expects to try to reconnect,
