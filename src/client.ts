@@ -1273,12 +1273,12 @@ export class Client<Ctx = null> {
     };
 
     /**
-     * If the user specifies a timeout we will short circuit
-     * the connection if we don't get READY from the container
-     * within the specified timeout.
+     * If the container stops responding for `timeout` period, we will throw.
+     * The container is expected to regularly send status updates if it is still
+     * working and healthy.
      *
-     * Every time we get a message we reset the connection timeout
-     * this is because it signifies that the connection will eventually work.
+     * Every time we get a message we reset the connection timeout this is because
+     * it signifies that the connection should eventually work.
      */
     let resetTimeout = () => {};
     let cancelTimeout = () => {};
