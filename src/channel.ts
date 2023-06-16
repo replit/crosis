@@ -207,8 +207,8 @@ export class Channel {
   static transaction = async (
     fn: () => Promise<RequestResult>,
     behavior: Omit<TransactionBehavior, 'continue'>,
-    invariant = (e: Error) => true,
-  ) => {
+    invariant = (_error: Error) => true,
+
     try {
       // TODO: check status closed somehow?
 
