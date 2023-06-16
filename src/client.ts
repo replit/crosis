@@ -932,7 +932,7 @@ export class Client<Ctx = null> {
   };
 
   /**
-   * Set a function to handle unrecoverable error
+   * Set a function to handle unrecoverable error.
    *
    * Unrecoverable errors are internal errors or invariance errors
    * caused by the user mis-using the client.
@@ -942,8 +942,8 @@ export class Client<Ctx = null> {
   };
 
   /**
-   * Gets the current connection metadata used by the WebSocket, or null if the
-   * WebSocket is not present.
+   * Gets the current connection metadata used by the websocket, or null if the
+   * websocket is not present.
    */
   public getConnectionMetadata = (): GovalMetadata | null => this.connectionMetadata;
 
