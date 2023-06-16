@@ -346,14 +346,9 @@ export class Client<Ctx = null> {
    * ```typescript
    * // See docs for exec service here https://protodoc.turbio.repl.co/services#exec
    * const closeChannel = client.openChannel({ service: 'exec' }, function open({
-   *   error,
    *   channel,
    *   context,
    * }) {
-   *   if (error) {
-   *     return;
-   *   }
-   *
    *   channel.onCommand((cmd) => {
    *     if (cmd.output) {
    *       terminal.write(cmd.output);
