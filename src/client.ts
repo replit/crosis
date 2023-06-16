@@ -1168,7 +1168,7 @@ export class Client<Ctx = null> {
     }
 
     if (websocketFailureCount === 3 && this.connectOptions.pollingHost) {
-      // Report that we fellback to polling
+      // Report that we fell back to polling
       this.debug({
         type: 'breadcrumb',
         message: 'websocket:polling fallback',
