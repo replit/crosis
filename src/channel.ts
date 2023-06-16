@@ -3,7 +3,7 @@ import type { ChannelCloseReason, RequestResult } from './types';
 import CrosisError from './util/CrosisError';
 
 type CustomFallbackBehavior = (
-  cmds: api.ICommand[],
+  commands: api.ICommand[],
   failedIndex: number,
   successfulResults: RequestResult[],
   failureResult: RequestResult,
@@ -258,22 +258,22 @@ export class Channel {
    * ])
    */
   public transaction = async (
-    cmds: api.ICommand[],
+    commands: api.ICommand[],
     behavior: TransactionBehavior | CustomFallbackBehavior,
   ): Promise<RequestResult[]> => {
     const responses = [];
-    for (let i = 0; i < cmds.length; i++) {
-      const response = await this.request(cmds[i]);
+    for (let i = 0; i < commands.length; i++) {
+      const response = await this.request(commands[i]);
 
       if (response.channelClosed) {
         if (behavior === 'retry') {
-          return this.transaction(cmds, behavior);
+          return this.transaction(commands, behavior);
         } else if (behavior === 'continue') {
-          return this.transaction(cmds.slice(i), behavior);
+          return this.transaction(commands.slice(i), behavior);
         } else if (behavior === 'throw') {
           throw new Error('Channel closed');
         } else if (typeof behavior === 'function') {
-          return behavior(cmds, i, responses, response);
+          return behavior(commands, i, responses, response);
         } else if (behavior === 'ignore') {
           // the channel is closed, so we can't actually make any more requests
           // so we just return the responses we have.
