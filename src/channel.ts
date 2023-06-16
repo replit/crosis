@@ -209,10 +209,15 @@ export class Channel {
     behavior: Omit<TransactionBehavior, 'continue'>,
     invariant = (_error: Error) => true,
 
+    retryArguments = {
+      maxRetries: -1,
+      retryFrequency: 1000,
+    },
+    retryCount = 0,
+  ): Promise<RequestResult | void> => {
     try {
-      // TODO: check status closed somehow?
-
       const result = await fn();
+
       return result;
     } catch (e) {
       if (!(e instanceof Error)) {
@@ -224,9 +229,13 @@ export class Channel {
       }
 
       if (behavior === 'retry') {
-        // TODO: add timeout/max retries.
+        if (retryArguments.maxRetries > 0 && retryCount > retryArguments.maxRetries) {
+          throw new TransactionError(e);
+        }
 
-        return transaction(fn, behavior);
+        await new Promise((resolve) => setTimeout(resolve, retryArguments.retryFrequency));
+
+        return Channel.transaction(fn, behavior, invariant, retryArguments, retryCount + 1);
       } else if (behavior === 'throw') {
         throw new TransactionError(e);
       } else if (behavior === 'ignore') {
@@ -236,7 +245,6 @@ export class Channel {
 
         return;
       }
-
       throw new Error('Invalid behavior');
     }
   };
