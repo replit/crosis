@@ -5,7 +5,7 @@ import CrosisError from './util/CrosisError';
 type CustomFallbackBehavior = (
   commands: api.ICommand[],
   failedIndex: number,
-  successfulResults: RequestResult[],
+  successResults: RequestResult[],
   failureResult: RequestResult,
 ) => Promise<RequestResult[]>;
 
