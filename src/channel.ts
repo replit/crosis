@@ -9,6 +9,11 @@ type CustomFallbackBehavior = (
   failureResult: RequestResult,
 ) => Promise<RequestResult[]>;
 
+/**
+ * `'retry'`: Retries entire transaction if a single command fails
+ * `'continue'`: Retries transaction starting from the failed command if any commands fail
+ * `'throw'`: Bail on any failed command
+ */
 type TransactionBehavior = 'retry' | 'continue' | 'throw' | 'ignore';
 
 class TransactionError extends Error {
