@@ -346,14 +346,9 @@ export class Client<Ctx = null> {
    * ```typescript
    * // See docs for exec service here https://protodoc.turbio.repl.co/services#exec
    * const closeChannel = client.openChannel({ service: 'exec' }, function open({
-   *   error,
    *   channel,
    *   context,
    * }) {
-   *   if (error) {
-   *     return;
-   *   }
-   *
    *   channel.onCommand((cmd) => {
    *     if (cmd.output) {
    *       terminal.write(cmd.output);
@@ -752,8 +747,6 @@ export class Client<Ctx = null> {
    * - If there's an open WebSocket connection it will be closed
    * - Any open channels will be closed
    *   - Does not clear openChannel requests
-   *   - If a channel never opened, its {@link OpenChannelCb | open channel callback}
-   *     will be called with an error
    *   - Otherwise returned cleanup callback is called
    *
    *  - expectReconnect: if true, the client will expects to try to reconnect,
@@ -926,8 +919,9 @@ export class Client<Ctx = null> {
 
   /**
    * Adds a listener for the "firewall denied" condition, which occurs when
-   * a user from firewalledreplit.com tries to connect to a repl which has
+   * a user from firewalledreplit.com tries to connect to a Repl which has
    * already been started in regular mode.
+   *
    * By default, throw an unrecoverable error, but this can be overridden if
    * clients want to do something different here.
    */
@@ -938,7 +932,7 @@ export class Client<Ctx = null> {
   };
 
   /**
-   * Set a function to handle unrecoverable error
+   * Set a function to handle unrecoverable error.
    *
    * Unrecoverable errors are internal errors or invariance errors
    * caused by the user mis-using the client.
@@ -948,8 +942,8 @@ export class Client<Ctx = null> {
   };
 
   /**
-   * Gets the current connection metadata used by the WebSocket, or null if the
-   * WebSocket is not present.
+   * Gets the current connection metadata used by the websocket, or null if the
+   * websocket is not present.
    */
   public getConnectionMetadata = (): GovalMetadata | null => this.connectionMetadata;
 
@@ -1133,7 +1127,7 @@ export class Client<Ctx = null> {
       }
 
       if (connectionMetadata.error === FetchConnectionMetadataError.Aborted) {
-        // Just return. The user called `client.close leading to a connectionMetadata abort
+        // Just return. The user called `client.close` leading to a connectionMetadata abort
         // chan0Cb will be called with with an error Channel close, no need to do anything here.
         return;
       }
@@ -1173,7 +1167,7 @@ export class Client<Ctx = null> {
     }
 
     if (websocketFailureCount === 3 && this.connectOptions.pollingHost) {
-      // Report that we fellback to polling
+      // Report that we fell back to polling
       this.debug({
         type: 'breadcrumb',
         message: 'websocket:polling fallback',
@@ -1280,12 +1274,12 @@ export class Client<Ctx = null> {
     };
 
     /**
-     * If the user specifies a timeout we will short circuit
-     * the connection if we don't get READY from the container
-     * within the specified timeout.
+     * If the container stops responding for `timeout` period, we will throw.
+     * The container is expected to regularly send status updates if it is still
+     * working and healthy.
      *
-     * Every time we get a message we reset the connection timeout
-     * this is because it signifies that the connection will eventually work.
+     * Every time we get a message we reset the connection timeout this is because
+     * it signifies that the connection should eventually work.
      */
     let resetTimeout = () => {};
     let cancelTimeout = () => {};
@@ -1859,7 +1853,7 @@ export class Client<Ctx = null> {
 
     // Replace existing error handler so an error doesn't get thrown.
     // We got here after either `handleClose` so it is safe to ignore
-    //  any potential remaining errors
+    // any potential remaining errors
     ws.onerror = () => {};
 
     if (ws.readyState === 0 || ws.readyState === 1) {

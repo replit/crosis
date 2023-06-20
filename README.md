@@ -2,7 +2,7 @@
 
 `yarn add @replit/crosis @replit/protocol`
 
-Crosis relies on the `@replit/protocol` package as a peer dependency. https://github.com/replit/protocol
+Crosis relies on the `@replit/protocol` package as a peer dependency. 
 
 ### Prerequisites
 

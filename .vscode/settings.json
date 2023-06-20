@@ -33,5 +33,16 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "typescript.tsdk": "./node_modules/typescript/lib",
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "cSpell.words": [
+    "backoff",
+    "Crosis",
+    "Goval",
+    "gurl",
+    "replit",
+    "Repls",
+    "retriable",
+    "unlisten",
+    "Websockets"
+  ]
 }
