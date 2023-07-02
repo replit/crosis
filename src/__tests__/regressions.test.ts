@@ -85,6 +85,9 @@ concurrent("interlaced connections don't throw - abort during case", async (done
     // encapsulated inside the client.
     { ...params, fetchConnectionMetadata: waitingMetadata },
     wrapWithDone(done, () => {
+      // we could possibly get here, it is maybe flaky to rely on the order of
+      // the promise resolutions (or at least, I can't trace the exact order
+      // I expect).
       console.log('reached second client.open');
     }),
   );
@@ -150,7 +153,7 @@ concurrent("interlaced connections don't throw - abort after case", async (done)
     // this case is more obvious that we expected to return aborted.
     { ...params, fetchConnectionMetadata: waitingMetadata },
     wrapWithDone(done, () => {
-      console.log('reached second client.open');
+      throw new Error('Expected to never get here (instant close).');
     }),
   );
 
