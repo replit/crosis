@@ -67,7 +67,7 @@ concurrent("interlaced connections don't throw", async (done) => {
   client.open(
     { ...params, fetchConnectionMetadata: abortingMetadata },
     wrapWithDone(done, () => {
-      console.log('first open');
+      throw new Error('Expected to never get here (abort+instant close).');
     }),
   );
   // set up the initial abort
@@ -76,7 +76,7 @@ concurrent("interlaced connections don't throw", async (done) => {
   client.open(
     { ...params, fetchConnectionMetadata: waitingMetadata },
     wrapWithDone(done, () => {
-      console.log('second open');
+      console.log('reached second client.open');
     }),
   );
 
