@@ -37,10 +37,17 @@ concurrent("interlaced connections don't throw - abort during case", async (done
   // connection state as a result of handleClose resetting the connection status.
   // CrosisError: Client entered wrong state during connect(); connected=false
 
-  const waitingMetadata = () =>
-    new Promise<FetchConnectionMetadataResult>((resolve) => {
+  let waitingPromise: Promise<FetchConnectionMetadataResult> | null = null;
+  const waitingMetadata = () => {
+    if (waitingPromise) {
+      return waitingPromise;
+    }
+
+    waitingPromise = new Promise<FetchConnectionMetadataResult>((resolve) => {
       return getConnectionMetadata().then(resolve);
     });
+    return waitingPromise;
+  };
 
   let abortingPromise: Promise<FetchConnectionMetadataResult> | null = null;
   const abortingMetadata = () => {
@@ -74,6 +81,8 @@ concurrent("interlaced connections don't throw - abort during case", async (done
   client.close();
 
   client.open(
+    // this is currently expected to return aborted, I think, but that should be
+    // encapsulated inside the client.
     { ...params, fetchConnectionMetadata: waitingMetadata },
     wrapWithDone(done, () => {
       console.log('reached second client.open');
@@ -83,18 +92,29 @@ concurrent("interlaced connections don't throw - abort during case", async (done
   await abortingPromise;
 
   client.close();
+
+  await waitingPromise;
+
+  done();
 });
 
 concurrent("interlaced connections don't throw - abort after case", async (done) => {
   // This isn't known to be user-achievable, but is roughly the same condition as the
-  // abort-during case, but with the abort after the final close..
+  // abort-during case, but with the abort after the final close... this case is probably
+  // more straightforward that it should've returned aborted, but it is still causing pain in production.
   // CrosisError: Expected abort returned from fetchConnectionMetadata to be truthy when the controller aborts
 
-  const waitingMetadata = () =>
-    new Promise<FetchConnectionMetadataResult>((resolve) => {
+  let waitingPromise: Promise<FetchConnectionMetadataResult> | null = null;
+  const waitingMetadata = () => {
+    if (waitingPromise) {
+      return waitingPromise;
+    }
+
+    waitingPromise = new Promise<FetchConnectionMetadataResult>((resolve) => {
       return getConnectionMetadata().then(resolve);
     });
-
+    return waitingPromise;
+  };
   let abortingPromise: Promise<FetchConnectionMetadataResult> | null = null;
   const abortingMetadata = () => {
     if (abortingPromise) {
@@ -127,6 +147,7 @@ concurrent("interlaced connections don't throw - abort after case", async (done)
   client.close();
 
   client.open(
+    // this case is more obvious that we expected to return aborted.
     { ...params, fetchConnectionMetadata: waitingMetadata },
     wrapWithDone(done, () => {
       console.log('reached second client.open');
@@ -136,4 +157,7 @@ concurrent("interlaced connections don't throw - abort after case", async (done)
   client.close();
 
   await abortingPromise;
+  await waitingPromise;
+
+  done();
 });
