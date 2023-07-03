@@ -265,7 +265,6 @@ concurrent('client requests new connection metadata after intentional close', (d
       expect(channel?.status).toBe('open');
 
       client.close();
-
       return () => {
         // Gotta open in a timeout, opening in a tight loop makes it loop forever
         setTimeout(() => {
@@ -779,7 +778,93 @@ concurrent(
 );
 
 concurrent(
-  'allows opening channel with the same name after others are closing others and client is connected',
+  'allows opening channel with the same name after others are closing others and client is connected (wait for open)',
+  (done) => {
+    const client = getClient(done);
+
+    console.log('opening client');
+    client.open(
+      {
+        fetchConnectionMetadata: () =>
+          Promise.resolve({
+            ...genConnectionMetadata(),
+            error: null,
+          }),
+        WebSocketClass: WebSocket,
+        context: null,
+      },
+      wrapWithDone(done, () => {
+        (async () => {
+          const name = Math.random().toString();
+
+          let firstChannel: Channel;
+
+          await new Promise<void>((resolve) => {
+            const close = client.openChannel(
+              { name, service: 'exec' },
+              wrapWithDone(done, ({ channel }) => {
+                // if we get here, we should have a channel.
+                // we're waiting to get here in this test, so it should be open!
+
+                expect(channel).toBeTruthy();
+
+                if (!channel) {
+                  throw new Error('appease typescript');
+                }
+
+                firstChannel = channel;
+
+                // close immediately.
+                close();
+
+                expect(firstChannel.status).toEqual('closing');
+
+                // then continue the test.
+                resolve();
+              }),
+            );
+          });
+
+          // open same name
+          const close2 = client.openChannel(
+            { name, service: 'exec' },
+            wrapWithDone(done, ({ channel: secondChannel }) => {
+              // ensure first channel opens
+              expect(firstChannel).toBeTruthy();
+
+              expect(secondChannel).toBeTruthy();
+              expect(secondChannel?.status).toEqual('open');
+              expect(secondChannel).not.toEqual(firstChannel);
+
+              // After the channel is opened close the current channel and open a new one
+              close2();
+              expect(secondChannel?.status).toEqual('closing');
+              const close3 = client.openChannel(
+                { name, service: 'exec' },
+                wrapWithDone(done, ({ channel: finalChannel }) => {
+                  expect(finalChannel).toBeTruthy();
+                  expect(finalChannel?.status).toEqual('open');
+                  expect(finalChannel).not.toEqual(firstChannel);
+                  expect(finalChannel).not.toEqual(secondChannel);
+
+                  close3();
+
+                  client.close();
+                  done();
+                }),
+              );
+            }),
+          );
+        })();
+
+        return () => {};
+      }),
+    );
+  },
+);
+
+concurrent(
+  'allows opening channel with the same name after others are closing others and client is connected (do not wait for open)',
   (done) => {
     const client = getClient(done);
 
@@ -797,9 +882,11 @@ concurrent(
         const name = Math.random().toString();
 
         let firstChannel: Channel;
+
         const close = client.openChannel(
           { name, service: 'exec' },
           wrapWithDone(done, ({ channel }) => {
+            // if we get here, we should have a channel.
             expect(channel).toBeTruthy();
 
             if (!channel) {
@@ -807,21 +894,19 @@ concurrent(
             }
 
             firstChannel = channel;
-
-            expect(firstChannel.status).toEqual('closing');
           }),
         );
 
-        // Close immediately
+        // close immediately, this likely means no channel will be returned
         close();
 
-        // open same name synchronously
+        // open same name
         const close2 = client.openChannel(
           { name, service: 'exec' },
           wrapWithDone(done, ({ channel: secondChannel }) => {
             // ensure first channel opens
-            expect(firstChannel).toBeTruthy();
-            expect(secondChannel).toBeTruthy();
+            expect(firstChannel).not.toEqual(secondChannel);
+
             expect(secondChannel?.status).toEqual('open');
             expect(secondChannel).not.toEqual(firstChannel);
 
