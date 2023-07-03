@@ -782,7 +782,6 @@ concurrent(
   (done) => {
     const client = getClient(done);
 
-    console.log('opening client');
     client.open(
       {
         fetchConnectionMetadata: () =>
