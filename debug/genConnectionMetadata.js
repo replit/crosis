@@ -32,7 +32,7 @@ function genConnectionMetadata(options) {
     user: 'crosistest',
     userId: {
       id: 8,
-      environment: 'crosistests',
+      environment: api.repl.Environment.DEVELOPMENT,
     },
     bucket: 'test-replit-repls',
   };
