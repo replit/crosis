@@ -31,7 +31,7 @@ function genConnectionMetadata(options) {
     slug: Math.random().toString(36).slice(2),
     user: 'crosistest',
     userId: {
-      id: 8,
+      id: 8, // arbitrary
       environment: api.repl.Environment.DEVELOPMENT,
     },
     bucket: 'test-replit-repls',
