@@ -778,11 +778,10 @@ concurrent(
 );
 
 concurrent(
-  'allows opening channel with the same name after others are closing others and client is connected (wait for open)',
+  'allows opening channel with the same name after closing (connected, wait for open)',
   (done) => {
     const client = getClient(done);
 
-    console.log('opening client');
     client.open(
       {
         fetchConnectionMetadata: () =>
@@ -864,7 +863,7 @@ concurrent(
 );
 
 concurrent(
-  'allows opening channel with the same name after others are closing others and client is connected (do not wait for open)',
+  'allows opening channel with the same name after closing (connected, do not wait for open)',
   (done) => {
     const client = getClient(done);
 
