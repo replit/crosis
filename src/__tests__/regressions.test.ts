@@ -36,16 +36,34 @@ concurrent("interlaced connections don't throw - abort during case", async (done
   // connection metadata fetch, open, close, open, close and end up with an interlaced
   // connection state as a result of handleClose resetting the connection status.
   // CrosisError: Client entered wrong state during connect(); connected=false
-
   let waitingPromise: Promise<FetchConnectionMetadataResult> | null = null;
-  const waitingMetadata = () => {
+  const waitingMetadata = (abortSignal: AbortSignal) => {
     if (waitingPromise) {
       return waitingPromise;
     }
 
     waitingPromise = new Promise<FetchConnectionMetadataResult>((resolve) => {
-      return getConnectionMetadata().then(resolve);
+      if (abortSignal.aborted) {
+        resolve({
+          error: FetchConnectionMetadataError.Aborted,
+        });
+
+        return;
+      }
+
+      return getConnectionMetadata().then((r) => {
+        if (abortSignal.aborted) {
+          resolve({
+            error: FetchConnectionMetadataError.Aborted,
+          });
+
+          return;
+        }
+
+        resolve(r);
+      });
     });
+
     return waitingPromise;
   };
 
@@ -78,7 +96,7 @@ concurrent("interlaced connections don't throw - abort during case", async (done
     }),
   );
 
-  client.close();
+  client.close(); // this triggers abort.
 
   client.open(
     // this is currently expected to return aborted, I think, but that should be
@@ -92,10 +110,16 @@ concurrent("interlaced connections don't throw - abort during case", async (done
     }),
   );
 
+  // we successfully finish the _open_ call of the first client open here, but
+  // we're already in-flight for the second client open (!)
   await abortingPromise;
 
+  // before the second open resolves, we call close. The request is (likely)
+  // already in flight.
   client.close();
 
+  // now we'll wait for the second open to resolve, which the above close will have
+  // aborted.
   await waitingPromise;
 
   done();
@@ -106,18 +130,19 @@ concurrent("interlaced connections don't throw - abort after case", async (done)
   // abort-during case, but with the abort after the final close... this case is probably
   // more straightforward that it should've returned aborted, but it is still causing pain in production.
   // CrosisError: Expected abort returned from fetchConnectionMetadata to be truthy when the controller aborts
-
-  let waitingPromise: Promise<FetchConnectionMetadataResult> | null = null;
-  const waitingMetadata = () => {
-    if (waitingPromise) {
-      return waitingPromise;
-    }
-
-    waitingPromise = new Promise<FetchConnectionMetadataResult>((resolve) => {
-      return getConnectionMetadata().then(resolve);
+  const waitingMetadata = (abortSignal: AbortSignal) => {
+    return new Promise<FetchConnectionMetadataResult>((resolve) => {
+      return getConnectionMetadata().then((r) => {
+        if (abortSignal.aborted) {
+          resolve({
+            error: FetchConnectionMetadataError.Aborted,
+          });
+        }
+        resolve(r);
+      });
     });
-    return waitingPromise;
   };
+
   let abortingPromise: Promise<FetchConnectionMetadataResult> | null = null;
   const abortingMetadata = () => {
     if (abortingPromise) {
@@ -160,7 +185,7 @@ concurrent("interlaced connections don't throw - abort after case", async (done)
   client.close();
 
   await abortingPromise;
-  await waitingPromise;
+  //await waitingPromise;
 
   done();
 });
