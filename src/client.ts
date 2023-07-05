@@ -185,9 +185,13 @@ export class Client<Ctx = null> {
    * `connect` call lingering around waiting for connection metadata and
    * eventually continue on as if we still want to connect
    *
+   * A map from an id to an abort controller so that we can cancel the
+   * connection metadata fetch if the user calls `client.close` and `client.open`
+   * in quick succession during a fetch.
+   *
    * @hidden
    */
-  private fetchTokenAbortController: AbortController | null;
+  private fetchTokenAbortControllers: Map<number, AbortController | null>;
 
   /**
    * Was the client destroyed? A destroyed client is a client that cannot
@@ -215,6 +219,8 @@ export class Client<Ctx = null> {
    */
   private redirectInitiatorURL: string | null;
 
+  private connectionId: number;
+
   /**
    * @typeParam Ctx  context, passed to various callbacks, specified when calling {@link Client.open | open}
    */
@@ -232,10 +238,11 @@ export class Client<Ctx = null> {
     this.channelRequests = [];
     this.retryTimeoutId = null;
     this.connectTimeoutId = null;
-    this.fetchTokenAbortController = null;
+    this.fetchTokenAbortControllers = new Map();
     this.destroyed = false;
     this.connectionMetadata = null;
     this.redirectInitiatorURL = null;
+    this.connectionId = 0;
 
     this.debug({ type: 'breadcrumb', message: 'constructor' });
   }
@@ -294,6 +301,8 @@ export class Client<Ctx = null> {
       throw error;
     }
 
+    this.connectionId++;
+
     this.connectOptions = {
       timeout: 10000,
       reuseConnectionMetadata: false,
@@ -307,7 +316,7 @@ export class Client<Ctx = null> {
     });
 
     this.chan0Cb = cb;
-    this.connect({ tryCount: 0, websocketFailureCount: 0 });
+    this.connect({ tryCount: 0, websocketFailureCount: 0, connectionId: this.connectionId });
   };
 
   /**
@@ -955,9 +964,11 @@ export class Client<Ctx = null> {
   private connect = async ({
     tryCount,
     websocketFailureCount,
+    connectionId,
   }: {
     tryCount: number;
     websocketFailureCount: number;
+    connectionId: number; // used to disambiguate open calls while async behavior is in flight.
   }) => {
     this.debug({
       type: 'breadcrumb',
@@ -1055,14 +1066,14 @@ export class Client<Ctx = null> {
     });
 
     if (!this.connectOptions.reuseConnectionMetadata || this.connectionMetadata === null) {
-      if (this.fetchTokenAbortController) {
+      if (this.fetchTokenAbortControllers.get(connectionId)) {
         this.onUnrecoverableError(new CrosisError('Expected fetchTokenAbortController to be null'));
 
         return;
       }
 
       const abortController = new AbortController();
-      this.fetchTokenAbortController = abortController;
+      this.fetchTokenAbortControllers.set(connectionId, abortController);
 
       let connectionMetadataFetchResult;
       try {
@@ -1100,7 +1111,7 @@ export class Client<Ctx = null> {
         return;
       }
 
-      this.fetchTokenAbortController = null;
+      this.fetchTokenAbortControllers.delete(connectionId);
 
       const connectionMetadata = connectionMetadataFetchResult;
       const aborted = connectionMetadata.error === FetchConnectionMetadataError.Aborted;
@@ -1142,6 +1153,7 @@ export class Client<Ctx = null> {
           websocketFailureCount,
           chan0,
           error: new CrosisError('Retriable error'),
+          connectionId: connectionId,
         });
 
         return;
@@ -1423,6 +1435,7 @@ export class Client<Ctx = null> {
         websocketFailureCount: didWebsocketsWork ? 0 : websocketFailureCount + 1,
         chan0,
         error,
+        connectionId,
       });
     };
   };
@@ -1437,11 +1450,13 @@ export class Client<Ctx = null> {
     websocketFailureCount,
     chan0,
     error,
+    connectionId,
   }: {
     tryCount: number;
     websocketFailureCount: number;
     chan0: Channel;
     error: CrosisError;
+    connectionId: number; // a retried connection is the same connection ID as the original.
   }) => {
     if (this.retryTimeoutId) {
       this.onUnrecoverableError(new CrosisError('Unexpected existing retryTimeoutId'));
@@ -1501,7 +1516,7 @@ export class Client<Ctx = null> {
       delete this.channels[0];
 
       this.setConnectionState(ConnectionState.DISCONNECTED);
-      this.connect({ tryCount, websocketFailureCount });
+      this.connect({ tryCount, websocketFailureCount, connectionId });
     }, this.connectOptions.getNextRetryDelayMs(tryCount));
   };
 
@@ -1652,7 +1667,8 @@ export class Client<Ctx = null> {
         return;
       }
 
-      if (this.ws && this.fetchTokenAbortController) {
+      const abortController = this.fetchTokenAbortControllers.get(this.connectionId);
+      if (this.ws && abortController) {
         // Fetching connection metadata is required prior to initializing a
         // websocket, we can't have both at the same time as the abort
         // controller is unset after we fetch the connection metadata.
@@ -1687,9 +1703,10 @@ export class Client<Ctx = null> {
       this.connectTimeoutId = null;
     }
 
-    if (this.fetchTokenAbortController) {
-      this.fetchTokenAbortController.abort();
-      this.fetchTokenAbortController = null;
+    const abortController = this.fetchTokenAbortControllers.get(this.connectionId);
+    if (abortController) {
+      abortController.abort();
+      this.fetchTokenAbortControllers.delete(this.connectionId);
     }
 
     const willClientReconnect =
@@ -1828,7 +1845,12 @@ export class Client<Ctx = null> {
       message: 'status:reconnecting',
     });
 
-    this.connect({ tryCount: 0, websocketFailureCount: 0 });
+    this.connectionId++; // TODO: should will reconnects increment this or not?
+    this.connect({
+      tryCount: 0,
+      websocketFailureCount: 0,
+      connectionId: this.connectionId,
+    });
   };
 
   /** @hidden */
