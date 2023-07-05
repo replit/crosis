@@ -602,6 +602,7 @@ export class Client<Ctx = null> {
         send: this.send,
       });
       this.channels[id] = channel;
+
       // TODO we should stop relying on mutating the same channelRequest
       (channelRequest as ChannelRequest<Ctx>).channelId = id;
       (channelRequest as ChannelRequest<Ctx>).isOpen = true;
@@ -613,11 +614,14 @@ export class Client<Ctx = null> {
 
       if (closeRequested) {
         // While we're opening the channel, we got a request to close this channel
-        // let's take care of that and request a close.
-        // The reason we call it before `openChannelCb`
-        // is just to make sure that channel has a status
-        // of `closing`
+        // let's take care of that and request a close. The reason we call it before `openChannelCb`
+        // is just to make sure that channel has a status of `closing`
         this.requestCloseChannel(channelRequest);
+
+        // we don't call the open callback here, because it violates the assumption that an opened
+        // channel is open (requestCloseChannel sets the channel to closing immediately).
+
+        return;
       }
 
       (channelRequest as ChannelRequest<Ctx>).cleanupCb = openChannelCb({
