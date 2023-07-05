@@ -30,6 +30,10 @@ function genConnectionMetadata(options) {
     language: 'bash',
     slug: Math.random().toString(36).slice(2),
     user: 'crosistest',
+    userId: {
+      id: 78171400, // arbitrary (chosen as crc32c("crosis") if you care)
+      environment: api.repl.Environment.DEVELOPMENT,
+    },
     bucket: 'test-replit-repls',
   };
 
