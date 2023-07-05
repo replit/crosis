@@ -1311,6 +1311,9 @@ export class Client<Ctx = null> {
       };
 
       resetTimeout = () => {
+        // TODO: this can and is run asynchronously (on chan0 message receipts)
+        // does this mean it could end up interlaced like the metadata fetch?
+
         this.debug({ type: 'breadcrumb', message: 'timeout:reset' });
 
         if (this.connectTimeoutId) {
@@ -1516,6 +1519,10 @@ export class Client<Ctx = null> {
       delete this.channels[0];
 
       this.setConnectionState(ConnectionState.DISCONNECTED);
+
+      // we refire here with the same connectionId. if we got here, we're retrying
+      // the same connection; if we have a new connection, this should have been
+      // cleared.
       this.connect({ tryCount, websocketFailureCount, connectionId });
     }, this.connectOptions.getNextRetryDelayMs(tryCount));
   };
