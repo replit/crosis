@@ -1103,36 +1103,11 @@ export class Client<Ctx = null> {
       this.fetchTokenAbortController = null;
 
       const connectionMetadata = connectionMetadataFetchResult;
-      const aborted = connectionMetadata.error === FetchConnectionMetadataError.Aborted;
 
-      if (abortController.signal.aborted !== aborted) {
-        // the aborted return value and the abort signal should be equivalent
-        if (abortController.signal.aborted) {
-          // In cases where our abort signal has been called means `client.close` was called
-          // that means we shouldn't be calling `handleConnectError` because chan0Cb is null!
-          this.onUnrecoverableError(
-            new CrosisError(
-              'Expected abort returned from fetchConnectionMetadata to be truthy when the controller aborts',
-            ),
-          );
-
-          return;
-        }
-
-        // the user shouldn't return abort without the abort signal being called, if aborting is desired
-        // client.close should be called
-        this.onUnrecoverableError(
-          new CrosisError(
-            'Abort should only be truthy returned when the abort signal is triggered',
-          ),
-        );
-
-        return;
-      }
-
-      if (connectionMetadata.error === FetchConnectionMetadataError.Aborted) {
+      if (abortController.signal.aborted) {
         // Just return. The user called `client.close` leading to a connectionMetadata abort
         // chan0Cb will be called with with an error Channel close, no need to do anything here.
+
         return;
       }
 
