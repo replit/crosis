@@ -10,6 +10,12 @@ export enum ConnectionState {
 
 export enum FetchConnectionMetadataError {
   /**
+   * Fetch was aborted. A client can return this if they decided not to fetch
+   * connection metadata _because_ the abort controller was already triggered.
+   */
+  Aborted = 'Aborted',
+
+  /**
    * The fetch failed due to a recoverable error (mostly a transient network
    * condition).
    */
