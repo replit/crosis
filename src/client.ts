@@ -1109,10 +1109,14 @@ export class Client<Ctx = null> {
         // chan0Cb will be called with with an error Channel close, no need to do anything here.
 
         return;
-      } else if (connectionMetadata.error === FetchConnectionMetadataError.Aborted) {
+      }
+
+      if (connectionMetadata.error === FetchConnectionMetadataError.Aborted) {
         this.onUnrecoverableError(
           new CrosisError('Received aborted metadata, but request was not aborted.'),
         );
+
+        return;
       }
 
       if (connectionMetadata.error === FetchConnectionMetadataError.Retriable) {
