@@ -39,6 +39,12 @@ concurrent("interlaced connections don't throw - abort during case", async (done
   let waitingPromise: Promise<FetchConnectionMetadataResult> | null = null;
   const waitingMetadata = (abortSignal: AbortSignal) => {
     if (waitingPromise) {
+      if (abortSignal.aborted) {
+        return Promise.resolve({
+          error: FetchConnectionMetadataError.Aborted,
+        });
+      }
+
       return waitingPromise;
     }
 
@@ -52,15 +58,18 @@ concurrent("interlaced connections don't throw - abort during case", async (done
       }
 
       return getConnectionMetadata().then((r) => {
-        if (abortSignal.aborted) {
-          resolve({
-            error: FetchConnectionMetadataError.Aborted,
-          });
+        setTimeout(() => {
+          if (abortSignal.aborted) {
+            resolve({
+              error: FetchConnectionMetadataError.Aborted,
+            });
 
-          return;
-        }
+            return;
+          }
 
-        resolve(r);
+          console.log('resolving test');
+          resolve(r);
+        }, 1);
       });
     });
 
@@ -98,6 +107,7 @@ concurrent("interlaced connections don't throw - abort during case", async (done
 
   client.close(); // this triggers abort.
 
+  console.log('opening');
   client.open(
     // this is currently expected to return aborted, I think, but that should be
     // encapsulated inside the client.
@@ -112,7 +122,9 @@ concurrent("interlaced connections don't throw - abort during case", async (done
 
   // we successfully finish the _open_ call of the first client open here, but
   // we're already in-flight for the second client open (!)
-  await abortingPromise;
+  console.log('aborting');
+  await abortingPromise; // request starts flying here.
+  console.log('aborted');
 
   // before the second open resolves, we call close. The request is (likely)
   // already in flight.
@@ -120,7 +132,9 @@ concurrent("interlaced connections don't throw - abort during case", async (done
 
   // now we'll wait for the second open to resolve, which the above close will have
   // aborted.
+  console.log('awaiting waiting');
   await waitingPromise;
+  console.log('waited');
 
   done();
 });
@@ -185,7 +199,6 @@ concurrent("interlaced connections don't throw - abort after case", async (done)
   client.close();
 
   await abortingPromise;
-  //await waitingPromise;
 
   done();
 });
