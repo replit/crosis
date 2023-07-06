@@ -1112,8 +1112,13 @@ export class Client<Ctx = null> {
       }
 
       if (connectionMetadata.error === FetchConnectionMetadataError.Aborted) {
+        // A client cannot unilaterally choose to abort. If the abortController is not aborted
+        // the client must either return an error or valid metadata.
+
         this.onUnrecoverableError(
-          new CrosisError('Received aborted metadata, but request was not aborted.'),
+          new CrosisError(
+            'Client received abort from fetchConnectionMetadata, but the request was not aborted.',
+          ),
         );
 
         return;
