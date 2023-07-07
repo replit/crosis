@@ -10,7 +10,8 @@ export enum ConnectionState {
 
 export enum FetchConnectionMetadataError {
   /**
-   * Fetch was aborted.
+   * Fetch was aborted. A client may return this only if
+   * the `AbortSignal` was already aborted.
    */
   Aborted = 'Aborted',
 
