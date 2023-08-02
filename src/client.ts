@@ -1840,7 +1840,7 @@ export class Client<Ctx = null> {
       message: 'status:reconnecting',
     });
 
-    this.connectionId++; // TODO: should will reconnects increment this or not?
+    this.connectionId++;
     this.connect({
       tryCount: 0,
       websocketFailureCount: 0,
