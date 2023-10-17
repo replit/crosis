@@ -25,6 +25,7 @@
     "engine.io-client": "^3.4.0"
   },
   "devDependencies": {
+    "@babel/traverse": "^7.23.2",
     "@replit/protocol": ">=0.3.16",
     "@types/engine.io-client": "^3.1.5",
     "@types/jest": "^27.5.1",
