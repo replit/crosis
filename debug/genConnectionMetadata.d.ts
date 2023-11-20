@@ -14,4 +14,5 @@ export default function genConnectionMetadata(options?: {
   gurl: string;
   conmanURL: string;
   repl: Repl;
+  dotdevHostname: string;
 };

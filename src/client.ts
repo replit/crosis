@@ -1950,6 +1950,7 @@ export class Client<Ctx = null> {
       token: this.connectionMetadata.token,
       conmanURL: this.connectionMetadata.conmanURL,
       gurl: this.connectionMetadata.gurl,
+      dotdevHostname: this.connectionMetadata.dotdevHostname,
     };
     this.redirectInitiatorURL = null;
     const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
@@ -1998,6 +1999,9 @@ export class Client<Ctx = null> {
       token: this.connectionMetadata.token,
       conmanURL: this.connectionMetadata.conmanURL,
       gurl: url,
+      // Redirects only happen on the same cluster, which means that the replit.dev hostname does
+      // not change.
+      dotdevHostname: this.connectionMetadata.dotdevHostname,
     };
     this.redirectInitiatorURL = this.connectionMetadata.gurl;
     const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {

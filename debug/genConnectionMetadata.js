@@ -79,6 +79,7 @@ function genConnectionMetadata(options) {
     gurl: 'wss://eval.global.replit.com',
     conmanURL: 'https://eval.global.replit.com',
     repl,
+    dotdevHostname: `https://${repl.id}-00-replittesting.gloval.replit.dev`,
   };
 }
 
