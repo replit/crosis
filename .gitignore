@@ -13,3 +13,4 @@ yarn-error.log*
 .cache/
 
 .env
+.direnv
