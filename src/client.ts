@@ -766,6 +766,10 @@ export class Client<Ctx = null> {
    *  e.g., a temporary network issue with an explicit reconnect handler.
    */
   public close = ({ expectReconnect } = { expectReconnect: false }): void => {
+    if (this.destroyed) {
+      return;
+    }
+
     this.debug({
       type: 'breadcrumb',
       message: expectReconnect ? 'close:temporary' : 'close:intentional',
@@ -801,6 +805,10 @@ export class Client<Ctx = null> {
    * avoiding leaks.
    */
   public destroy = (): void => {
+    if (this.destroyed) {
+      return;
+    }
+
     this.destroyed = true;
     this.debug({ type: 'breadcrumb', message: 'status:destroy' });
 

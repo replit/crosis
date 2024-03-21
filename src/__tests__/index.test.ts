@@ -1445,3 +1445,12 @@ concurrent('emits boot status messages', (done) => {
     () => {},
   );
 });
+
+
+concurrent('close after destroy and destroy multiple times', (done) => {
+  const client = getClient<{ username: string }>(done);
+
+  client.destroy();
+  client.close();
+  client.destroy();
+})
