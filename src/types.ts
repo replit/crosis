@@ -84,7 +84,7 @@ export enum ClientCloseReason {
   /**
    * The client encountered an unrecoverable/invariant error
    */
-  Error = 'Error',
+  ErrorOrDestroy = 'ErrorOrDestroy',
 }
 
 export type DebugLogBreadcrumb<Ctx> =

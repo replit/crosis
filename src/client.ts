@@ -24,22 +24,6 @@ import CrosisError from './util/CrosisError';
 // redirect initiator (only effective after a redirect)
 const MAX_RETRY_COUNT = 10;
 
-type CloseResult =
-  | {
-      closeReason: ClientCloseReason.Intentional;
-    }
-  | {
-      closeReason: ClientCloseReason.Temporary;
-    }
-  | {
-      closeReason: ClientCloseReason.Disconnected;
-      wsEvent: CloseEvent | Event;
-    }
-  | {
-      closeReason: ClientCloseReason.Error;
-      error: CrosisError;
-    };
-
 type ChannelRequest<Ctx> =
   | {
       options: ChannelOptions<Ctx>;
@@ -789,13 +773,7 @@ export class Client<Ctx = null> {
     // when it reconnects.
     this.connectionMetadata = null;
 
-    if (expectReconnect) {
-      this.handleClose({
-        closeReason: ClientCloseReason.Temporary,
-      });
-    } else {
-      this.handleClose({ closeReason: ClientCloseReason.Intentional });
-    }
+    this.handleClose(expectReconnect ? ClientCloseReason.Temporary : ClientCloseReason.Intentional);
   };
 
   /**
@@ -812,11 +790,7 @@ export class Client<Ctx = null> {
     this.destroyed = true;
     this.debug({ type: 'breadcrumb', message: 'status:destroy' });
 
-    if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
-      this.close({
-        expectReconnect: false,
-      });
-    }
+    this.handleClose(ClientCloseReason.ErrorOrDestroy);
 
     this.debug = () => {};
     this.connectionStateChangeFuncs = [];
@@ -1622,10 +1596,7 @@ export class Client<Ctx = null> {
         },
       });
 
-      this.handleClose({
-        closeReason: ClientCloseReason.Disconnected,
-        wsEvent: event,
-      });
+      this.handleClose(ClientCloseReason.Disconnected);
     };
 
     this.ws.onclose = onClose;
@@ -1658,8 +1629,8 @@ export class Client<Ctx = null> {
   };
 
   /** @hidden */
-  private handleClose = (closeResult: CloseResult) => {
-    if (closeResult.closeReason !== ClientCloseReason.Error) {
+  private handleClose = (closeReason: ClientCloseReason) => {
+    if (closeReason !== ClientCloseReason.ErrorOrDestroy) {
       // If we got here as a result of an error we'll ignore these assertions to avoid
       // infinite recursion in onUnrecoverableError
       if (this.getConnectionState() === ConnectionState.DISCONNECTED) {
@@ -1687,7 +1658,7 @@ export class Client<Ctx = null> {
       type: 'breadcrumb',
       message: 'client:handleClose',
       data: {
-        closeReason: closeResult.closeReason,
+        closeReason: closeReason,
         connectionState: this.getConnectionState(),
       },
     });
@@ -1713,8 +1684,7 @@ export class Client<Ctx = null> {
     }
 
     const willClientReconnect =
-      closeResult.closeReason === ClientCloseReason.Disconnected ||
-      closeResult.closeReason === ClientCloseReason.Temporary;
+      closeReason === ClientCloseReason.Disconnected || closeReason === ClientCloseReason.Temporary;
 
     this.channelRequests.forEach((channelRequest) => {
       const willChannelReconnect: boolean = willClientReconnect && !channelRequest.closeRequested;
@@ -1810,7 +1780,7 @@ export class Client<Ctx = null> {
         willReconnect: willClientReconnect,
       });
       this.chan0CleanupCb = null;
-    } else if (!this.chan0Cb && closeResult.closeReason !== ClientCloseReason.Error) {
+    } else if (!this.chan0Cb && closeReason !== ClientCloseReason.ErrorOrDestroy) {
       // if we got here as a result of an error we're not gonna call onUnrecoverableError again
       this.onUnrecoverableError(
         new CrosisError(
@@ -1818,7 +1788,7 @@ export class Client<Ctx = null> {
             (willClientReconnect ? 'would reconnect' : 'would not reconnect') +
             ')',
           {
-            closeReason: closeResult.closeReason,
+            closeReason: closeReason,
             connectionState: this.getConnectionState(),
           },
         ),
@@ -1909,10 +1879,7 @@ export class Client<Ctx = null> {
 
     if (this.getConnectionState() !== ConnectionState.DISCONNECTED) {
       try {
-        this.handleClose({
-          closeReason: ClientCloseReason.Error,
-          error: e,
-        });
+        this.handleClose(ClientCloseReason.ErrorOrDestroy);
       } catch (handleCloseErr) {
         // We tried our best to clean up. But we need to keep going and report
         // unrecoverable error regardless of what happens inside handleClose

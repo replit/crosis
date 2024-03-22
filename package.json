@@ -40,7 +40,6 @@
     "jest": "^28.1.0",
     "jest-websocket-mock": "^2.4.0",
     "mock-socket": "^9.1.5",
-    "parcel": "1.12.3",
     "prettier": "^2.6.2",
     "ts-jest": "^28.0.2",
     "typedoc": "^0.22.15",
