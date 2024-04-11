@@ -2,7 +2,7 @@
 
 `yarn add @replit/crosis @replit/protocol`
 
-Crosis relies on the `@replit/protocol` package as a peer dependency. 
+Crosis relies on the `@replit/protocol` package as a peer dependency.
 
 ### Prerequisites
 
@@ -99,16 +99,17 @@ const closeChannel = client.openChannel({ service: 'exec' }, function open({ cha
 
 ### Developing
 
-To run tests run
+To run tests, in your Replit devvm check out the goval repository and run `process-compose up`, then
+run
 
 ```bash
-USER_KEY_ID=XXXX USER_PRIVATE_KEY=XXXX yarn test
+yarn test
 ```
 
 To interact with a connected client in the browser run
 
 ```bash
-USER_KEY_ID=XXXX USER_PRIVATE_KEY=XXXX yarn debug
+yarn debug
 ```
 
 You can then access the client from the console an send messages like:

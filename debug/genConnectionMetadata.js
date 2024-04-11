@@ -3,6 +3,14 @@ const crypto = require('crypto');
 const { api } = require('@replit/protocol');
 const paseto = require('./paseto');
 
+let cluster = 'mark';
+if (!process.env.USER_KEY_ID && !process.env.USER_PRIVATE_KEY) {
+  process.env.USER_KEY_ID = 'dev';
+  process.env.USER_PRIVATE_KEY =
+    'h/Qn2Wtu0bq85i3EF17r/diy4xNdYAMkCgHxLmu3xG+ifQWRKYQL5x7jRX1VzhAAFdLHpNej6WGn31voprSCug==';
+  cluster = 'development';
+}
+
 if (!process.env.USER_KEY_ID || !process.env.USER_PRIVATE_KEY) {
   throw new Error('Expected USER_KEY_ID and USER_PRIVATE_KEY in ENV');
 }
@@ -23,9 +31,9 @@ ${keyData.toString('base64')}
 function genConnectionMetadata(options) {
   const now = Date.now();
 
-  const restrictNetwork = !!options?.restrictNetwork;
+  const restrictNetwork = !!(options && options.restrictNetwork);
 
-  const repl = options?.repl || {
+  const repl = (options && options.repl) || {
     id: `testing-crosis-${Math.random().toString(36).split('.')[1]}`,
     language: 'bash',
     slug: Math.random().toString(36).slice(2),
@@ -44,7 +52,7 @@ function genConnectionMetadata(options) {
     exp: {
       seconds: Math.floor(now / 1000) + 60 * 60,
     },
-    cluster: 'global',
+    cluster,
     persistence: api.repl.Persistence.NONE,
     format: api.ReplToken.WireFormat.PROTOBUF,
     repl,
@@ -74,12 +82,23 @@ function genConnectionMetadata(options) {
     ),
   );
 
+  const clusterMetadata =
+    cluster === 'development'
+      ? {
+          gurl: 'ws://localhost:4560',
+          conmanURL: 'http://localhost:4560',
+          dotdevHostname: `http://${repl.id}-00-replittesting.${cluster}.replit.localhost:8081`,
+        }
+      : {
+          gurl: `wss://eval.${cluster}.replit.com`,
+          conmanURL: `https://eval.${cluster}.replit.com`,
+          dotdevHostname: `https://${repl.id}-00-replittesting.${cluster}.replit.dev`,
+        };
+
   return {
     token: encodedToken,
-    gurl: 'wss://eval.global.replit.com',
-    conmanURL: 'https://eval.global.replit.com',
     repl,
-    dotdevHostname: `https://${repl.id}-00-replittesting.gloval.replit.dev`,
+    ...clusterMetadata,
   };
 }
 
