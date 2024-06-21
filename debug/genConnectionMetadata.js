@@ -19,6 +19,7 @@ let keyId;
 let key;
 let clusterMetadata;
 let cluster;
+let bucket;
 
 if (!process.env.USER_KEY_ID || !process.env.USER_PRIVATE_KEY) {
   console.info(
@@ -37,6 +38,7 @@ if (!process.env.USER_KEY_ID || !process.env.USER_PRIVATE_KEY) {
     // this should be fetched from lore, but doesn't matter in the context of crosis
     dotdevHostname: `http://thishouldbeareplid-00-replittesting.${cluster}.replit.localhost:8081`,
   };
+  bucket = 'dev-replit-repls';
 } else {
   console.info('Found key in environment variables, will connect to CI cluster');
 
@@ -50,6 +52,7 @@ if (!process.env.USER_KEY_ID || !process.env.USER_PRIVATE_KEY) {
     // this should be fetched from lore, but doesn't matter in the context of crosis
     dotdevHostname: `https://thishouldbeareplid-00-replittesting.mark.replit.dev`,
   };
+  bucket = 'replit-repl-files-mark';
 }
 
 function genConnectionMetadata(options) {
@@ -67,7 +70,7 @@ function genConnectionMetadata(options) {
       id: 78171400, // arbitrary (chosen as crc32c("crosis") if you care)
       environment: api.repl.Environment.DEVELOPMENT,
     },
-    bucket: 'replit-repl-files-mark',
+    bucket,
   };
 
   const token = api.ReplToken.create({
