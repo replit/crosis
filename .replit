@@ -1,2 +1,2 @@
-language = "nodejs"
-run = "yarn run"
+run = "npm run test -- --watch"
+modules = ["nodejs-20"]
