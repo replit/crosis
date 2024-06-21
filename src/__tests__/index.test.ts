@@ -1421,9 +1421,15 @@ concurrent('emits boot status messages', (done) => {
           }),
         );
       } else if (count === 3) {
-        // LOAD_BLOCKS and PULL_FILES aren't emitted since
-        // this container should not have any history
-
+        expect(bootStatus).toEqual(
+          expect.objectContaining({
+            stage: api.BootStatus.Stage.LOAD_BLOCK,
+          }),
+        );
+      } else if (
+        bootStatus.stage !== api.BootStatus.Stage.LOAD_BLOCK &&
+        bootStatus.stage !== api.BootStatus.Stage.PULL_FILES
+      ) {
         expect(bootStatus).toEqual(
           expect.objectContaining({
             stage: api.BootStatus.Stage.COMPLETE,
@@ -1452,4 +1458,5 @@ concurrent('close after destroy and destroy multiple times', (done) => {
   client.destroy();
   client.close();
   client.destroy();
+  done();
 });
