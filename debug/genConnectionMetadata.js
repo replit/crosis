@@ -3,46 +3,74 @@ const crypto = require('crypto');
 const { api } = require('@replit/protocol');
 const paseto = require('./paseto');
 
-let cluster = 'mark';
-if (!process.env.USER_KEY_ID && !process.env.USER_PRIVATE_KEY) {
-  process.env.USER_KEY_ID = 'dev';
-  process.env.USER_PRIVATE_KEY =
-    'h/Qn2Wtu0bq85i3EF17r/diy4xNdYAMkCgHxLmu3xG+ifQWRKYQL5x7jRX1VzhAAFdLHpNej6WGn31voprSCug==';
-  cluster = 'development';
-}
-
-if (!process.env.USER_KEY_ID || !process.env.USER_PRIVATE_KEY) {
-  throw new Error('Expected USER_KEY_ID and USER_PRIVATE_KEY in ENV');
-}
-
-const keyId = process.env.USER_KEY_ID;
-const govalPrivateKey = (() => {
+const getCryptoKey = (value) => {
   const ed25519AsnPrivateKeyHeader = Buffer.from('302e020100300506032b657004220420', 'hex');
   const keyData = Buffer.concat([
     ed25519AsnPrivateKeyHeader,
     // The last 32 bytes of the private key is the public key.
-    Buffer.from(process.env.USER_PRIVATE_KEY, 'base64').slice(0, 32),
+    Buffer.from(value, 'base64').slice(0, 32),
   ]);
   return crypto.createPrivateKey(`-----BEGIN PRIVATE KEY-----
 ${keyData.toString('base64')}
 -----END PRIVATE KEY-----`);
-})();
+};
+
+let keyId;
+let key;
+let clusterMetadata;
+let cluster;
+let bucket;
+
+if (!process.env.USER_KEY_ID || !process.env.USER_PRIVATE_KEY) {
+  console.info(
+    'No key in environment variables, generating new key, using development key to be used with a development goval',
+  );
+
+  keyId = 'dev';
+  key = getCryptoKey(
+    'h/Qn2Wtu0bq85i3EF17r/diy4xNdYAMkCgHxLmu3xG+ifQWRKYQL5x7jRX1VzhAAFdLHpNej6WGn31voprSCug==',
+  );
+
+  cluster = 'development';
+  clusterMetadata = {
+    gurl: 'ws://localhost:4560',
+    conmanURL: 'http://localhost:4560',
+    // this should be fetched from lore, but doesn't matter in the context of crosis
+    dotdevHostname: `http://thishouldbeareplid-00-replittesting.${cluster}.replit.localhost:8081`,
+  };
+  bucket = 'dev-replit-repls';
+} else {
+  console.info('Found key in environment variables, will connect to CI cluster');
+
+  keyId = process.env.USER_KEY_ID;
+  key = getCryptoKey(process.env.USER_PRIVATE_KEY);
+
+  cluster = 'mark';
+  clusterMetadata = {
+    gurl: `wss://eval2.mark.platform-replit.replit.com`,
+    conmanURL: `https://eval2.mark.platform-replit.replit.com`,
+    // this should be fetched from lore, but doesn't matter in the context of crosis
+    dotdevHostname: `https://thishouldbeareplid-00-replittesting.mark.replit.dev`,
+  };
+  bucket = 'replit-repl-files-mark';
+}
 
 function genConnectionMetadata(options) {
   const now = Date.now();
 
   const restrictNetwork = !!(options && options.restrictNetwork);
+  const id = `testing-crosis-${Math.random().toString(36).split('.')[1]}`;
 
   const repl = (options && options.repl) || {
-    id: `testing-crosis-${Math.random().toString(36).split('.')[1]}`,
-    language: 'bash',
+    id,
+    language: 'nix',
     slug: Math.random().toString(36).slice(2),
     user: 'crosistest',
     userId: {
       id: 78171400, // arbitrary (chosen as crc32c("crosis") if you care)
       environment: api.repl.Environment.DEVELOPMENT,
     },
-    bucket: 'test-replit-repls',
+    bucket,
   };
 
   const token = api.ReplToken.create({
@@ -68,7 +96,7 @@ function genConnectionMetadata(options) {
 
   const encodedOpts = api.ReplToken.encode(token).finish().toString('base64');
   const encodedToken = paseto.sign(
-    govalPrivateKey,
+    key,
     Buffer.from(encodedOpts),
     Buffer.from(
       api.GovalSigningAuthority.encode(
@@ -81,19 +109,6 @@ function genConnectionMetadata(options) {
         .toString('base64'),
     ),
   );
-
-  const clusterMetadata =
-    cluster === 'development'
-      ? {
-          gurl: 'ws://localhost:4560',
-          conmanURL: 'http://localhost:4560',
-          dotdevHostname: `http://${repl.id}-00-replittesting.${cluster}.replit.localhost:8081`,
-        }
-      : {
-          gurl: `wss://eval.${cluster}.replit.com`,
-          conmanURL: `https://eval.${cluster}.replit.com`,
-          dotdevHostname: `https://${repl.id}-00-replittesting.${cluster}.replit.dev`,
-        };
 
   return {
     token: encodedToken,
