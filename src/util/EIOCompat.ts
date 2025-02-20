@@ -123,7 +123,7 @@ export class EIOCompat implements WebSocket {
     this.onclose = null;
     this.onmessage = null;
     this.onerror = null;
-    this.eioSocket = eio(uri, { path, transports: ['polling'] });
+    this.eioSocket = new eio.Socket(uri, { path, transports: ['polling'] });
     this.url = url;
     this.extensions = '';
     this.protocol = '';
@@ -253,6 +253,9 @@ export class EIOCompat implements WebSocket {
   }
 
   get binaryType(): BinaryType {
+    if (this.eioSocket.binaryType === 'nodebuffer') {
+      throw new Error('unsupported eioSocket.binaryType nodebuffer');
+    }
     return this.eioSocket.binaryType || 'blob';
   }
 }
