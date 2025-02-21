@@ -123,7 +123,7 @@ export class EIOCompat implements WebSocket {
     this.onclose = null;
     this.onmessage = null;
     this.onerror = null;
-    this.eioSocket = eio(uri, { path, transports: ['polling'] });
+    this.eioSocket = new eio.Socket(uri, { path, transports: ['polling'] });
     this.url = url;
     this.extensions = '';
     this.protocol = '';
@@ -233,17 +233,14 @@ export class EIOCompat implements WebSocket {
     this.setReadyState();
   }
 
-  // eslint-disable-next-line class-methods-use-this
   addEventListener(): boolean {
     throw new Error('Not Implemented, please use onmessage, onopen, onerror, or onclose');
   }
 
-  // eslint-disable-next-line class-methods-use-this
   removeEventListener(): void {
     throw new Error('Not Implemented');
   }
 
-  // eslint-disable-next-line class-methods-use-this
   dispatchEvent(): boolean {
     throw new Error('Not Implemented');
   }
@@ -253,6 +250,9 @@ export class EIOCompat implements WebSocket {
   }
 
   get binaryType(): BinaryType {
+    if (this.eioSocket.binaryType === 'nodebuffer') {
+      throw new Error('unsupported eioSocket.binaryType nodebuffer');
+    }
     return this.eioSocket.binaryType || 'blob';
   }
 }

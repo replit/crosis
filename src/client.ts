@@ -1881,11 +1881,7 @@ export class Client<Ctx = null> {
       try {
         this.handleClose(ClientCloseReason.ErrorOrDestroy);
       } catch (handleCloseErr) {
-        // We tried our best to clean up. But we need to keep going and report
-        // unrecoverable error regardless of what happens inside handleClose
-        // eslint-disable-next-line no-console
         console.error('handleClose errored during unrecoverable error');
-        // eslint-disable-next-line no-console
         console.error(handleCloseErr);
       }
     }
@@ -1896,7 +1892,6 @@ export class Client<Ctx = null> {
       return;
     }
 
-    // eslint-disable-next-line no-console
     console.error('Please supply your own unrecoverable error handling function');
 
     throw e;
