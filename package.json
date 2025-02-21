@@ -5,10 +5,11 @@
   "files": [
     "/dist"
   ],
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "lint": "eslint --ext .js,.ts src/ src.browser/",
+    "lint": "eslint --cache src/ src.browser/",
     "build": "tsc",
     "build:browser": "yarn clean && yarn build && parcel build src.browser/index.js -d dist.browser --out-file crosis.js",
     "debug": "node debug/server.js",
@@ -43,6 +44,7 @@
     "ts-jest": "^29.2.5",
     "typedoc": "^0.27.7",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.1",
     "ws": "^8.18.0"
   },
   "peerDependencies": {

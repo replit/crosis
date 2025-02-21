@@ -8,7 +8,6 @@ import { WebSocket } from 'mock-socket';
 // eslint-disable-next-line
 const genConnectionMetadata = require('../../debug/genConnectionMetadata');
 
-// eslint-disable-next-line
 jest.setTimeout(1000);
 
 const testingClients: Array<Client<{ username: string }>> = [];

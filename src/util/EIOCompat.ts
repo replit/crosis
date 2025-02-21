@@ -233,17 +233,14 @@ export class EIOCompat implements WebSocket {
     this.setReadyState();
   }
 
-  // eslint-disable-next-line class-methods-use-this
   addEventListener(): boolean {
     throw new Error('Not Implemented, please use onmessage, onopen, onerror, or onclose');
   }
 
-  // eslint-disable-next-line class-methods-use-this
   removeEventListener(): void {
     throw new Error('Not Implemented');
   }
 
-  // eslint-disable-next-line class-methods-use-this
   dispatchEvent(): boolean {
     throw new Error('Not Implemented');
   }
