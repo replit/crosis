@@ -26,6 +26,7 @@ export interface GovalMetadata {
   token: string;
   gurl: string;
   conmanURL: string;
+  wsURL: string;
   dotdevHostname: string;
 }
 

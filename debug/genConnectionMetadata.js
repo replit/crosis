@@ -114,6 +114,7 @@ function genConnectionMetadata(options) {
     token: encodedToken,
     repl,
     ...clusterMetadata,
+    wsURL: `${clusterMetadata.gurl}/wsv2/${encodedToken}`,
   };
 }
 

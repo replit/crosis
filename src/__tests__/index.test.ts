@@ -195,6 +195,7 @@ concurrent('client retries and caches tokens', (done) => {
         return {
           token: 'test - bad connection metadata retries',
           gurl: 'ws://invalid.example.com',
+          wsURL: 'ws://invalid.example.com/wsv2/test',
           conmanURL: 'http://invalid.example.com',
           dotdevHostname: 'https://invalid-00-replittesting.invalid.replit.dev',
           error: null,
@@ -242,6 +243,7 @@ concurrent('client retries but does not cache tokens', (done) => {
         return {
           token: 'test - bad connection metadata retries',
           gurl: 'ws://invalid.example.com',
+          wsURL: 'ws://invalid.example.com/wsv2/test',
           conmanURL: 'http://invalid.example.com',
           dotdevHostname: 'https://invalid-00-replittesting.invalid.replit.dev',
           error: null,

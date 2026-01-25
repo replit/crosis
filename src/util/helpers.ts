@@ -57,16 +57,26 @@ export function getWebSocketClass(
  * fallback to polling if `pollingHost` is provided.
  */
 export function getConnectionStr(connectionMetadata: GovalMetadata, pollingHost?: string): string {
-  const gurl = urllib.parse(connectionMetadata.gurl);
   if (pollingHost) {
+    const gurl = urllib.parse(connectionMetadata.wsURL);
     gurl.hostname = pollingHost;
     gurl.host = pollingHost;
-    gurl.pathname = `/wsv2/${connectionMetadata.token}/${encodeURIComponent(
-      connectionMetadata.gurl,
-    )}`;
-  } else {
-    gurl.pathname = `/wsv2/${connectionMetadata.token}`;
+    gurl.pathname += `/${encodeURIComponent(connectionMetadata.gurl)}`;
+
+    return urllib.format(gurl);
   }
 
-  return urllib.format(gurl);
+  return connectionMetadata.wsURL;
+}
+
+/**
+ * Given an original URL, replace its host / hostname with the redirect URL.
+ */
+export function getRedirectURL(wsURL: string, redirectURL: string): string {
+  const parsed = urllib.parse(wsURL);
+  const override = urllib.parse(redirectURL);
+  parsed.hostname = override.hostname;
+  parsed.host = override.host;
+
+  return urllib.format(parsed);
 }
