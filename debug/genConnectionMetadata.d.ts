@@ -12,6 +12,7 @@ export default function genConnectionMetadata(options?: {
 }): {
   token: string;
   gurl: string;
+  wsURL: string;
   conmanURL: string;
   repl: Repl;
   dotdevHostname: string;

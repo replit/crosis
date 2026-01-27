@@ -1,6 +1,11 @@
 import { api } from '@replit/protocol';
 import { Channel } from './channel';
-import { getWebSocketClass, defaultGetNextRetryDelay, getConnectionStr } from './util/helpers';
+import {
+  getWebSocketClass,
+  defaultGetNextRetryDelay,
+  getConnectionStr,
+  getRedirectURL,
+} from './util/helpers';
 import { EIOCompat } from './util/EIOCompat';
 import {
   FetchConnectionMetadataError,
@@ -1922,10 +1927,7 @@ export class Client<Ctx = null> {
     const context = this.connectOptions.context;
     const chan0Cb = this.chan0Cb;
     const govalMetadata: GovalMetadata = {
-      token: this.connectionMetadata.token,
-      conmanURL: this.connectionMetadata.conmanURL,
-      gurl: this.connectionMetadata.gurl,
-      dotdevHostname: this.connectionMetadata.dotdevHostname,
+      ...this.connectionMetadata,
     };
     this.redirectInitiatorURL = null;
     const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
@@ -1971,12 +1973,9 @@ export class Client<Ctx = null> {
     const context = this.connectOptions.context;
     const chan0Cb = this.chan0Cb;
     const govalMetadata: GovalMetadata = {
-      token: this.connectionMetadata.token,
-      conmanURL: this.connectionMetadata.conmanURL,
+      ...this.connectionMetadata,
       gurl: url,
-      // Redirects only happen on the same cluster, which means that the replit.dev hostname does
-      // not change.
-      dotdevHostname: this.connectionMetadata.dotdevHostname,
+      wsURL: getRedirectURL(this.connectionMetadata.wsURL, url),
     };
     this.redirectInitiatorURL = this.connectionMetadata.gurl;
     const fetchConnectionMetadataResult: FetchConnectionMetadataResult = {
