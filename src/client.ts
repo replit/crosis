@@ -1221,6 +1221,8 @@ export class Client<Ctx = null> {
 
       let retriable = true;
       let errorMessage = 'WebSocket closed before we got READY';
+      let closeCode: number | undefined;
+      let closeReason: string | undefined;
 
       if (WebSocketClass === EIOCompat) {
         if (!didReceiveAnyCommand) {
@@ -1230,6 +1232,8 @@ export class Client<Ctx = null> {
         }
       } else if ('code' in event) {
         const closeEvent = <CloseEvent>event;
+        closeCode = closeEvent.code;
+        closeReason = closeEvent.reason || undefined;
         if (closeEvent.code === CloseCode.POLICY_VIOLATION) {
           // This means that the token was rejected. Even though this is a
           // permanent error from the perspective of the infrastructure, most
@@ -1249,10 +1253,23 @@ export class Client<Ctx = null> {
           errorMessage =
             'You have reached the concurrent Repl limit. Please shut down other Repls.';
           retriable = false;
+        } else if (closeEvent.code === CloseCode.REPL_TAKEN_DOWN) {
+          // The Repl was taken down for a policy/abuse violation. This is
+          // terminal: retrying (or fetching a new token) will keep hitting the
+          // same block, so surface it as unrecoverable so the UI can explain
+          // why the Repl can't run.
+          errorMessage = 'This Repl has been taken down for a violation of our Terms of Service.';
+          retriable = false;
+        } else if (closeEvent.code === CloseCode.REPL_DELETED) {
+          errorMessage = 'This Repl has been deleted.';
+          retriable = false;
         }
       }
 
-      onFailed(new CrosisError(errorMessage), retriable);
+      const extras =
+        closeCode === undefined ? null : { closeCode, ...(closeReason ? { closeReason } : {}) };
+
+      onFailed(new CrosisError(errorMessage, extras), retriable);
     };
 
     ws.onopen = () => {

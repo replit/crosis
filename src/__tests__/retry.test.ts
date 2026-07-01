@@ -72,6 +72,53 @@ describe('retry handling', () => {
     });
   });
 
+  test('should not retry when the Repl is taken down', (done) => {
+    const ctx = { username: 'zyzz' };
+    const client = new Client<{ username: string }>();
+    let errorMessage = '';
+    client.setUnrecoverableErrorHandler((e) => {
+      errorMessage = e.message;
+    });
+    testingClients.push(client);
+    const addr = 'ws://localhost:' + port;
+    const server = new WS(addr + '/wsv2/');
+
+    let tryCount = 0;
+    const connectionMetadata = genConnectionMetadataWithGurl(addr);
+    client.open(
+      {
+        fetchConnectionMetadata: () => {
+          tryCount++;
+
+          return Promise.resolve({
+            ...connectionMetadata,
+            error: null,
+          });
+        },
+        WebSocketClass: WebSocket,
+        context: ctx,
+      },
+      () => {},
+    );
+
+    client.onDebugLog((log) => {
+      if (log.type === 'breadcrumb' && log.message === 'onUnrecoverableError') {
+        expect(tryCount).toBe(1);
+        expect(errorMessage).toContain('taken down');
+
+        done();
+      }
+    });
+
+    server.on('connection', function () {
+      server.close({
+        code: CloseCode.REPL_TAKEN_DOWN,
+        reason: 'anomaly-takedown',
+        wasClean: true,
+      });
+    });
+  });
+
   test('should retry for another machine', (done) => {
     const ctx = { username: 'zyzz' };
     const client = new Client<{ username: string }>();
