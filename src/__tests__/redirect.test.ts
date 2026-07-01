@@ -22,6 +22,7 @@ const sendFromServer = (cmd: api.Command, ws: WS) => {
 const genConnectionMetadataWithGurl = (gurl: string) => {
   const connectionMetadata = genConnectionMetadata();
   connectionMetadata.gurl = gurl;
+  connectionMetadata.wsURL = gurl + '/wsv2/';
   connectionMetadata.token = ''; // need this so the mock server connects
   return connectionMetadata;
 };
