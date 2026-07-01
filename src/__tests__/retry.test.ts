@@ -75,9 +75,8 @@ describe('retry handling', () => {
   test('should not retry when the Repl is taken down', (done) => {
     const ctx = { username: 'zyzz' };
     const client = new Client<{ username: string }>();
-    let errorMessage = '';
     client.setUnrecoverableErrorHandler((e) => {
-      errorMessage = e.message;
+      console.log('got unrecoverable error: ', e);
     });
     testingClients.push(client);
     const addr = 'ws://localhost:' + port;
@@ -104,7 +103,7 @@ describe('retry handling', () => {
     client.onDebugLog((log) => {
       if (log.type === 'breadcrumb' && log.message === 'onUnrecoverableError') {
         expect(tryCount).toBe(1);
-        expect(errorMessage).toContain('taken down');
+        expect(log.data.message).toContain('taken down');
 
         done();
       }
