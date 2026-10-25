@@ -8,13 +8,13 @@ Crosis relies on the `@replit/protocol` package as a peer dependency.
 
 You should probably familiarize yourself with the protocol before trying to use it. Crosis is just a client that helps you connect and communicate with the container using the protocol.
 
-Read about the protocol here https://crosis-doc.util.repl.co/
+The protocol definitions are available in the [archived `replit/protocol` repository](https://github.com/replit/protocol).
 
 ### Usage and concepts
 
 The central concept is a "channel" that you can send commands to and receive commands from. Communicating with channels requires a network connection. The goal of this client is to provide an API to manage the connection (including disconnects and reconnects), opening channels, and a way to send a receive messages/commands on channels. How you handle this is up to you and depends on the desired UX. In some cases you'll want to disable UI to prevent any new messages from being sent when offline and then re-enable once connected again. In other cases you might want to give the user the illusion that they are connected and queue messages locally while disconnected and send them once reconnected.
 
-Here is an example usage, for more details on usage please refer to the API docs at https://crosisdoc.util.repl.co/
+Here is an example usage. For the API reference, generate the documentation locally with `yarn docs` (see [Developing](#developing)).
 
 ```typescript
 import { Client } from '@replit/crosis';
@@ -67,7 +67,7 @@ const context = { user, repl };
 
 client.open({ context, fetchConnectionMetadata }, function onOpen({ channel, context }) {
   //  The client is now connected (or reconnected in the event that it encountered an unexpected disconnect)
-  // `channel` here is channel0 (more info at https://crosis-doc.util.repl.co/protov2)
+  // `channel` here is channel0, which listens to global events.
   // - send commands using `channel.send`
   // - listen for commands using `channel.onCommand(cmd => ...)`
 
@@ -76,7 +76,7 @@ client.open({ context, fetchConnectionMetadata }, function onOpen({ channel, con
   };
 });
 
-// See docs for exec service here https://crosis-doc.util.repl.co/services#exec
+// See the protocol definitions in https://github.com/replit/protocol.
 const closeChannel = client.openChannel({ service: 'exec' }, function open({ channel, context }) {
   channel.onCommand((cmd) => {
     if (cmd.output) {
@@ -98,6 +98,14 @@ const closeChannel = client.openChannel({ service: 'exec' }, function open({ cha
 ```
 
 ### Developing
+
+To generate the API reference, install the dependencies and run:
+
+```bash
+yarn docs
+```
+
+This writes the generated documentation to `docs/`.
 
 To run tests, in your Replit devvm check out the goval repository and run `process-compose up`, then
 run
@@ -122,4 +130,4 @@ window.client.send({ exec: { args: ['kill', '1'] } });
 
 To release, just run `USER_KEY_ID=XXXX USER_PRIVATE_KEY=XXXX yarn version`, it will prompt you for a version, then it will push to github and release to npm.
 
-To update documentation, go to https://crosisdoc.util.repl.co/__repl and run `. ./updatedocs.sh`
+To update the API reference, run `yarn docs` and commit any intended documentation changes.
