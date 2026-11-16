@@ -239,7 +239,7 @@ export class Client<Ctx = null> {
   /**
    * Starts connecting to the server and and opens channel 0
    *
-   * See https://protodoc.turbio.repl.co/protov2 from more protocol specific info.
+   * See the historical protocol definitions at https://github.com/replit/protocol for more information.
    *
    * Every client connected automatically "has" {@link Channel | channel} 0 listen to global events.
    * Any time the client connects it will call callback with channel 0 so you can use it.
@@ -263,7 +263,7 @@ export class Client<Ctx = null> {
    *   }
    *
    *   //  The client is now connected (or reconnected in the event that it encountered an unexpected disconnect)
-   *   // `channel` here is channel0 (more info at http://protodoc.turbio.repl.co/protov2)
+   *   // `channel` here is channel0, which listens to global events.
    *   // - send commands using `channel.send`
    *   // - listen for commands using `channel.onCommand(cmd => ...)`
    *
@@ -310,11 +310,10 @@ export class Client<Ctx = null> {
 
   /**
    *
-   * Opens a {@link Channel | channel} for a [service](https://protodoc.turbio.repl.co/services)
+   * Opens a {@link Channel | channel} for a service
    * and returns a function to close the channel.
    *
-   * Read [opening channels](https://protodoc.turbio.repl.co/protov2#opening-channels)
-   * section in the protocol documentation for protocol specific information.
+   * See the historical protocol definitions at https://github.com/replit/protocol for more information.
    *
    * When the client connects, and the channel opens, the open callback is called with the channel.
    * As you should already know, you can use the channel to {@link Channel.send | send commands}
@@ -342,7 +341,7 @@ export class Client<Ctx = null> {
    *
    * Usage:
    * ```typescript
-   * // See docs for exec service here https://protodoc.turbio.repl.co/services#exec
+   * // See the historical protocol definitions at https://github.com/replit/protocol.
    * const closeChannel = client.openChannel({ service: 'exec' }, function open({
    *   channel,
    *   context,
