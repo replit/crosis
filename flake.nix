@@ -44,6 +44,7 @@
           ./debug
           ./package.json
           ./tsconfig.json
+          ./jest.config.js
           ./.eslintrc.js
           ./.eslintignore
           ./.prettierrc.js
@@ -65,6 +66,10 @@
     in {
       lint = check "lint" "yarn run lint";
       typecheck = check "typecheck" "yarn run tsc --noEmit";
+      unit-tests = check "unit-tests" ''
+        unset USER_KEY_ID USER_PRIVATE_KEY
+        yarn run test:unit
+      '';
     });
 
     devShells = forEachSystem (pkgs: {
