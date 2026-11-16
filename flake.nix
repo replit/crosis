@@ -24,6 +24,49 @@
           })
       );
   in {
+    checks = forEachSystem (pkgs: let
+      package = builtins.fromJSON (builtins.readFile ./package.json);
+      dependencies = pkgs.mkYarnModules {
+        pname = package.name;
+        inherit (package) version;
+        packageJSON = ./package.json;
+        yarnLock = ./yarn.lock;
+        offlineCache = pkgs.fetchYarnDeps {
+          yarnLock = ./yarn.lock;
+          hash = "sha256-A4mm/ryF3Y2h1APjxDrC1uuYURWHvVf4W24uRnBHmh8=";
+        };
+      };
+      src = lib.fileset.toSource {
+        root = ./.;
+        fileset = lib.fileset.unions [
+          ./src
+          ./src.browser
+          ./debug
+          ./package.json
+          ./tsconfig.json
+          ./.eslintrc.js
+          ./.eslintignore
+          ./.prettierrc.js
+        ];
+      };
+      check = name: command:
+        pkgs.runCommand "crosis-${name}" {
+          inherit src;
+          nativeBuildInputs = [pkgs.nodejs pkgs.yarn];
+        } ''
+          cp -R "$src" source
+          chmod -R u+w source
+          cd source
+          export HOME="$TMPDIR"
+          ln -s ${dependencies}/node_modules node_modules
+          ${command}
+          touch "$out"
+        '';
+    in {
+      lint = check "lint" "yarn run lint";
+      typecheck = check "typecheck" "yarn run tsc --noEmit";
+    });
+
     devShells = forEachSystem (pkgs: {
       default = pkgs.mkShell {
         packages = with pkgs; [
