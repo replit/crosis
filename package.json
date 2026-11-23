@@ -15,7 +15,7 @@
     "clean": "rm -rf dist dist.browser",
     "docs": "typedoc --out docs --name crosis src/index.ts node_modules/@replit/protocol/index.d.ts",
     "test": "jest --no-cache",
-    "test:unit": "jest --no-cache --runInBand --runTestsByPath src/__tests__/redirect.test.ts src/__tests__/retry.test.ts src/__tests__/regressions.test.ts src/__tests__/sortByPriority.test.ts",
+    "test:unit": "yarn test --runInBand",
     "preversion": "yarn lint && yarn clean && yarn build",
     "postversion": "echo \"pushing branch and tag\" && git push origin HEAD --tags && echo \"publishing\" && yarn publish --new-version $npm_package_version && echo \"Successfully released version v$npm_package_version!\""
   },
@@ -33,6 +33,7 @@
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^7.13.1",
     "@typescript-eslint/parser": "^7.13.1",
+    "engine.io": "6.6.4",
     "eslint": "^8.15.0",
     "eslint-config-prettier": "8.5.0",
     "eslint-plugin-prettier": "4.0.0",
