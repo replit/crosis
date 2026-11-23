@@ -99,22 +99,15 @@ const closeChannel = client.openChannel({ service: 'exec' }, function open({ cha
 
 ### Developing
 
-To run the unit tests without credentials or a running backend:
-
-```bash
-yarn test:unit
-```
-
-This runs the redirect, retry, regression, and sorting suites. NixCI runs these alongside lint and
-type checking. The connection and firewall integration suites still require a backend and are not
-included in this command.
-
-To run tests, in your Replit devvm check out the goval repository and run `process-compose up`, then
-run
+Run all tests without credentials or a running backend:
 
 ```bash
 yarn test
 ```
+
+NixCI runs the full suite alongside lint and type checking. Connection and firewall tests use a
+local protocol fixture, including an Engine.IO polling server. They check client behavior, not
+backend compatibility or network isolation.
 
 To interact with a connected client in the browser run
 

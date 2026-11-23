@@ -2,9 +2,7 @@
 
 import { Client } from '..';
 import { wrapWithDone } from '../__testutils__/done';
-
-// eslint-disable-next-line
-const genConnectionMetadata = require('../../debug/genConnectionMetadata');
+import { MockBackend } from '../__testutils__/backend';
 
 // eslint-disable-next-line
 const WebSocket = require('ws');
@@ -13,6 +11,9 @@ jest.setTimeout(30 * 1000);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const testingClients: Array<Client<any>> = [];
+
+const backend = new MockBackend();
+beforeAll(() => backend.start());
 
 // Just a helper that to help us exit from jest without any open handles
 function getClient<Ctx = null>(done: jest.DoneCallback) {
@@ -23,10 +24,11 @@ function getClient<Ctx = null>(done: jest.DoneCallback) {
   return c;
 }
 
-afterAll(() => {
+afterAll(async () => {
   testingClients.forEach((c) => {
     c.destroy();
   });
+  await backend.stop();
 });
 
 test('handles firewall denied condition specifically', (done) => {
@@ -34,7 +36,7 @@ test('handles firewall denied condition specifically', (done) => {
 
   const ctx = { username: 'zyzz' };
 
-  const connmeta = genConnectionMetadata();
+  const connmeta = backend.metadata();
 
   client.open(
     {
@@ -61,7 +63,7 @@ test('handles firewall denied condition specifically', (done) => {
         {
           fetchConnectionMetadata: () =>
             Promise.resolve({
-              ...genConnectionMetadata({ restrictNetwork: true, repl: connmeta.repl }),
+              ...backend.metadata('denied'),
               error: null,
             }),
           WebSocketClass: WebSocket,

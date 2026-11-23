@@ -8,7 +8,7 @@ import { createCloseEvent } from '../util/EIOCompat';
 import { api } from '@replit/protocol';
 import { concurrent } from '../__testutils__/concurrent';
 import { wrapWithDone } from '../__testutils__/done';
-import genConnectionMetadata from '../../debug/genConnectionMetadata';
+import { MockBackend } from '../__testutils__/backend';
 
 // eslint-disable-next-line
 const WebSocket = require('ws');
@@ -17,6 +17,11 @@ jest.setTimeout(30 * 1000);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const testingClients: Array<Client<any>> = [];
+
+const backend = new MockBackend();
+const genConnectionMetadata = () => backend.metadata();
+
+beforeAll(() => backend.start());
 
 // Just a helper that to help us exit from jest without any open handles
 function getClient<Ctx = null>(done: jest.DoneCallback) {
@@ -32,8 +37,9 @@ const getConnectionMetadata = async () => ({
   error: null,
 });
 
-afterAll(() => {
+afterAll(async () => {
   testingClients.forEach((c) => c.destroy());
+  await backend.stop();
 });
 
 function getWebsocketClassThatNeverConnects() {
@@ -134,9 +140,8 @@ concurrent('client retries', (done) => {
 
         if (tryCount === 1) {
           return {
-            ...genConnectionMetadata(),
+            ...backend.metadata('retry'),
             error: null,
-            token: 'test - bad connection metadata retries',
           };
         }
 
@@ -193,15 +198,11 @@ concurrent('client retries and caches tokens', (done) => {
       fetchConnectionMetadata: async () => {
         fetchConnectionMetadata();
         return {
-          token: 'test - bad connection metadata retries',
-          gurl: 'ws://invalid.example.com',
-          wsURL: 'ws://invalid.example.com/wsv2/test',
-          conmanURL: 'http://invalid.example.com',
-          dotdevHostname: 'https://invalid-00-replittesting.invalid.replit.dev',
+          ...genConnectionMetadata(),
           error: null,
         };
       },
-      WebSocketClass: WebSocket,
+      WebSocketClass: getWebsocketClassThatNeverConnects(),
       context: null,
     },
     onConnect,
@@ -241,15 +242,11 @@ concurrent('client retries but does not cache tokens', (done) => {
       fetchConnectionMetadata: async () => {
         fetchConnectionMetadata();
         return {
-          token: 'test - bad connection metadata retries',
-          gurl: 'ws://invalid.example.com',
-          wsURL: 'ws://invalid.example.com/wsv2/test',
-          conmanURL: 'http://invalid.example.com',
-          dotdevHostname: 'https://invalid-00-replittesting.invalid.replit.dev',
+          ...genConnectionMetadata(),
           error: null,
         };
       },
-      WebSocketClass: WebSocket,
+      WebSocketClass: getWebsocketClassThatNeverConnects(),
       context: null,
     },
     onConnect,
@@ -1170,12 +1167,20 @@ concurrent(
         }),
         WebSocketClass: WebsocketThatNeverConnects,
         context: null,
-        pollingHost: 'gp-v2.replit.com',
+        pollingHost: backend.pollingHost,
       },
       wrapWithDone(done, ({ channel }) => {
         expect(channel).not.toBeNull();
         expect(didLogFallback).toBe(true);
-        client.close();
+        expect(backend.pollingConnections).toBe(1);
+        const close = client.openChannel(
+          { service: 'shell' },
+          wrapWithDone(done, ({ channel: shell }) => {
+            expect(shell?.status).toBe('open');
+            close();
+            return wrapWithDone(done, () => client.close());
+          }),
+        );
 
         return () => {
           done();
@@ -1397,52 +1402,8 @@ concurrent('emits boot status messages', (done) => {
   const client = getClient<{ username: string }>(done);
 
   const ctx = { username: 'zyzz' };
-
-  let count = 0;
-  client.onBootStatus(
-    wrapWithDone(done, (bootStatus) => {
-      if (bootStatus.stage === api.BootStatus.Stage.PROXY) {
-        // we're just going to ignore any proxy steps for the sake of counting
-        // the order of the other steps; they're optional and potentially
-        // stochastic.
-        return;
-      }
-
-      count++;
-
-      if (count === 1) {
-        expect(bootStatus).toEqual(
-          expect.objectContaining({
-            stage: api.BootStatus.Stage.HANDSHAKE,
-          }),
-        );
-      } else if (count === 2) {
-        expect(bootStatus).toEqual(
-          expect.objectContaining({
-            stage: api.BootStatus.Stage.ACQUIRING,
-          }),
-        );
-      } else if (count === 3) {
-        expect(bootStatus).toEqual(
-          expect.objectContaining({
-            stage: api.BootStatus.Stage.LOAD_BLOCK,
-          }),
-        );
-      } else if (
-        bootStatus.stage !== api.BootStatus.Stage.LOAD_BLOCK &&
-        bootStatus.stage !== api.BootStatus.Stage.PULL_FILES
-      ) {
-        expect(bootStatus).toEqual(
-          expect.objectContaining({
-            stage: api.BootStatus.Stage.COMPLETE,
-          }),
-        );
-
-        client.destroy();
-        done();
-      }
-    }),
-  );
+  const onBootStatus = jest.fn();
+  client.onBootStatus(onBootStatus);
 
   client.open(
     {
@@ -1450,7 +1411,16 @@ concurrent('emits boot status messages', (done) => {
       WebSocketClass: WebSocket,
       context: ctx,
     },
-    () => {},
+    wrapWithDone(done, () => {
+      expect(onBootStatus.mock.calls.map(([status]) => status.stage)).toEqual([
+        api.BootStatus.Stage.HANDSHAKE,
+        api.BootStatus.Stage.ACQUIRING,
+        api.BootStatus.Stage.LOAD_BLOCK,
+        api.BootStatus.Stage.COMPLETE,
+      ]);
+      client.close();
+      return () => done();
+    }),
   );
 });
 

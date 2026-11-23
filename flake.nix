@@ -33,7 +33,7 @@
         yarnLock = ./yarn.lock;
         offlineCache = pkgs.fetchYarnDeps {
           yarnLock = ./yarn.lock;
-          hash = "sha256-A4mm/ryF3Y2h1APjxDrC1uuYURWHvVf4W24uRnBHmh8=";
+          hash = "sha256-LH9JWOnIJHZbHSGbKpztS8aMec0qVIFYUPJVcOjq6ks=";
         };
       };
       src = lib.fileset.toSource {
@@ -68,7 +68,7 @@
       typecheck = check "typecheck" "yarn run tsc --noEmit";
       unit-tests = check "unit-tests" ''
         unset USER_KEY_ID USER_PRIVATE_KEY
-        yarn run test:unit
+        yarn run test --runInBand
       '';
     });
 
